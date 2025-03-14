@@ -9,21 +9,14 @@ import Cocoa
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
+    @IBAction func printResponderChain(_ sender: Any?) {
+        var responder: NSResponder? = NSApp.keyWindow?.firstResponder
 
-
-
-    func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Insert code here to initialize your application
+        while true {
+            guard let localResponder = responder else { return }
+            print("Responder: \(localResponder)")
+            responder = localResponder.nextResponder
+        }
     }
-
-    func applicationWillTerminate(_ aNotification: Notification) {
-        // Insert code here to tear down your application
-    }
-
-    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-        return true
-    }
-
-
 }
 
