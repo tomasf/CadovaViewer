@@ -1,15 +1,6 @@
 {
-  "originHash" : "486c7f8bff37aa1fa29a70cde27d96782e01d6e9718cfe8c81e71cbe9263ae8b",
+  "originHash" : "1581edc6f404a9db7c85c9ca84baa8aadd6cfbe038da2be3da847de6ea51b3ff",
   "pins" : [
-    {
-      "identity" : "navlibswift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tomasf/NavLibSwift",
-      "state" : {
-        "revision" : "28a41fb0e13feef4ecd3c04fb1e80266610eeb37",
-        "version" : "1.0.0"
-      }
-    },
     {
       "identity" : "nodal",
       "kind" : "remoteSourceControl",

@@ -3,21 +3,6 @@ import Combine
 import SceneKit
 import NavLib
 
-struct PivotPointDisplayProperties {
-    let point: CGPoint
-    let isVisible: Bool
-
-    init(point: CGPoint, isVisible: Bool) {
-        self.point = point
-        self.isVisible = isVisible
-    }
-
-    init() {
-        self.point = .zero
-        self.isVisible = false
-    }
-}
-
 extension ViewportController {
     func startNavLib() {
         do {
@@ -66,13 +51,13 @@ extension ViewportController {
 }
 
 extension ViewportController: NavLibStateProvider {
-    var modelBoundingBox: any NavLib.BoundingBox {
-        Bounds(sceneController.modelContainer.boundingBox)
+    var modelBoundingBox: SCNVector3.BoundingBox {
+        sceneController.modelContainer.boundingBox
     }
     
-    var cameraTransform: any NavLib.Transform {
+    var cameraTransform: NavLib.Transform {
         get {
-            sceneView.pointOfView?.presentation.transform ?? SCNMatrix4Identity
+            (sceneView.pointOfView?.presentation.transform ?? SCNMatrix4Identity).navLibTransform
         }
         set {
             guard let pov = sceneView.pointOfView, !navLibIsSuspended else { return }
@@ -86,7 +71,7 @@ extension ViewportController: NavLibStateProvider {
     var unitsInMeters: Double? { 0.001 }
     var hasEmptySelection: Bool? { true }
 
-    var cameraProjection: NavLib.CameraProjection? {
+    var cameraProjection: NavLib.CameraProjection<SCNVector3>? {
         get {
             guard let camera = sceneView.pointOfView?.camera else { return nil }
 
@@ -103,15 +88,16 @@ extension ViewportController: NavLibStateProvider {
         }
     }
 
-    var frontView: (any Transform)? {
-        cameraView(for: .front).transform
+    var frontView: Transform? {
+        cameraView(for: .front).transform.navLibTransform
     }
 
-    func pivotChanged(position: any Vector, visible: Bool) {
-        pivotPoint = (position.scnVector, visible)
+    func pivotChanged(position: SCNVector3, visible: Bool) {
+        overlayScene.pivotPointVisibility = visible
+        overlayScene.pivotPointLocation = position.scnVector
     }
 
-    func hitTest(parameters: HitTest) -> (any Vector)? {
+    func hitTest(parameters: HitTest<SCNVector3>) -> SCNVector3? {
         let origin = parameters.origin.scnVector
         let direction = parameters.direction.scnVector
 
@@ -133,42 +119,36 @@ extension ViewportController: NavLibStateProvider {
         return result.worldCoordinates
     }
 
-    var mousePosition: (any Vector)? {
+    var mousePosition: SCNVector3? {
         guard var hoverPoint = hoverPoint else { return nil }
         hoverPoint.y = sceneViewSize.height - hoverPoint.y
         return sceneView.unprojectPoint(SCNVector3(hoverPoint.x, hoverPoint.y, 0))
     }
+
+    func motionActiveChanged(_ active: Bool) {
+        if active {
+            sceneView.defaultCameraController.stopInertia()
+        }
+        sceneView.allowsCameraControl = !active
+    }
 }
 
 fileprivate extension SCNCamera {
-    func orthographicViewExtents(viewAspectRatio: Double) -> ViewportController.Bounds {
+    func orthographicViewExtents(viewAspectRatio: Double) -> SCNVector3.BoundingBox {
         let height = orthographicScale * 2
         let width = height * viewAspectRatio
-        return .init(
+        return (
             min: SCNVector3(-width / 2, -height / 2, zNear),
             max: SCNVector3(width / 2, height / 2, zFar)
         )
     }
 }
 
-extension ViewportController {
-    fileprivate struct Bounds: BoundingBox {
-        let min: SCNVector3
-        let max: SCNVector3
-
-        init(min: SCNVector3, max: SCNVector3) {
-            self.min = min
-            self.max = max
-        }
-
-        init(_ box: (min: SCNVector3, max: SCNVector3)) {
-            min = box.min
-            max = box.max
-        }
+extension SCNVector3: NavLib.Vector {
+    public init(x: Double, y: Double, z: Double) {
+        self.init(x, y, z)
     }
 }
-
-extension SCNVector3: NavLib.Vector {}
 
 extension Transform {
     var scnMatrix: SCNMatrix4 {
@@ -187,8 +167,8 @@ extension Vector {
     }
 }
 
-extension SCNMatrix4: @retroactive Transform {
-    public var values: [Double] {
-        [m11, m12, m13, m14,  m21, m22, m23, m24,  m31, m32, m33, m34,  m41, m42, m43, m44]
+extension SCNMatrix4 {
+    public var navLibTransform: NavLib.Transform {
+        .init([m11, m12, m13, m14,  m21, m22, m23, m24,  m31, m32, m33, m34,  m41, m42, m43, m44])
     }
 }

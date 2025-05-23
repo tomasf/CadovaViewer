@@ -8,11 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C90E33532D84621F002DC32F /* NavLibSwift */; };
-		C923A4BE2D942943007AA0E3 /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C923A4BD2D942943007AA0E3 /* NavLibSwift */; };
 		C923A4C12D94295C007AA0E3 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C923A4C02D94295C007AA0E3 /* ThreeMF */; };
 		C932E69F2D0F6711006E5D17 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = C932E69E2D0F6711006E5D17 /* Zip */; };
 		C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */; };
 		C94754082D305F740085380D /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C94754072D305F740085380D /* ThreeMF */; };
+		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,10 +46,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */,
 				C923A4C12D94295C007AA0E3 /* ThreeMF in Frameworks */,
 				C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */,
 				C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */,
-				C923A4BE2D942943007AA0E3 /* NavLibSwift in Frameworks */,
 				C94754082D305F740085380D /* ThreeMF in Frameworks */,
 				C932E69F2D0F6711006E5D17 /* Zip in Frameworks */,
 			);
@@ -106,8 +106,8 @@
 				C932E69E2D0F6711006E5D17 /* Zip */,
 				C94754072D305F740085380D /* ThreeMF */,
 				C90E33532D84621F002DC32F /* NavLibSwift */,
-				C923A4BD2D942943007AA0E3 /* NavLibSwift */,
 				C923A4C02D94295C007AA0E3 /* ThreeMF */,
+				C9C7D33D2DE0981E00480B4E /* NavLibSwift */,
 			);
 			productName = "Model Viewer";
 			productReference = C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */;
@@ -138,8 +138,8 @@
 			mainGroup = C932E6392D0F5A01006E5D17;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C923A4BC2D942943007AA0E3 /* XCRemoteSwiftPackageReference "NavLibSwift" */,
 				C923A4BF2D94295C007AA0E3 /* XCRemoteSwiftPackageReference "ThreeMF" */,
+				C9C7D33C2DE0981E00480B4E /* XCLocalSwiftPackageReference "../NavLibSwift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C932E6432D0F5A01006E5D17 /* Products */;
@@ -387,15 +387,14 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		C923A4BC2D942943007AA0E3 /* XCRemoteSwiftPackageReference "NavLibSwift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tomasf/NavLibSwift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		C9C7D33C2DE0981E00480B4E /* XCLocalSwiftPackageReference "../NavLibSwift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../NavLibSwift;
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		C923A4BF2D94295C007AA0E3 /* XCRemoteSwiftPackageReference "ThreeMF" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/tomasf/ThreeMF.git";
@@ -411,11 +410,6 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
 		};
-		C923A4BD2D942943007AA0E3 /* NavLibSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C923A4BC2D942943007AA0E3 /* XCRemoteSwiftPackageReference "NavLibSwift" */;
-			productName = NavLibSwift;
-		};
 		C923A4C02D94295C007AA0E3 /* ThreeMF */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C923A4BF2D94295C007AA0E3 /* XCRemoteSwiftPackageReference "ThreeMF" */;
@@ -428,6 +422,10 @@
 		C94754072D305F740085380D /* ThreeMF */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ThreeMF;
+		};
+		C9C7D33D2DE0981E00480B4E /* NavLibSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NavLibSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -4,11 +4,31 @@ import SceneKit
 import Combine
 
 final class OverlayScene: SKScene {
-    private weak var sceneKitRenderer: SCNSceneRenderer?
+    private weak var sceneKitRenderer: SCNSceneRenderer!
     private weak var viewportController: ViewportController?
 
     private let transientNodeContainer = SKNode()
-    private let pivotPointIndicator = SKShapeNode(circleOfRadius: 8)
+
+    private let pivotPointIndicator = SKShapeNode(circleOfRadius: 6)
+    var pivotPointLocation = SCNVector3(0, 0, 0)
+    var pivotPointVisibility = false {
+        didSet {
+            guard pivotPointVisibility != oldValue else { return }
+
+            delayedPivotPointHide?.cancel()
+            pivotPointIndicator.removeAllActions()
+            if pivotPointVisibility {
+                pivotPointIndicator.run(.fadeAlpha(to: 1, duration: 0.1))
+            } else {
+                delayedPivotPointHide = Task {
+                    try await Task.sleep(for: .milliseconds(300))
+                    guard !pivotPointVisibility else { return }
+                    await pivotPointIndicator.run(.fadeAlpha(to: 0, duration: 0.3))
+                }
+            }
+        }
+    }
+    var delayedPivotPointHide: Task<Void, Error>?
 
     private var cancellables: Set<AnyCancellable> = []
     private var measurements: [Measurement] = []
@@ -23,7 +43,7 @@ final class OverlayScene: SKScene {
         addChild(pivotPointIndicator)
 
         pivotPointIndicator.fillColor = .red
-        pivotPointIndicator.strokeColor = .black
+        pivotPointIndicator.strokeColor = .black.withAlphaComponent(0.5)
         pivotPointIndicator.alpha = 0
 
         viewportController.measurements.sink { [weak self] in self?.measurements = $0 }.store(in: &cancellables)
@@ -38,13 +58,8 @@ final class OverlayScene: SKScene {
 
         guard let viewportController, let sceneKitRenderer else { return }
 
-        let projectedPivot = sceneKitRenderer.projectPoint(viewportController.pivotPoint.location)
+        let projectedPivot = sceneKitRenderer.projectPoint(pivotPointLocation)
         pivotPointIndicator.position = CGPoint(x: projectedPivot.x, y: projectedPivot.y)
-
-        let alpha = viewportController.pivotPoint.visible ? 1.0 : 0.0
-        if pivotPointIndicator.alpha != alpha {
-            pivotPointIndicator.run(.fadeAlpha(to: alpha, duration: 0.2))
-        }
 
         guard viewportController.isAnimatingView == false else { return }
 

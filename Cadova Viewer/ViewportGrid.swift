@@ -27,7 +27,7 @@ final class ViewportGrid {
     }
 
     func updateVisibility(cameraNode: SCNNode) {
-        let z = cameraNode.presentation.convertVector(SCNVector3(x: 0, y: 0, z: -1), from: nil).z
+        let z = cameraNode.presentation.convertVector(SCNVector3(0, 0, -1), from: nil).z
         let hideGrid = z > 0 && cameraNode.camera!.usesOrthographicProjection
         coarseGrid.isHidden = hideGrid
         fineGrid.isHidden = hideGrid

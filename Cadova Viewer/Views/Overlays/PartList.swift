@@ -27,6 +27,11 @@ struct PartList: View {
         }
     }
 
+    var hiddenParts: Set<ModelData.Part.ID> {
+        get { viewportController.hiddenPartIDs }
+        nonmutating set { viewportController.hiddenPartIDs = newValue }
+    }
+
     var body: some View {
         if sceneController.parts.count > 1 {
             Button {
@@ -42,12 +47,12 @@ struct PartList: View {
                 VStack(alignment: .leading) {
                     ForEach(sceneController.parts) { part in
                         Toggle(isOn: Binding(get: {
-                            !viewportController.hiddenPartIDs.contains(part.id)
+                            !hiddenParts.contains(part.id)
                         }, set: { visible in
                             if visible {
-                                viewportController.hiddenPartIDs.remove(part.id)
+                                hiddenParts.remove(part.id)
                             } else {
-                                viewportController.hiddenPartIDs.insert(part.id)
+                                hiddenParts.insert(part.id)
                             }
                         })) {
                             Text(part.displayName)
@@ -55,7 +60,16 @@ struct PartList: View {
                     }
                 }
                 .padding()
-                //.interactiveDismissDisabled()
+
+                Button(hiddenParts.isEmpty ? "Hide All" : "Show All") {
+                    if hiddenParts.isEmpty {
+                        hiddenParts = Set(sceneController.parts.map(\.id))
+                    } else {
+                        hiddenParts = []
+                    }
+                }
+                .frame(minWidth: 70)
+                .padding(.all.subtracting(.top))
             }
             .padding()
         }

@@ -49,6 +49,7 @@ enum InteractionMode {
 class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let sceneView = CustomSceneView(frame: .zero)
     let sceneController: SceneController
+    var overlayScene: OverlayScene!
 
     weak var document: Document?
 
@@ -66,7 +67,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     var observers: Set<AnyCancellable> = []
 
-    var session = NavLibSession()
+    var session = NavLibSession<SCNVector3>()
 
     var notificationTokens: [any NSObjectProtocol] = []
     var navLibIsSuspended = false
@@ -102,8 +103,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     private let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
 
-    var pivotPoint: (location: SCNVector3, visible: Bool) = (.init(), false)
-
     var hoverPoint: CGPoint? {
         didSet { hoverPointDidChange() }
     }
@@ -127,6 +126,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         self.document = document
         super.init()
+
+        overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
+        sceneView.overlaySKScene = overlayScene
 
         sceneView.scene = sceneController.scene
         sceneView.showsStatistics = false
@@ -165,8 +167,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         cameraNodeChanged(cameraNode)
         startNavLib()
-
-        sceneView.overlaySKScene = OverlayScene(viewportController: self, renderer: sceneView)
 
         /*
          measurementsStream.value = [
