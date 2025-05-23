@@ -128,12 +128,12 @@ extension ViewportController: NavLibStateProvider {
         ]).first else {
             return nil
         }
-/*
+
         print("Hit: \(result.worldCoordinates)")
         sceneView.scene?.rootNode.addChildNode(debugSphere)
         debugSphere.geometry?.firstMaterial?.diffuse.contents = NSColor.green
         debugSphere.position = result.worldCoordinates
-         */
+         
         return result.worldCoordinates
     }
 

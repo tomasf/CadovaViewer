@@ -169,10 +169,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.overlaySKScene = OverlayScene(viewportController: self, renderer: sceneView)
 
         /*
-        measurementsStream.value = [
-            Measurement(id: 0, fromPoint: .init(x: 0, y: 10, z: 0), toPoint: .init(14, 8, 25)),
-            Measurement(id: 1, fromPoint: .init(x: 20, y: 2, z: 30))
-        ]
+         measurementsStream.value = [
+         Measurement(id: 0, fromPoint: .init(x: 0, y: 10, z: 0), toPoint: .init(14, 8, 25)),
+         Measurement(id: 1, fromPoint: .init(x: 20, y: 2, z: 30))
+         ]
          */
     }
 
@@ -215,6 +215,22 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         })
         if canShowPresets != presetFlags {
             DispatchQueue.main.async { self.canShowPresets = presetFlags }
+        }
+
+        let edgeNodes = sceneController.modelContainer.childNodes(passingTest: { node, _ in node.name == "edges" })
+        let globalOffset = cameraNode.presentation.simdWorldFront * -0.01
+
+        for node in edgeNodes {
+            node.simdPosition = .zero
+            node.simdWorldPosition += globalOffset
+        }
+
+        
+        let encoder = renderer.currentRenderCommandEncoder as! NSObject
+        if encoder.responds(to: NSSelectorFromString("setLineWidth:")) {
+            let lineWidthInPoints = 1.0
+            let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
+            encoder.setValue(lineWidthInPoints * scale, forKey: "lineWidth")
         }
 
         recalculateHover()

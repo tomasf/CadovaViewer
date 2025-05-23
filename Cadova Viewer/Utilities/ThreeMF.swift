@@ -84,6 +84,7 @@ extension ThreeMF.Model {
             //node.geometry = mesh.visibleEdgeGeometry()
             let edgeNode = SCNNode(geometry: mesh.visibleEdgeGeometry())
             node.addChildNode(edgeNode)
+            edgeNode.name = "edges"
 
         case .components (let components):
             for component in components {
