@@ -22,7 +22,6 @@ extension ViewportController {
     func startNavLib() {
         do {
             try session.start(stateProvider: self, applicationName: "Model Viewer")
-            session.pivotPointOverride = SCNVector3(x: 0, y: 0, z: 0)
         } catch {
             print("NavLib initialization failed: \(error)")
         }
@@ -122,18 +121,15 @@ extension ViewportController: NavLibStateProvider {
             y: origin.y + direction.y * length,
             z: origin.z + direction.z * length
         )
-        guard let result = sceneController.modelContainer.hitTestWithSegment(from: origin, to: end, options: [
-            SCNHitTestOption.searchMode.rawValue: NSNumber(value: SCNHitTestSearchMode.closest.rawValue),
-            SCNHitTestOption.rootNode.rawValue: sceneController.modelContainer
-        ]).first else {
+        guard let result = sceneController.modelContainer.hitTestWithSegment(from: origin, to: end).first(where: { $0.node.name != "edges" }) else {
             return nil
         }
 
-        print("Hit: \(result.worldCoordinates)")
-        sceneView.scene?.rootNode.addChildNode(debugSphere)
-        debugSphere.geometry?.firstMaterial?.diffuse.contents = NSColor.green
-        debugSphere.position = result.worldCoordinates
-         
+        //print("Hit: \(result.worldCoordinates) \(result.node)")
+        //sceneView.scene?.rootNode.addChildNode(debugSphere)
+        //debugSphere.geometry?.firstMaterial?.diffuse.contents = NSColor.green
+        //debugSphere.position = result.worldCoordinates
+
         return result.worldCoordinates
     }
 
