@@ -44,7 +44,7 @@ struct PartList: View {
             .controlSize(.large)
             .buttonStyle(BlurButtonStyle())
             .popover(isPresented: $showList, arrowEdge: .top) {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(sceneController.parts) { part in
                         Toggle(isOn: Binding(get: {
                             !hiddenParts.contains(part.id)
@@ -56,6 +56,11 @@ struct PartList: View {
                             }
                         })) {
                             Text(part.displayName)
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onHover { hovered in
+                            viewportController.highlightedPartID = hovered ? part.id : nil
                         }
                     }
                 }

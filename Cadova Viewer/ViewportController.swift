@@ -3,6 +3,8 @@ import Foundation
 import Combine
 import AppKit
 import NavLib
+import CoreImage
+import CoreImage.CIFilterBuiltins
 
 struct OrientationIndicatorValues {
     let x: CGPoint
@@ -80,6 +82,37 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     @Published var hiddenPartIDs: Set<ModelData.Part.ID> = [] {
         didSet { updatePartNodeVisibility() }
+    }
+
+    private var savedMaterials: [SCNMaterial] = []
+    @Published var highlightedPartID: ModelData.Part.ID? {
+        didSet {
+            if let oldValue, let part = sceneController.parts.first(where: { $0.id == oldValue }) {
+                part.node.geometry?.setMaterials(savedMaterials)
+                part.node.removeAllActions()
+            }
+            if let highlightedPartID, let part = sceneController.parts.first(where: { $0.id == highlightedPartID }) {
+                savedMaterials = part.node.geometry?.materials ?? []
+                let highlight = SCNMaterial()
+                highlight.lightingModel = .blinn
+                let color1 = NSColor(red: 145.0/255.0, green: 166.0/255.0, blue: 1.0, alpha: 0.70)
+                let color2 = color1.withAlphaComponent(0.9)
+                highlight.diffuse.contents = color1
+                part.node.geometry?.materials = [highlight]
+
+                let action = SCNAction.customAction(duration: 0.5) { node, time in
+                    highlight.diffuse.contents = color1.blended(withFraction: time * 2, of: color2)
+                }
+                action.timingMode = .easeInEaseOut
+
+                let action2 = SCNAction.customAction(duration: 0.5) { node, time in
+                    highlight.diffuse.contents = color2.blended(withFraction: time * 2, of: color1)
+                }
+                action2.timingMode = .easeInEaseOut
+
+                part.node.runAction(.repeatForever(.sequence([action, action2])))
+            }
+        }
     }
 
     @Published private(set) var canResetCameraRoll: Bool = false
@@ -234,6 +267,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         }
 
         recalculateHover()
+    }
+
+    func renderer(_ renderer: any SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
+        //if let highlightedPartID, let part = sceneController.parts.first(where: { $0.id == highlightedPartID }) {
+        //    part.node.filters = []
+       // }
     }
 
     func calculateOrthographicScale() -> Double {
