@@ -2,6 +2,7 @@ import Foundation
 import ThreeMF
 import SceneKit
 import ModelIO
+import Nodal
 
 struct ModelData {
     let rootNode: SCNNode
@@ -13,15 +14,22 @@ struct ModelData {
         let node: SCNNode
         let name: String?
         let id: ID
+        let kind: Kind
 
-        init(node: SCNNode, name: String?, id: ID?) {
+        init(node: SCNNode, name: String?, id: ID?, kind: Kind) {
             self.node = node
             self.name = name
             self.id = id ?? UUID().uuidString
+            self.kind = kind
         }
 
         var displayName: String {
             name ?? "Object"
+        }
+
+        enum Kind {
+            case model
+            case secondary
         }
     }
 }
@@ -48,21 +56,30 @@ extension ThreeMF.Model {
             container.transform = SCNMatrix4MakeScale(multiplier, multiplier, multiplier)
         }
 
-        let parts = try buildItems.enumerated().map { index, item in
-            let node = try buildNode(item: item, index: index)
+        let parts = try buildItems.enumerated().compactMap { index, item -> ModelData.Part? in
+            guard let node = try buildNode(item: item, index: index) else {
+                return nil
+            }
             container.addChildNode(node)
 
             let object = try object(for: item.objectID)
-            return ModelData.Part(node: node, name: object.name, id: item.partNumber)
+            let kind: ModelData.Part.Kind = (object.type ?? .model) == .model ? .model : .secondary
+            return ModelData.Part(node: node, name: object.name, id: item.partNumber, kind: kind)
         }
 
         return ModelData(rootNode: container, parts: parts)
     }
 
-    func buildNode(item: Item, index: Int) throws -> SCNNode {
-        let object = try object(for: item.objectID)
+    func buildNode(item: Item, index: Int) throws -> SCNNode? {
+        let semantic: PartSemantic
+        if let attribute = item.customAttributes[.semantic], let parsed = PartSemantic(xmlAttributeValue: attribute) {
+            semantic = parsed
+        } else {
+            semantic = .solid
+        }
 
-        let node = try self.node(for: object)
+        let object = try object(for: item.objectID)
+        let node = try self.node(for: object, with: semantic)
 
         let quotedName = if let name = object.name { " \"\(name)\"" } else { "" }
         node.name = "Object id \(object.id)\(quotedName) for item #\(index)"
@@ -73,7 +90,7 @@ extension ThreeMF.Model {
         return node
     }
 
-    func node(for object: ThreeMF.Object) throws -> SCNNode {
+    func node(for object: ThreeMF.Object, with semantic: PartSemantic) throws -> SCNNode {
         let node = SCNNode()
         let quotedName = if let name = object.name { " \"\(name)\"" } else { "" }
         node.name = "Object id \(object.id)" + quotedName
@@ -81,15 +98,17 @@ extension ThreeMF.Model {
         switch object.content {
         case .mesh (let mesh):
             node.geometry = geometry(for: mesh, in: object)
-            //node.geometry = mesh.visibleEdgeGeometry()
-            let edgeNode = SCNNode(geometry: mesh.visibleEdgeGeometry())
-            node.addChildNode(edgeNode)
-            edgeNode.name = "edges"
+
+            if semantic == .solid {
+                let edgeNode = SCNNode(geometry: mesh.visibleEdgeGeometry())
+                node.addChildNode(edgeNode)
+                edgeNode.name = "edges"
+            }
 
         case .components (let components):
             for component in components {
                 let subobject = try self.object(for: component.objectID)
-                let subnode = try self.node(for: subobject)
+                let subnode = try self.node(for: subobject, with: semantic)
                 if let transform = component.transform {
                     subnode.transform = transform.scnMatrix
                 }
@@ -374,7 +393,7 @@ extension Mesh {
 
         let triangleNormals = triangles.map { normal(of: $0) }
 
-        let maxSmoothAngleDegrees = 3.0
+        let maxSmoothAngleDegrees = 30.0 //3.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
         var featureEdges: [Edge] = []
 
@@ -396,4 +415,34 @@ extension Mesh {
         let indices = featureEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }
         return SCNGeometryElement(indices: indices, primitiveType: .line)
     }
+}
+
+enum PartSemantic: String, Hashable, Sendable, Codable {
+    /// A regular printable part, typically rendered as opaque and included in the physical output.
+    case solid
+
+    /// A background or reference part used for spatial context. These parts are included in the model for visualization,
+    /// but are not intended to be printed or interact with the printable geometry.
+    case context
+
+    /// A visual-only part used for display, guidance, or context. These are not intended for printing.
+    case visual
+}
+
+fileprivate extension ExpandedName {
+    static let printable = ExpandedName(namespaceName: nil, localName: "printable")
+    static let semantic = CadovaNamespace.semantic
+}
+
+fileprivate struct CadovaNamespace {
+    static let uri = "https://cadova.org/3mf"
+    static let semantic = ExpandedName(namespaceName: uri, localName: "semantic")
+}
+
+fileprivate extension PartSemantic {
+    init?(xmlAttributeValue value: String) {
+        self.init(rawValue: value)
+    }
+
+    var xmlAttributeValue: String { rawValue }
 }

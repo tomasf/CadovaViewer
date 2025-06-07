@@ -162,6 +162,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
+        sceneView.sceneController = sceneController
 
         sceneView.scene = sceneController.scene
         sceneView.showsStatistics = false
@@ -169,6 +170,19 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.onClick = { [weak self] p in
             self?.handleClick(at: p)
         }
+
+        sceneView.mouseInteractionActive.sink { [weak self] active in
+            self?.setNavLibSuspended(active)
+        }.store(in: &observers)
+
+
+        sceneView.mouseRotationPivot.sink { [weak self] pivot in
+            guard let self else { return }
+            if let pivot {
+                self.overlayScene.pivotPointLocation = pivot
+            }
+            self.overlayScene.pivotPointVisibility = pivot != nil
+        }.store(in: &observers)
 
         let initialCamera = SCNCamera()
         let initialCameraNode = SCNNode()
@@ -251,14 +265,13 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         }
 
         let edgeNodes = sceneController.modelContainer.childNodes(passingTest: { node, _ in node.name == "edges" })
-        let globalOffset = cameraNode.presentation.simdWorldFront * -0.01
+        let globalOffset = cameraNode.presentation.simdWorldFront * -0.1
 
         for node in edgeNodes {
             node.simdPosition = .zero
             node.simdWorldPosition += globalOffset
         }
 
-        
         let encoder = renderer.currentRenderCommandEncoder as! NSObject
         if encoder.responds(to: NSSelectorFromString("setLineWidth:")) {
             let lineWidthInPoints = 1.0

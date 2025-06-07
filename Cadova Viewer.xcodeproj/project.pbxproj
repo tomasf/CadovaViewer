@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C90E33532D84621F002DC32F /* NavLibSwift */; };
-		C923A4C12D94295C007AA0E3 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C923A4C02D94295C007AA0E3 /* ThreeMF */; };
+		C914C3EE2DE75E7000363AFF /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C914C3ED2DE75E7000363AFF /* ThreeMF */; };
 		C932E69F2D0F6711006E5D17 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = C932E69E2D0F6711006E5D17 /* Zip */; };
 		C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */; };
 		C94754082D305F740085380D /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C94754072D305F740085380D /* ThreeMF */; };
@@ -46,8 +46,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C914C3EE2DE75E7000363AFF /* ThreeMF in Frameworks */,
 				C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */,
-				C923A4C12D94295C007AA0E3 /* ThreeMF in Frameworks */,
 				C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */,
 				C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */,
 				C94754082D305F740085380D /* ThreeMF in Frameworks */,
@@ -106,8 +106,8 @@
 				C932E69E2D0F6711006E5D17 /* Zip */,
 				C94754072D305F740085380D /* ThreeMF */,
 				C90E33532D84621F002DC32F /* NavLibSwift */,
-				C923A4C02D94295C007AA0E3 /* ThreeMF */,
 				C9C7D33D2DE0981E00480B4E /* NavLibSwift */,
+				C914C3ED2DE75E7000363AFF /* ThreeMF */,
 			);
 			productName = "Model Viewer";
 			productReference = C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */;
@@ -138,8 +138,8 @@
 			mainGroup = C932E6392D0F5A01006E5D17;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C923A4BF2D94295C007AA0E3 /* XCRemoteSwiftPackageReference "ThreeMF" */,
 				C9C7D33C2DE0981E00480B4E /* XCLocalSwiftPackageReference "../NavLibSwift" */,
+				C914C3EC2DE75E7000363AFF /* XCLocalSwiftPackageReference "../ThreeMF" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C932E6432D0F5A01006E5D17 /* Products */;
@@ -388,31 +388,23 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
+		C914C3EC2DE75E7000363AFF /* XCLocalSwiftPackageReference "../ThreeMF" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ThreeMF;
+		};
 		C9C7D33C2DE0981E00480B4E /* XCLocalSwiftPackageReference "../NavLibSwift" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../NavLibSwift;
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		C923A4BF2D94295C007AA0E3 /* XCRemoteSwiftPackageReference "ThreeMF" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tomasf/ThreeMF.git";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		C90E33532D84621F002DC32F /* NavLibSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
 		};
-		C923A4C02D94295C007AA0E3 /* ThreeMF */ = {
+		C914C3ED2DE75E7000363AFF /* ThreeMF */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = C923A4BF2D94295C007AA0E3 /* XCRemoteSwiftPackageReference "ThreeMF" */;
 			productName = ThreeMF;
 		};
 		C932E69E2D0F6711006E5D17 /* Zip */ = {

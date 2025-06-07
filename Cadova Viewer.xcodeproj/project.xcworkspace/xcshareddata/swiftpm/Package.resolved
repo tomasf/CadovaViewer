@@ -1,5 +1,5 @@
 {
-  "originHash" : "1581edc6f404a9db7c85c9ca84baa8aadd6cfbe038da2be3da847de6ea51b3ff",
+  "originHash" : "4074a854d4e3c62f55de21c09c5e095985f3b3daebee68632c6926f6800f53ae",
   "pins" : [
     {
       "identity" : "nodal",
@@ -8,15 +8,6 @@
       "state" : {
         "revision" : "763efeebe6bf1c26958dcbb29661a9af45cced52",
         "version" : "0.3.1"
-      }
-    },
-    {
-      "identity" : "threemf",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tomasf/ThreeMF.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "dcb9d8e493bd1281675c9f16857b6f1501738ae1"
       }
     },
     {

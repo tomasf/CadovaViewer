@@ -17,15 +17,21 @@ extension ViewportController {
             }
         })
 
-        notificationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.session.applicationHasFocus = true
-        })
+        NSWorkspace.shared.publisher(for: \.frontmostApplication).sink { [weak self] runningApp in
+            guard let runningApp else { return }
 
-        notificationTokens.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            if NSWorkspace.shared.frontmostApplication?.bundleIdentifier != "com.apple.dt.Xcode" { // Keep SpaceMouse enabled in Xcode 🤩
-                self?.session.applicationHasFocus = false
+            if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
+                self?.session.applicationHasFocus = true
+                return
             }
-        })
+
+            let active = switch Preferences.navLibActivationBehavior {
+            case .always: true
+            case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
+            case .specificApplicationsInForeground: Preferences.navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
+            }
+            self?.session.applicationHasFocus = active
+        }.store(in: &observers)
     }
 
     func updateNavLibFocus() {
@@ -93,6 +99,7 @@ extension ViewportController: NavLibStateProvider {
     }
 
     func pivotChanged(position: SCNVector3, visible: Bool) {
+        guard !navLibIsSuspended else { return }
         overlayScene.pivotPointVisibility = visible
         overlayScene.pivotPointLocation = position.scnVector
     }
@@ -126,6 +133,7 @@ extension ViewportController: NavLibStateProvider {
     }
 
     func motionActiveChanged(_ active: Bool) {
+        guard !navLibIsSuspended else { return }
         if active {
             sceneView.defaultCameraController.stopInertia()
         }

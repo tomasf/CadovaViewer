@@ -9,7 +9,7 @@ final class OverlayScene: SKScene {
 
     private let transientNodeContainer = SKNode()
 
-    private let pivotPointIndicator = SKShapeNode(circleOfRadius: 6)
+    private let pivotPointIndicator = SKShapeNode(circleOfRadius: 4)
     var pivotPointLocation = SCNVector3(0, 0, 0)
     var pivotPointVisibility = false {
         didSet {
@@ -42,7 +42,7 @@ final class OverlayScene: SKScene {
         addChild(transientNodeContainer)
         addChild(pivotPointIndicator)
 
-        pivotPointIndicator.fillColor = .red
+        pivotPointIndicator.fillColor = .red.withAlphaComponent(1)
         pivotPointIndicator.strokeColor = .black.withAlphaComponent(0.5)
         pivotPointIndicator.alpha = 0
 
