@@ -264,13 +264,38 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             DispatchQueue.main.async { self.canShowPresets = presetFlags }
         }
 
-        let edgeNodes = sceneController.modelContainer.childNodes(passingTest: { node, _ in node.name == "edges" })
-        let globalOffset = cameraNode.presentation.simdWorldFront * -0.1
+        // Calculate a suitable distance for offsetting edges
 
+        let localHitTestPoints: [CGPoint] = [
+            CGPoint(x: sceneViewSize.width / 2, y: sceneViewSize.height / 2),
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: sceneViewSize.width, y: 0),
+            CGPoint(x: sceneViewSize.width, y: sceneViewSize.height),
+            CGPoint(x: 0, y: sceneViewSize.height),
+        ]
+
+        var closestHitTestDistance: Float = 1000.0
+        for viewPoint in localHitTestPoints {
+            let hitTestResult = sceneView.hitTest(viewPoint, options: [
+                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
+                .rootNode: sceneController.modelContainer
+            ]).first(where: { $0.node.name != "edges" })
+
+            if let hitTestResult {
+                closestHitTestDistance = min(Float(hitTestResult.worldCoordinates.distance(from: cameraNode.presentation.worldPosition)), closestHitTestDistance)
+            }
+        }
+
+        let edgeNodes = sceneController.modelContainer.childNodes(passingTest: { node, _ in node.name == "edges" })
         for node in edgeNodes {
             node.simdPosition = .zero
-            node.simdWorldPosition += globalOffset
+            let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
+            let minDistance = min(closestHitTestDistance, distanceToPart)
+            let offset = minDistance / -1000.0
+            print(minDistance, offset)
+            node.simdWorldPosition += cameraNode.presentation.simdWorldFront * offset
         }
+
 
         let encoder = renderer.currentRenderCommandEncoder as! NSObject
         if encoder.responds(to: NSSelectorFromString("setLineWidth:")) {
