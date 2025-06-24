@@ -55,9 +55,6 @@ class DocumentHostingController: NSHostingController<DocumentView>, NSMenuItemVa
             return true
         }
     }
-
-
-
 }
 
 //if menuItem.action == #selector(copy:)

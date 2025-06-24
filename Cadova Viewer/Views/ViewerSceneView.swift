@@ -24,10 +24,12 @@ class CustomSceneView: SCNView {
     var onClick: ((CGPoint) -> Void)? = nil
     var mouseInteractionActive: AnyPublisher<Bool, Never> { mouseInteractionActiveSubject.eraseToAnyPublisher() }
     var mouseRotationPivot: AnyPublisher<SCNVector3?, Never> { mouseRotationPivotSubject.eraseToAnyPublisher() }
+    var showContextMenu: AnyPublisher<NSEvent, Never> { contextMenuSubject.eraseToAnyPublisher() }
     weak var sceneController: SceneController?
 
     private let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     private let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
+    private let contextMenuSubject = PassthroughSubject<NSEvent, Never>()
 
     override init(frame: NSRect, options: [String : Any]? = nil) {
         super.init(frame: frame, options: options)
@@ -74,10 +76,6 @@ class CustomSceneView: SCNView {
         guard let sceneController, allowsCameraControl else { return }
 
         super.mouseDown(with: event)
-        CGAssociateMouseAndMouseCursorPosition(0)
-        NSCursor.hide()
-        _ = CGGetLastMouseDelta() // Clear accumulated delta
-
         let localPoint = convert(event.locationInWindow, from: nil)
 
         if let result = hitTest(localPoint, options: [
@@ -94,30 +92,36 @@ class CustomSceneView: SCNView {
             mouseRotationPivotSubject.send(defaultCameraController.target)
         }
 
-        var location = event.locationInWindow
-        var eventNumber = event.eventNumber
+        NSCursor.hide()
+        var didMove = false
+        let endEvent = MouseTracker.track(with: event) { location in
+            didMove = true
 
-        while true {
-            if NSApp.nextEvent(matching: [.leftMouseUp, .rightMouseUp], until: .now.addingTimeInterval(0.001), inMode: .default, dequeue: true) != nil {
-                break
+            if let dragEvent = NSEvent.mouseEvent(
+                with: .leftMouseDragged,
+                location: location,
+                modifierFlags: [],
+                timestamp: event.timestamp,
+                windowNumber: event.windowNumber,
+                context: nil,
+                eventNumber: event.eventNumber,
+                clickCount: 1,
+                pressure: 0
+            ) {
+                mouseDragged(with: dragEvent)
             }
-            let (deltaX, deltaY) = CGGetLastMouseDelta()
-            location.x += CGFloat(deltaX)
-            location.y -= CGFloat(deltaY)
-            eventNumber += 1
-
-            guard let dragEvent = NSEvent.mouseEvent(with: .leftMouseDragged, location: location, modifierFlags: [], timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil, eventNumber: eventNumber, clickCount: 1, pressure: 0) else { break }
-            mouseDragged(with: dragEvent)
         }
-        CGAssociateMouseAndMouseCursorPosition(1)
+
         NSCursor.unhide()
-
-        if let upEvent = NSEvent.mouseEvent(with: .leftMouseUp, location: location, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: eventNumber, clickCount: 1, pressure: 0) {
-            mouseUp(with: upEvent)
-        }
+        super.mouseUp(with: endEvent)
 
         mouseRotationPivotSubject.send(nil)
         mouseInteractionActiveSubject.send(false)
+
+        if endEvent.type == .rightMouseUp && !didMove {
+            contextMenuSubject.send(endEvent)
+
+        }
     }
 
     override var acceptsFirstResponder: Bool { true }

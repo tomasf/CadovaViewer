@@ -152,6 +152,34 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             self.overlayScene.pivotPointVisibility = pivot != nil
         }.store(in: &observers)
 
+        sceneView.showContextMenu.sink { [weak self] event in
+            guard let self else { return }
+
+            let builder = MenuBuilder()
+            builder.addHeader("Parts")
+
+            for part in self.sceneController.parts {
+                builder.addItem(label: part.displayName, checked: self.hiddenPartIDs.contains(part.id) == false) {
+                    self.hiddenPartIDs.formSymmetricDifference([part.id])
+                } onHighlight: { h in
+                    self.highlightedPartID = h ? part.id : nil
+                }
+            }
+
+            builder.addSeparator()
+            if self.hiddenPartIDs.isEmpty {
+                builder.addItem(label: "Hide All") {
+                    self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id))
+                }
+            } else {
+                builder.addItem(label: "Show All") {
+                    self.hiddenPartIDs = []
+                }
+            }
+
+            NSMenu.popUpContextMenu(builder.makeMenu(), with: event, for: self.sceneView)
+        }.store(in: &observers)
+
         let initialCamera = SCNCamera()
         let initialCameraNode = SCNNode()
         initialCameraNode.name = "Initial camera node"

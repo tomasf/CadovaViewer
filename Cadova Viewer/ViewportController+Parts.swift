@@ -7,7 +7,7 @@ extension ViewportController {
     }
 
     func updateHighlightedPart(oldID oldValue: ModelData.Part.ID?, newID newValue: ModelData.Part.ID?) {
-        if let oldValue {
+        if oldValue != nil {
             highlightNode?.removeFromParentNode()
             highlightNode = nil
             updatePartNodeVisibility()
@@ -24,7 +24,8 @@ extension ViewportController {
 
             let highlight = SCNMaterial()
             highlight.lightingModel = .blinn
-            let color1 = NSColor.white
+            highlight.transparencyMode = .singleLayer
+            let color1 = NSColor.white.withAlphaComponent(0.7)
             highlight.diffuse.contents = color1
 
             guard let oldGeometry = part.node.geometry else { return }
