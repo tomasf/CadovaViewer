@@ -80,38 +80,16 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         didSet { updateCameraProjection() }
     }
 
+    // Parts
     @Published var hiddenPartIDs: Set<ModelData.Part.ID> = [] {
         didSet { updatePartNodeVisibility() }
     }
 
-    private var savedMaterials: [SCNMaterial] = []
+    var highlightNode: SCNNode?
+    var savedMaterials: [SCNMaterial] = []
     @Published var highlightedPartID: ModelData.Part.ID? {
         didSet {
-            if let oldValue, let part = sceneController.parts.first(where: { $0.id == oldValue }) {
-                part.node.geometry?.setMaterials(savedMaterials)
-                part.node.removeAllActions()
-            }
-            if let highlightedPartID, let part = sceneController.parts.first(where: { $0.id == highlightedPartID }) {
-                savedMaterials = part.node.geometry?.materials ?? []
-                let highlight = SCNMaterial()
-                highlight.lightingModel = .blinn
-                let color1 = NSColor(red: 145.0/255.0, green: 166.0/255.0, blue: 1.0, alpha: 0.70)
-                let color2 = color1.withAlphaComponent(0.9)
-                highlight.diffuse.contents = color1
-                part.node.geometry?.materials = [highlight]
-
-                let action = SCNAction.customAction(duration: 0.5) { node, time in
-                    highlight.diffuse.contents = color1.blended(withFraction: time * 2, of: color2)
-                }
-                action.timingMode = .easeInEaseOut
-
-                let action2 = SCNAction.customAction(duration: 0.5) { node, time in
-                    highlight.diffuse.contents = color2.blended(withFraction: time * 2, of: color1)
-                }
-                action2.timingMode = .easeInEaseOut
-
-                part.node.runAction(.repeatForever(.sequence([action, action2])))
-            }
+            updateHighlightedPart(oldID: oldValue, newID: highlightedPartID)
         }
     }
 
@@ -122,16 +100,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var measurements: AnyPublisher<[Measurement], Never> { measurementsStream.eraseToAnyPublisher() }
 
     var isAnimatingView = false
-
-    private func updatePartNodeVisibility() {
-        for part in sceneController.parts {
-            if hiddenPartIDs.contains(part.id) {
-                part.node.categoryBitMask &= ~(1 << categoryID)
-            } else {
-                part.node.categoryBitMask |= 1 << categoryID
-            }
-        }
-    }
 
     private let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
@@ -292,7 +260,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
             let minDistance = min(closestHitTestDistance, distanceToPart)
             let offset = minDistance / -1000.0
-            print(minDistance, offset)
+            //print(minDistance, offset)
             node.simdWorldPosition += cameraNode.presentation.simdWorldFront * offset
         }
 
@@ -305,12 +273,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         }
 
         recalculateHover()
-    }
-
-    func renderer(_ renderer: any SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
-        //if let highlightedPartID, let part = sceneController.parts.first(where: { $0.id == highlightedPartID }) {
-        //    part.node.filters = []
-       // }
     }
 
     func calculateOrthographicScale() -> Double {

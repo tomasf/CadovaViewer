@@ -39,6 +39,7 @@ final class SceneController: ObservableObject {
 
             parts = modelData.parts
 
+            // Should the viewport controllers do this instead? They know their hidden IDs
             for part in parts {
                 if let previousCategoryBitMask = previousVisibility[part.id] {
                     part.node.categoryBitMask = previousCategoryBitMask

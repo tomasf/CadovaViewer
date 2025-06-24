@@ -226,7 +226,7 @@ extension ThreeMF.Model {
         let defaultMaterial = SCNMaterial()
         defaultMaterial.diffuse.contents = defaultColor.nsColor
         defaultMaterial.emission.intensity = 0
-        defaultMaterial.transparencyMode = .dualLayer
+        defaultMaterial.transparencyMode = .singleLayer
         defaultMaterial.name = "Default material"
 
         let materials = orderedMaterials.map {
