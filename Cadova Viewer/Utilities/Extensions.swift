@@ -93,6 +93,14 @@ extension Sequence {
             $0.3.append($1.3)
         }
     }
+
+    func paired() -> [(Element, Element)] {
+        .init(zip(self, dropFirst()))
+    }
+
+    func wrappedPairs() -> [(Element, Element)] {
+        .init(zip(self, dropFirst() + Array(prefix(1))))
+    }
 }
 
 internal extension Collection {

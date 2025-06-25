@@ -61,7 +61,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         self.sceneController = sceneController
         self.categoryID = categoryID
         self.privateContainer = privateContainer
-        grid = ViewportGrid(container: privateContainer, categoryID: categoryID)
+        grid = ViewportGrid(categoryID: categoryID)
+        privateContainer.addChildNode(grid.node)
 
         self.document = document
         super.init()
@@ -138,19 +139,20 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         updateCameraProjection()
 
+        var hasSetInitialView = false
         sceneController.modelWasLoaded.sink { [weak self] in
-            self?.showViewPreset(.isometric, animated: false)
+            guard let self else { return }
+
+            if !hasSetInitialView {
+                showViewPreset(.isometric, animated: false)
+                hasSetInitialView = true
+            }
+
+            grid.updateBounds(geometry: sceneController.modelContainer)
         }.store(in: &observers)
 
         cameraNodeChanged(cameraNode)
         startNavLib()
-
-        /*
-         measurementsStream.value = [
-         Measurement(id: 0, fromPoint: .init(x: 0, y: 10, z: 0), toPoint: .init(14, 8, 25)),
-         Measurement(id: 1, fromPoint: .init(x: 20, y: 2, z: 30))
-         ]
-         */
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
@@ -221,7 +223,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             node.simdPosition = .zero
             let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
             let minDistance = min(closestHitTestDistance, distanceToPart)
-            let offset = minDistance / -1000.0
+            let offset = minDistance / -500.0
             //print(minDistance, offset)
             node.simdWorldPosition += cameraNode.presentation.simdWorldFront * offset
         }

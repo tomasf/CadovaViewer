@@ -2,28 +2,65 @@ import Foundation
 import SceneKit
 
 final class ViewportGrid {
+    let node = SCNNode()
+    private let perimeter = SCNNode()
     private let coarseGrid = SCNNode()
     private let fineGrid = SCNNode()
+    private let originCross = SCNNode()
 
-    init(container: SCNNode, categoryID: Int) {
+    private var currentCoarseSpacing = 0.0
+    private var gridCenter = SCNVector3Zero
+    private var gridRadius = 0.0
+
+    private let maxGridOpacity = 0.15
+
+    init(categoryID: Int) {
+        node.name = "Grid"
+
         coarseGrid.name = "Coarse grid"
         coarseGrid.categoryBitMask = 1 << categoryID
         fineGrid.name = "Fine grid"
         fineGrid.categoryBitMask = 1 << categoryID
 
-        container.addChildNode(coarseGrid)
-        container.addChildNode(fineGrid)
-
-        let originLineContainer = SCNNode()
-        container.addChildNode(originLineContainer)
+        node.addChildNode(coarseGrid)
+        node.addChildNode(fineGrid)
+        node.addChildNode(perimeter)
+        node.addChildNode(originCross)
 
         let extent = 10000.0
-        let x = SCNNode(geometry: .lines([(SCNVector3(-extent, 0, 0), SCNVector3(extent, 0, 0))], color: .init(white: 0.5, alpha: 1)))
-        let y = SCNNode(geometry: .lines([(SCNVector3(0, -extent, 0), SCNVector3(0, extent, 0))], color: .init(white: 0.5, alpha: 1)))
-        let z = SCNNode(geometry: .lines([(SCNVector3(0, 0, -extent), SCNVector3(0, 0, extent))], color: .init(white: 0.5, alpha: 1)))
-        originLineContainer.addChildNode(x)
-        originLineContainer.addChildNode(y)
-        originLineContainer.addChildNode(z)
+        let pairs = [
+            (SCNVector3(-extent, 0, 0), SCNVector3(extent, 0, 0)),
+            (SCNVector3(0, -extent, 0), SCNVector3(0, extent, 0)),
+            (SCNVector3(0, 0, -extent), SCNVector3(0, 0, extent))
+        ]
+
+        originCross.geometry = .lines(pairs, color: .init(white: 0.4, alpha: 1))
+    }
+
+    func updateBounds(geometry: SCNNode) {
+        let box = geometry.boundingBox
+        let modelRadius = sqrt(pow(box.max.x - box.min.x, 2) + pow(box.max.y - box.min.y, 2)) * 0.5
+        let modelCenter = SCNVector3(
+            (box.min.x + box.max.x) / 2,
+            (box.min.y + box.max.y) / 2,
+            (box.min.z + box.max.z) / 2
+        )
+
+        gridRadius = Double(modelRadius * 1.5)
+        gridCenter = SCNVector3(round(modelCenter.x / 10.0) * 10, round(modelCenter.y / 10.0) * 10, 0)
+        currentCoarseSpacing = 0 // Invalidate grid
+
+        let resolution = 100
+        let perimeterLines = (0..<resolution).map {
+            let angle = Double($0) * .pi * 2 / Double(resolution)
+            return SCNVector3(
+                gridCenter.x + cos(angle) * gridRadius,
+                gridCenter.y + sin(angle) * gridRadius,
+                gridCenter.z
+            )
+        }.wrappedPairs()
+
+        perimeter.geometry = .lines(perimeterLines, color: .init(white: 1, alpha: maxGridOpacity))
     }
 
     func updateVisibility(cameraNode: SCNNode) {
@@ -31,12 +68,13 @@ final class ViewportGrid {
         let hideGrid = z > 0 && cameraNode.camera!.usesOrthographicProjection
         coarseGrid.isHidden = hideGrid
         fineGrid.isHidden = hideGrid
+        perimeter.isHidden = hideGrid
     }
 
     func updateScale(renderer: SCNSceneRenderer, viewSize: CGSize) {
         let bounds = CGRect(origin: .zero, size: viewSize)
-        let effectiveScale = min(max(calculateGridScale(renderer: renderer, sceneViewBounds: bounds), 0.11), 99.99)
-        setScale(effectiveScale)
+        let effectiveScale = min(max(calculateGridScale(renderer: renderer, sceneViewBounds: bounds), 0.11), 400.0)
+        buildGrid(effectiveScale)
     }
 
    // MARK: - Calculation
@@ -66,27 +104,47 @@ final class ViewportGrid {
 
     // MARK: - Construction
 
-    private func setScale(_ scale: Double) {
+    private func buildGrid(_ scale: Double) {
+        guard gridRadius > 0 else { return }
         let lineDistance = 1 / pow(10, floor(log10(scale)) - 2)
         let fraction = 1 - (ceil(log10(scale)) - log10(scale))
 
         guard !lineDistance.isNaN else { return }
 
-        let fullOpacity = 0.15
-        let coarseCount = 100
-        coarseGrid.geometry = makeGrid(lineDistance: lineDistance, count: coarseCount, color: .init(white: 1, alpha: fullOpacity))
-        fineGrid.geometry = makeGrid(lineDistance: lineDistance / 10.0, count: coarseCount * 10, color: .init(white: 1, alpha: fraction * fullOpacity))
+        let fineGridColor = NSColor(white: 1, alpha: fraction * maxGridOpacity)
+
+        if lineDistance != currentCoarseSpacing {
+            coarseGrid.geometry = makeGridGeometry(lineDistance: lineDistance, color: .init(white: 1, alpha: maxGridOpacity))
+            fineGrid.geometry = makeGridGeometry(lineDistance: lineDistance / 10.0, color: fineGridColor)
+            currentCoarseSpacing = lineDistance
+        } else {
+            fineGrid.geometry?.firstMaterial?.diffuse.contents = fineGridColor
+        }
     }
 
-    private func makeGrid(lineDistance: Double, count: Int, color: NSColor) -> SCNGeometry {
-        let range = -Double(count)*lineDistance...Double(count)*lineDistance
-        let a = stride(from: range.lowerBound, through: range.upperBound, by: lineDistance).map { y in
-            (SCNVector3(range.lowerBound, y, 0), SCNVector3(range.upperBound, y, 0))
-        }
-        let b = stride(from: range.lowerBound, through: range.upperBound, by: lineDistance).map { x in
-            (SCNVector3(x, range.lowerBound, 0), SCNVector3(x, range.upperBound, 0))
+    private func makeGridGeometry(lineDistance: Double, color: NSColor) -> SCNGeometry {
+        let minX = ceil((gridCenter.x - gridRadius) / lineDistance) * lineDistance
+        let maxX = floor((gridCenter.x + gridRadius) / lineDistance) * lineDistance
+        let yLines = stride(from: minX, through: maxX, by: lineDistance).map { x in
+            let xOffset = x - gridCenter.x
+            let yOffset = sqrt(gridRadius * gridRadius - xOffset * xOffset)
+            return (
+                SCNVector3(x, gridCenter.y - yOffset, gridCenter.z),
+                SCNVector3(x, gridCenter.y + yOffset, gridCenter.z)
+            )
         }
 
-        return SCNGeometry.lines(a + b, color: color)
+        let minY = ceil((gridCenter.y - gridRadius) / lineDistance) * lineDistance
+        let maxY = floor((gridCenter.y + gridRadius) / lineDistance) * lineDistance
+        let xLines = stride(from: minY, through: maxY, by: lineDistance).map { y in
+            let yOffset = y - gridCenter.y
+            let xOffset = sqrt(gridRadius * gridRadius - yOffset * yOffset)
+            return (
+                SCNVector3(gridCenter.x - xOffset, y, gridCenter.z),
+                SCNVector3(gridCenter.x + xOffset, y, gridCenter.z)
+            )
+        }
+
+        return SCNGeometry.lines(xLines + yLines, color: color)
     }
 }

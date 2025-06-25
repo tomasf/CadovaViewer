@@ -25,8 +25,6 @@ final class SceneController: ObservableObject {
         viewportPrivateContainer.name = "Viewport-private container"
         scene.rootNode.addChildNode(viewportPrivateContainer)
 
-        var hasLoadedModel = false
-
         document.modelStream.receive(on: DispatchQueue.main).sink { [weak self] modelData in
             guard let self else { return }
 
@@ -48,10 +46,7 @@ final class SceneController: ObservableObject {
                 }
             }
 
-            if !hasLoadedModel {
-                modelLoadedSignal.send()
-                hasLoadedModel = true
-            }
+            modelLoadedSignal.send()
         }.store(in: &observers)
     }
 
