@@ -20,6 +20,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let cameraLight = SCNLight()
 
     let grid: ViewportGrid
+    var viewOptions = Preferences.viewOptions {
+        didSet {
+            viewOptionsDidChange()
+        }
+    }
 
     var navLibSession = NavLibSession<SCNVector3>()
 
@@ -89,30 +94,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         sceneView.showContextMenu.sink { [weak self] event in
             guard let self else { return }
-
-            let builder = MenuBuilder()
-            builder.addHeader("Parts")
-
-            for part in self.sceneController.parts {
-                builder.addItem(label: part.displayName, checked: self.hiddenPartIDs.contains(part.id) == false) {
-                    self.hiddenPartIDs.formSymmetricDifference([part.id])
-                } onHighlight: { h in
-                    self.highlightedPartID = h ? part.id : nil
-                }
-            }
-
-            builder.addSeparator()
-            if self.hiddenPartIDs.isEmpty {
-                builder.addItem(label: "Hide All") {
-                    self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id))
-                }
-            } else {
-                builder.addItem(label: "Show All") {
-                    self.hiddenPartIDs = []
-                }
-            }
-
-            NSMenu.popUpContextMenu(builder.makeMenu(), with: event, for: self.sceneView)
+            NSMenu.popUpContextMenu(contextMenu(), with: event, for: self.sceneView)
         }.store(in: &observers)
 
         let initialCamera = SCNCamera()
@@ -153,6 +135,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         cameraNodeChanged(cameraNode)
         startNavLib()
+        viewOptionsDidChange()
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
@@ -283,6 +266,49 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         updateNavLibPointerPosition()
     }
 
+    private func viewOptionsDidChange() {
+        grid.showGrid = viewOptions.showGrid
+        grid.showOrigin = viewOptions.showOrigin
+        Preferences.viewOptions = viewOptions
+    }
+
+    private func contextMenu() -> NSMenu {
+        let builder = MenuBuilder()
+        if sceneController.parts.count > 1 {
+            builder.addHeader("Parts")
+
+            for part in self.sceneController.parts {
+                builder.addItem(label: part.displayName, checked: self.hiddenPartIDs.contains(part.id) == false) {
+                    self.hiddenPartIDs.formSymmetricDifference([part.id])
+                } onHighlight: { h in
+                    self.highlightedPartID = h ? part.id : nil
+                }
+            }
+
+            builder.addSeparator()
+            if self.hiddenPartIDs.isEmpty {
+                builder.addItem(label: "Hide All") {
+                    self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id))
+                }
+            } else {
+                builder.addItem(label: "Show All") {
+                    self.hiddenPartIDs = []
+                }
+            }
+            builder.addSeparator()
+        }
+
+        builder.addItem(label: "Show Grid", checked: viewOptions.showGrid) {
+            self.viewOptions.showGrid = !self.viewOptions.showGrid
+        }
+
+        builder.addItem(label: "Show Origin", checked: viewOptions.showOrigin) {
+            self.viewOptions.showOrigin = !self.viewOptions.showOrigin
+        }
+
+        return builder.makeMenu()
+    }
+
     func performMenuCommand(_ command: MenuCommand, tag: Int) {
         switch command {
         case .showViewPreset:
@@ -340,5 +366,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         case zoomOut
         case showRenderingOptions
         case clearRoll
+    }
+
+    struct ViewOptions: Codable {
+        var showGrid = true
+        var showOrigin = true
     }
 }
