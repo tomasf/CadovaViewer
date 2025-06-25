@@ -33,13 +33,7 @@ struct DocumentView: View {
             }
             .frame(minWidth: 500, minHeight: 300)
             .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 10) {
-                    MeasurementListView(stream: viewportController.measurements) { measurement in
-                        viewportController.removeMeasurement(id: measurement.id)
-                    }
-                    .padding()
-                    PartList(sceneController: viewportController.sceneController, viewportController: viewportController)
-                }
+                PartList(sceneController: viewportController.sceneController, viewportController: viewportController)
             }
             .overlay(alignment: .bottomTrailing) {
                 CoordinateSystemIndicator(stream: viewportController.coordinateIndicatorValues)

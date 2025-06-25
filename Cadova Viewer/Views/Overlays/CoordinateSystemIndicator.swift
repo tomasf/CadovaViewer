@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import SceneKit
 
 struct CoordinateSystemIndicator: View {
     let stream: AnyPublisher<OrientationIndicatorValues, Never>
@@ -42,5 +43,23 @@ struct CoordinateSystemIndicator: View {
                 .offset(x: value.x * textRadius, y: value.y * -textRadius)
                 .font(.system(size: 10))
         }
+    }
+}
+
+struct OrientationIndicatorValues {
+    let x: CGPoint
+    let y: CGPoint
+    let z: CGPoint
+
+    init(x: CGPoint, y: CGPoint, z: CGPoint) {
+        self.x = x
+        self.y = y
+        self.z = z
+    }
+
+    init(x: SCNVector3, y: SCNVector3, z: SCNVector3) {
+        self.x = CGPoint(x: x.x, y: x.y)
+        self.y = CGPoint(x: y.x, y: y.y)
+        self.z = CGPoint(x: z.x, y: z.y)
     }
 }

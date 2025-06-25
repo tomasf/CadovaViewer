@@ -3,50 +3,6 @@ import Foundation
 import Combine
 import AppKit
 import NavLib
-import CoreImage
-import CoreImage.CIFilterBuiltins
-
-struct OrientationIndicatorValues {
-    let x: CGPoint
-    let y: CGPoint
-    let z: CGPoint
-
-    init(x: CGPoint, y: CGPoint, z: CGPoint) {
-        self.x = x
-        self.y = y
-        self.z = z
-    }
-
-    init(x: SCNVector3, y: SCNVector3, z: SCNVector3) {
-        self.x = CGPoint(x: x.x, y: x.y)
-        self.y = CGPoint(x: y.x, y: y.y)
-        self.z = CGPoint(x: z.x, y: z.y)
-    }
-}
-
-struct MeasurementIndicator: Identifiable {
-    let measurement: Measurement
-    let fromPoint: Point
-    let toPoint: Point
-
-    struct Point {
-        let point: CGPoint
-        let visible: Bool
-    }
-
-    var id: Int { measurement.id }
-}
-
-enum InteractionMode {
-    case view
-    case measurement (MeasurementState)
-
-    enum MeasurementState {
-        case initial
-        case selectingStart (id: Int)
-        case selectingEnd (id: Int)
-    }
-}
 
 class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let sceneView = CustomSceneView(frame: .zero)
@@ -58,8 +14,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let categoryID: Int
     let privateContainer: SCNNode
 
-    var interactionMode: InteractionMode = .view //.measurement(.initial)
-
     var sceneViewSize: CGSize = .zero
 
     var cameraNode = SCNNode()
@@ -67,14 +21,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     let grid: ViewportGrid
 
-    var observers: Set<AnyCancellable> = []
-
-    var session = NavLibSession<SCNVector3>()
+    var navLibSession = NavLibSession<SCNVector3>()
 
     var notificationTokens: [any NSObjectProtocol] = []
     var navLibIsSuspended = false
-
-    let debugSphere = SCNNode(geometry: SCNSphere(radius: 1))
 
     @Published var projection: CameraProjection = .perspective {
         didSet { updateCameraProjection() }
@@ -96,9 +46,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     @Published private(set) var canResetCameraRoll: Bool = false
     @Published var canShowPresets: [ViewPreset: Bool] = [:]
 
-    private let measurementsStream = CurrentValueSubject<[Measurement], Never>([])
-    var measurements: AnyPublisher<[Measurement], Never> { measurementsStream.eraseToAnyPublisher() }
-
     var isAnimatingView = false
 
     private let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
@@ -108,16 +55,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         didSet { hoverPointDidChange() }
     }
 
-    func removeMeasurement(id: Int) {
-        measurementsStream.value.removeAll(where: { $0.id == id })
-        if case .measurement (let state) = interactionMode {
-            if case .selectingStart(let measurementID) = state, measurementID == id {
-                interactionMode = .measurement(.initial)
-            } else if case .selectingEnd(let measurementID) = state, measurementID == id {
-                interactionMode = .measurement(.initial)
-            }
-        }
-    }
+    var observers: Set<AnyCancellable> = []
 
     init(document: Document, sceneController: SceneController, categoryID: Int, privateContainer: SCNNode) {
         self.sceneController = sceneController
@@ -134,10 +72,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         sceneView.scene = sceneController.scene
         sceneView.showsStatistics = false
-
-        sceneView.onClick = { [weak self] p in
-            self?.handleClick(at: p)
-        }
 
         sceneView.mouseInteractionActive.sink { [weak self] active in
             self?.setNavLibSuspended(active)
@@ -299,8 +233,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
             encoder.setValue(lineWidthInPoints * scale, forKey: "lineWidth")
         }
-
-        recalculateHover()
     }
 
     func calculateOrthographicScale() -> Double {
@@ -342,76 +274,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     func clearRoll() {
         setCameraView(clearRollView(), movement: .small)
-    }
-
-    private func handleClick(at point: CGPoint) {
-        switch interactionMode {
-        case .view:
-            break
-
-        case .measurement(let measurementState):
-            switch measurementState {
-            case .initial: break
-            case .selectingStart (let measurementID):
-                interactionMode = .measurement(.selectingEnd(id: measurementID))
-
-            case .selectingEnd:
-                interactionMode = .measurement(.initial)
-            }
-        }
-    }
-
-    private func recalculateHover() {
-        var measurements = measurementsStream.value
-
-        switch interactionMode {
-        case .view:
-            break
-
-        case .measurement (let measurementState):
-            let matchPoint = hoverPoint.flatMap {
-                var localPoint = $0
-                localPoint.y = sceneViewSize.height - localPoint.y
-                return sceneView.hitTest(localPoint, options: [
-                    .categoryBitMask: (1 << categoryID) as NSNumber,
-                    .rootNode: sceneController.modelContainer,
-                    .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
-                ]).first?.worldCoordinates
-            }
-
-            switch measurementState {
-            case .initial:
-                guard let matchPoint else { return }
-
-                let nextID = (measurements.map(\.id).max() ?? -1) + 1
-                let measurement = Measurement(id: nextID, fromPoint: matchPoint)
-                measurements.append(measurement)
-                interactionMode = .measurement(.selectingStart(id: nextID))
-
-            case .selectingStart (let measurementID):
-                guard let matchPoint else {
-                    measurements.removeAll(where: { $0.id == measurementID })
-                    interactionMode = .measurement(.initial)
-                    break
-                }
-
-                guard let index = measurementsStream.value.firstIndex(where: { $0.id == measurementID }) else { break }
-                measurements[index].fromPoint = matchPoint
-
-            case .selectingEnd (let measurementID):
-                guard let index = measurementsStream.value.firstIndex(where: { $0.id == measurementID }) else { break }
-
-                guard let matchPoint else {
-                    break
-                }
-
-                measurements[index].toPoint = matchPoint
-            }
-        }
-
-        if measurements != measurementsStream.value {
-            measurementsStream.value = measurements
-        }
     }
 
     private func hoverPointDidChange() {

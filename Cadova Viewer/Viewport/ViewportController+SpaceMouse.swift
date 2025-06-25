@@ -6,7 +6,7 @@ import NavLib
 extension ViewportController {
     func startNavLib() {
         do {
-            try session.start(stateProvider: self, applicationName: "Model Viewer")
+            try navLibSession.start(stateProvider: self, applicationName: "Model Viewer")
         } catch {
             print("NavLib initialization failed: \(error)")
         }
@@ -21,7 +21,7 @@ extension ViewportController {
             guard let runningApp else { return }
 
             if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
-                self?.session.applicationHasFocus = true
+                self?.navLibSession.applicationHasFocus = true
                 return
             }
 
@@ -30,29 +30,29 @@ extension ViewportController {
             case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
             case .specificApplicationsInForeground: Preferences.navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
             }
-            self?.session.applicationHasFocus = active
+            self?.navLibSession.applicationHasFocus = active
         }.store(in: &observers)
     }
 
     func updateNavLibFocus() {
         if let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) == document {
-            session.setAsActiveSession()
+            navLibSession.setAsActiveSession()
         }
     }
 
     func updateNavLibPointerPosition() {
         guard let position = mousePosition else { return }
-        session.mousePosition = position
+        navLibSession.mousePosition = position
     }
 
     func updateNavLibProjection() {
         guard let cameraProjection else { return }
-        session.cameraProjection = cameraProjection
+        navLibSession.cameraProjection = cameraProjection
     }
 
     func setNavLibSuspended(_ suspend: Bool) {
         navLibIsSuspended = suspend
-        session.cancelMotion()
+        navLibSession.cancelMotion()
     }
 }
 

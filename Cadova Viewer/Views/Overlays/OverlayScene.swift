@@ -45,8 +45,6 @@ final class OverlayScene: SKScene {
         pivotPointIndicator.fillColor = .red.withAlphaComponent(1)
         pivotPointIndicator.strokeColor = .black.withAlphaComponent(0.5)
         pivotPointIndicator.alpha = 0
-
-        viewportController.measurements.sink { [weak self] in self?.measurements = $0 }.store(in: &cancellables)
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -56,37 +54,9 @@ final class OverlayScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         transientNodeContainer.removeAllChildren()
 
-        guard let viewportController, let sceneKitRenderer else { return }
+        guard let sceneKitRenderer else { return }
 
         let projectedPivot = sceneKitRenderer.projectPoint(pivotPointLocation)
         pivotPointIndicator.position = CGPoint(x: projectedPivot.x, y: projectedPivot.y)
-
-        guard viewportController.isAnimatingView == false else { return }
-
-        for measurement in measurements {
-            var flatPoints = measurement.points.map {
-                let projected = sceneKitRenderer.projectPoint($0)
-                return CGPoint(x: projected.x, y: projected.y)
-            }
-
-            if measurement.points.count > 1 {
-                let line = flatPoints.withUnsafeMutableBufferPointer { bufferPointer in
-                    SKShapeNode(points: bufferPointer.baseAddress!, count: measurement.points.count)
-                }
-
-                line.strokeColor = .white
-                line.lineWidth = 1
-                transientNodeContainer.addChild(line)
-            }
-
-            for p in flatPoints {
-                let circle = SKShapeNode(circleOfRadius: 5)
-                circle.fillColor = .init(measurement.color)
-                circle.strokeColor = .black
-                circle.position = p
-                transientNodeContainer.addChild(circle)
-            }
-        }
-
     }
 }
