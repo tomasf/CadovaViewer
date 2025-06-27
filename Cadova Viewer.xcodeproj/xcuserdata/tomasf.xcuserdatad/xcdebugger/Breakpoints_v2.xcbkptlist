@@ -25,5 +25,21 @@
             stopOnStyle = "0">
          </BreakpointContent>
       </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "1CCDAF46-6490-4734-AF8F-78F767AF8EEB"
+            shouldBeEnabled = "Yes"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "../../../Library/Developer/Xcode/DerivedData/Cadova_Viewer-ctuqwdxcerznzmbfctupviitipkf/SourcePackages/checkouts/Zip/Sources/miniz/miniz.c"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "5875"
+            endingLineNumber = "5875"
+            landmarkName = "mz_zip_writer_init_file_v2(pZip, pFilename, size_to_reserve_at_beginning, flags)"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
    </Breakpoints>
 </Bucket>
