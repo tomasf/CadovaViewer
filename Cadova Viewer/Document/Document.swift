@@ -33,7 +33,7 @@ class Document: NSDocument, NSWindowDelegate {
         do {
             let threeMF = try PackageReader(url: url)
             let start = CFAbsoluteTimeGetCurrent()
-            modelSubject.value = try threeMF.sceneKitNode()
+            modelSubject.value = try threeMF.modelData()
             let end = CFAbsoluteTimeGetCurrent()
             Swift.print("Loading time: \(end - start)")
         } catch {

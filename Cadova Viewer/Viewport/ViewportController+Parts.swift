@@ -2,6 +2,38 @@ import Cocoa
 import SceneKit
 
 extension ViewportController {
+    var parts: [ModelData.Part] {
+        sceneController.parts
+    }
+    
+    var onlyVisiblePartID: ModelData.Part.ID? {
+        get {
+            visibleParts.count == 1 ? visibleParts.first : nil
+        }
+        set {
+            visibleParts = newValue.map { [$0] } ?? []
+        }
+    }
+
+    var visibleParts: Set<ModelData.Part.ID> {
+        get {
+            Set(sceneController.parts.map(\.id)).subtracting(hiddenPartIDs)
+        }
+        set {
+            hiddenPartIDs = Set(sceneController.parts.map(\.id)).subtracting(newValue)
+        }
+    }
+
+    var effectivePartCounts: (visible: Int, hidden: Int) {
+        sceneController.parts.reduce(into: (0,0)) { result, part in
+            if hiddenPartIDs.contains(part.id) {
+                result.1 += 1
+            } else {
+                result.0 += 1
+            }
+        }
+    }
+
     func part(withID id: ModelData.Part.ID) -> ModelData.Part? {
         sceneController.parts.first(where: { $0.id == id })
     }

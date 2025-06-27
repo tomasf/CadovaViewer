@@ -93,7 +93,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             self.overlayScene.pivotPointVisibility = pivot != nil
         }.store(in: &observers)
 
-        sceneView.showContextMenu.sink { [weak self] event in
+        sceneView.showContextMenu.receive(on: DispatchQueue.main).sink { [weak self] event in
             guard let self else { return }
             NSMenu.popUpContextMenu(contextMenu(), with: event, for: self.sceneView)
         }.store(in: &observers)
@@ -207,7 +207,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             node.simdPosition = .zero
             let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
             let minDistance = min(closestHitTestDistance, distanceToPart)
-            let offset = minDistance / -500.0
+            let offset = minDistance / -5000.0
             //print(minDistance, offset)
             node.simdWorldPosition += cameraNode.presentation.simdWorldFront * offset
         }
@@ -281,6 +281,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             for part in self.sceneController.parts {
                 builder.addItem(label: part.displayName, checked: self.hiddenPartIDs.contains(part.id) == false) {
                     self.hiddenPartIDs.formSymmetricDifference([part.id])
+                } onHighlight: { h in
+                    self.highlightedPartID = h ? part.id : nil
+                }
+
+                builder.addItem(label: "Show only \"\(part.displayName)\"", alternateForModifiers: .option) {
+                    self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id)).subtracting([part.id])
                 } onHighlight: { h in
                     self.highlightedPartID = h ? part.id : nil
                 }

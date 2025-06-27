@@ -120,7 +120,6 @@ class CustomSceneView: SCNView {
 
         if endEvent.type == .rightMouseUp && !didMove {
             contextMenuSubject.send(endEvent)
-
         }
     }
 

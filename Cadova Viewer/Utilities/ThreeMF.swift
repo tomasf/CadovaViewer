@@ -35,7 +35,7 @@ struct ModelData {
 }
 
 extension PackageReader {
-    func sceneKitNode() throws -> ModelData {
+    func modelData() throws -> ModelData {
         let model = try model()
         return try model.buildModelData()
     }

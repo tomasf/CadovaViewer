@@ -11,6 +11,7 @@ class MenuBuilder: NSObject, NSMenuDelegate {
     func addItem(
         label: String,
         checked: Bool = false,
+        alternateForModifiers: NSEvent.ModifierFlags = [],
         action: @escaping () -> Void,
         onHighlight: ((Bool) -> Void)? = nil,
     ) {
@@ -19,6 +20,11 @@ class MenuBuilder: NSObject, NSMenuDelegate {
         let uuid = UUID()
         item.representedObject = uuid
         item.state = checked ? .on : .off
+
+        if alternateForModifiers != [] {
+            item.isAlternate = true
+            item.keyEquivalentModifierMask = alternateForModifiers
+        }
 
         actions[uuid] = action
         highlightActions[uuid] = onHighlight

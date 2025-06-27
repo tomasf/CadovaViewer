@@ -33,7 +33,7 @@ struct DocumentView: View {
             }
             .frame(minWidth: 500, minHeight: 300)
             .overlay(alignment: .bottomLeading) {
-                PartList(sceneController: viewportController.sceneController, viewportController: viewportController)
+                PartListOverlay(viewportController: viewportController)
             }
             .overlay(alignment: .bottomTrailing) {
                 if viewportController.viewOptions.showCoordinateSystemIndicator {
