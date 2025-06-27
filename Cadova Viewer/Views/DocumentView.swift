@@ -36,8 +36,10 @@ struct DocumentView: View {
                 PartList(sceneController: viewportController.sceneController, viewportController: viewportController)
             }
             .overlay(alignment: .bottomTrailing) {
-                CoordinateSystemIndicator(stream: viewportController.coordinateIndicatorValues)
-                    .padding()
+                if viewportController.viewOptions.showCoordinateSystemIndicator {
+                    CoordinateSystemIndicator(stream: viewportController.coordinateIndicatorValues)
+                        .padding()
+                }
             }
             .toolbar(id: "document") {
                 Group {

@@ -20,9 +20,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let cameraLight = SCNLight()
 
     let grid: ViewportGrid
-    var viewOptions = Preferences.viewOptions {
+    @Published var viewOptions = Preferences.viewOptions {
         didSet {
             viewOptionsDidChange()
+            document?.invalidateRestorableState()
         }
     }
 
@@ -306,6 +307,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             self.viewOptions.showOrigin = !self.viewOptions.showOrigin
         }
 
+        builder.addItem(label: "Show Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
+            self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
+        }
+
         return builder.makeMenu()
     }
 
@@ -371,5 +376,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     struct ViewOptions: Codable {
         var showGrid = true
         var showOrigin = true
+        var showCoordinateSystemIndicator = true
     }
 }

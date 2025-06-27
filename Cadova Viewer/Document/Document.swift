@@ -42,6 +42,30 @@ class Document: NSDocument, NSWindowDelegate {
         }
     }
 
+    private var documentHostingController: DocumentHostingController? {
+        windowControllers.first?.contentViewController as? DocumentHostingController
+    }
+
+    private static let viewOptionsKey = "viewOptions"
+
+    override func encodeRestorableState(with coder: NSCoder) {
+        guard let viewOptions = documentHostingController?.viewportController.viewOptions,
+              let data = try? JSONEncoder().encode(viewOptions)
+        else { return }
+
+        coder.encode(data, forKey: Self.viewOptionsKey)
+        Swift.print("Encoded", viewOptions)
+    }
+
+    override func restoreState(with coder: NSCoder) {
+        if let data = coder.decodeObject(forKey: Self.viewOptionsKey) as? Data,
+           let viewOptions = try? JSONDecoder().decode(ViewportController.ViewOptions.self, from: data)
+        {
+            documentHostingController?.viewportController.viewOptions = viewOptions
+            Swift.print("Restored", viewOptions)
+        }
+    }
+
     override func presentedItemDidChange() {
         super.presentedItemDidChange()
 
