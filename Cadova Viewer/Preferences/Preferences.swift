@@ -1,7 +1,8 @@
 import Foundation
 import SwiftUI
+import Combine
 
-struct Preferences {
+class Preferences: ObservableObject {
     static let navLibActivationBehaviorKey = "navLibActivationBehavior"
     static let navLibWhitelistedAppsDataKey = "navLibWhitelistedApps"
     static let viewOptionsDataKey = "viewOptions"
@@ -17,24 +18,40 @@ struct Preferences {
         let displayName: String
     }
 
-    static var navLibWhitelistedApps: [NavLibForegroundApplication] {
-        guard let data = UserDefaults.standard.data(forKey: navLibWhitelistedAppsDataKey) else { return [] }
-        return (try? JSONDecoder().decode([Preferences.NavLibForegroundApplication].self, from: data)) ?? []
+    private let defaults = UserDefaults()
+
+    var objectWillChange: NotificationCenter.Publisher {
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
     }
 
-    static var navLibActivationBehavior: NavLibAppActivationBehavior {
-        let string = UserDefaults.standard.string(forKey: navLibActivationBehaviorKey) ?? "foregroundOnly"
-        return NavLibAppActivationBehavior(rawValue: string) ?? .foregroundOnly
-    }
-
-    static var viewOptions: ViewportController.ViewOptions {
+    private subscript <T: Codable>(key: String) -> T? {
         get {
-            guard let data = UserDefaults.standard.data(forKey: viewOptionsDataKey) else { return .init() }
-            return (try? JSONDecoder().decode(ViewportController.ViewOptions.self, from: data)) ?? .init()
+            guard let data = defaults.data(forKey: key) else { return nil }
+            return try? JSONDecoder().decode(T.self, from: data)
         }
         set {
-            let data = try? JSONEncoder().encode(newValue)
-            UserDefaults.standard.set(data, forKey: viewOptionsDataKey)
+            defaults.set(try? JSONEncoder().encode(newValue), forKey: key)
+        }
+    }
+
+    var navLibWhitelistedApps: [NavLibForegroundApplication] {
+        get { self[Self.navLibWhitelistedAppsDataKey] ?? [] }
+        set { self[Self.navLibWhitelistedAppsDataKey] = newValue }
+    }
+
+    var viewOptions: ViewportController.ViewOptions {
+        get { self[Self.viewOptionsDataKey] ?? .init() }
+        set { self[Self.viewOptionsDataKey] = newValue }
+    }
+
+
+    var navLibActivationBehavior: NavLibAppActivationBehavior {
+        get {
+            let string = defaults.string(forKey: Self.navLibActivationBehaviorKey) ?? "foregroundOnly"
+            return NavLibAppActivationBehavior(rawValue: string) ?? .foregroundOnly
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Self.navLibActivationBehaviorKey)
         }
     }
 }

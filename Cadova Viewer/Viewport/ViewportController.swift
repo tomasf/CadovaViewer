@@ -20,7 +20,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let cameraLight = SCNLight()
 
     let grid: ViewportGrid
-    @Published var viewOptions = Preferences.viewOptions {
+    @Published var viewOptions = Preferences().viewOptions {
         didSet {
             viewOptionsDidChange()
             document?.invalidateRestorableState()
@@ -270,7 +270,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     private func viewOptionsDidChange() {
         grid.showGrid = viewOptions.showGrid
         grid.showOrigin = viewOptions.showOrigin
-        Preferences.viewOptions = viewOptions
+        Preferences().viewOptions = viewOptions
     }
 
     private func contextMenu() -> NSMenu {

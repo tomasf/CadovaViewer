@@ -54,7 +54,6 @@ class Document: NSDocument, NSWindowDelegate {
         else { return }
 
         coder.encode(data, forKey: Self.viewOptionsKey)
-        Swift.print("Encoded", viewOptions)
     }
 
     override func restoreState(with coder: NSCoder) {
@@ -62,7 +61,6 @@ class Document: NSDocument, NSWindowDelegate {
            let viewOptions = try? JSONDecoder().decode(ViewportController.ViewOptions.self, from: data)
         {
             documentHostingController?.viewportController.viewOptions = viewOptions
-            Swift.print("Restored", viewOptions)
         }
     }
 

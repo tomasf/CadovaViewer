@@ -1,5 +1,6 @@
 import SceneKit
 import ModelIO
+import SwiftUI
 
 extension SCNVector3: @retroactive Equatable {
     public static func == (lhs: SCNVector3, rhs: SCNVector3) -> Bool {

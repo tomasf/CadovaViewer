@@ -25,10 +25,10 @@ extension ViewportController {
                 return
             }
 
-            let active = switch Preferences.navLibActivationBehavior {
+            let active = switch Preferences().navLibActivationBehavior {
             case .always: true
             case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
-            case .specificApplicationsInForeground: Preferences.navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
+            case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
             }
             self?.navLibSession.applicationHasFocus = active
         }.store(in: &observers)
