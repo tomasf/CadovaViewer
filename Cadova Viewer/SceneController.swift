@@ -40,14 +40,16 @@ final class SceneController: ObservableObject {
             // Should the viewport controllers do this instead? They know their hidden IDs
             for part in parts {
                 if let previousCategoryBitMask = previousVisibility[part.id] {
-                    part.node.categoryBitMask = previousCategoryBitMask
+                    part.node.treeCategoryBitMask = previousCategoryBitMask
                 } else {
-                    part.node.categoryBitMask = ~1
+                    part.node.treeCategoryBitMask = ~1
                 }
             }
 
             modelLoadedSignal.send()
         }.store(in: &observers)
+
+        setupAmbientLight()
     }
 
     private func setupAmbientLight() {

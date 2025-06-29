@@ -23,9 +23,9 @@ final class ViewportGrid {
         node.name = "Grid"
 
         coarseGrid.name = "Coarse grid"
-        coarseGrid.categoryBitMask = 1 << categoryID
+        coarseGrid.treeCategoryBitMask = 1 << categoryID
         fineGrid.name = "Fine grid"
-        fineGrid.categoryBitMask = 1 << categoryID
+        fineGrid.treeCategoryBitMask = 1 << categoryID
 
         node.addChildNode(gridContainer)
         gridContainer.addChildNode(coarseGrid)

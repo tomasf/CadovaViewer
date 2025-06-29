@@ -94,9 +94,9 @@ extension SCNNode {
     func setVisible(_ visibility: Bool, forViewportID categoryID: Int) {
         enumerateHierarchy { node, _ in
             if visibility {
-                node.categoryBitMask |= 1 << categoryID
+                node.treeCategoryBitMask |= 1 << categoryID
             } else {
-                node.categoryBitMask &= ~(1 << categoryID)
+                node.treeCategoryBitMask &= ~(1 << categoryID)
             }
 
             // This won't work with multiple viewports, but line geometries don't seem to respect categoryBitMask

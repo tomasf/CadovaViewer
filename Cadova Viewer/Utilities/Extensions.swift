@@ -115,3 +115,14 @@ extension SIMD4<Float> {
         SIMD3<Float>(x, y, z)
     }
 }
+
+extension SCNNode {
+    var treeCategoryBitMask: Int {
+        get { categoryBitMask }
+        set {
+            enumerateHierarchy { node, _ in
+                node.categoryBitMask = newValue
+            }
+        }
+    }
+}

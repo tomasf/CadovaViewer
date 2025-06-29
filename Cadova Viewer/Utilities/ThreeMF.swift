@@ -227,7 +227,7 @@ extension ThreeMF.Model {
         defaultMaterial.diffuse.contents = defaultColor.nsColor
         defaultMaterial.emission.intensity = 0
         defaultMaterial.transparencyMode = .singleLayer
-        defaultMaterial.name = "Default material"
+        defaultMaterial.name = "Non-PBR material"
 
         let materials = orderedMaterials.map {
             $0?.scnMaterial ?? defaultMaterial
@@ -236,6 +236,7 @@ extension ThreeMF.Model {
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: elements)
         geometry.materials = materials
         geometry.name = UUID().uuidString
+
         return geometry
     }
 }
@@ -273,8 +274,8 @@ extension ComplexMaterial {
         case .metallic(let diffuse, let metallicness, let roughness, let name):
             material.lightingModel = .physicallyBased
             material.diffuse.contents = diffuse.nsColor
-            material.metalness.contents = NSNumber(value: metallicness)
-            material.roughness.contents = NSNumber(value: roughness)
+            material.metalness.contents = metallicness as NSNumber
+            material.roughness.contents = roughness as NSNumber
             material.name = name
             if !diffuse.isOpaque {
                 material.transparencyMode = .dualLayer
