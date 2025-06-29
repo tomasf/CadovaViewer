@@ -383,7 +383,7 @@
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="uzA-lF-NoZ"/>
-                                        <menuItem title="Level View" keyEquivalent="l" identifier="clearRoll" id="g00-93-oQi">
+                                        <menuItem title="Straighten Camera" keyEquivalent="l" identifier="clearRoll" id="g00-93-oQi">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="Txf-rs-Nhi"/>
                                             </connections>

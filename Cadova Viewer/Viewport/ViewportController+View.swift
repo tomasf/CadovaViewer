@@ -130,42 +130,45 @@ extension ViewportController {
     }
 
     func clearRollView() -> CameraView {
-        let transform = cameraNode.simdWorldTransform
+        let forward = simd_normalize(cameraNode.presentation.simdWorldFront)
+        let worldUp = simd_float3(sceneView.defaultCameraController.worldUp)
 
-        let forward = simd_normalize(-cameraNode.simdWorldFront)
-        let worldUp = SIMD3<Float>(0, 0, 1)
-        let right = simd_normalize(simd_cross(worldUp, forward))
-        let correctedUp = simd_normalize(simd_cross(forward, right))
+        var right = simd_cross(forward, worldUp)
+        if simd_length_squared(right) < 1.0e-6 {
+            right = simd_float3(1, 0, 0)
+        }
+        right = simd_normalize(right)
 
-        let newTransform = simd_float4x4(.init(right, 0), .init(correctedUp, 0), .init(forward, 0), transform[3])
+        let transform = float4x4(columns: (
+            simd_float4(right, 0),
+            simd_float4(simd_normalize(simd_cross(right, forward)), 0),
+            simd_float4(-forward, 0),
+            simd_float4(cameraNode.simdWorldPosition, 1)
+        ))
 
-        return (SCNMatrix4(newTransform), cameraNode.camera!.orthographicScale)
+        return (SCNMatrix4(transform), cameraNode.camera!.orthographicScale)
     }
 
     func viewForZoom(amount: Double) -> CameraView {
-        captureView {
-            guard let pointOfView = sceneView.pointOfView, let camera = pointOfView.camera else { return }
+        guard let pointOfView = sceneView.pointOfView, let camera = pointOfView.camera else { fatalError() }
 
-            if camera.usesOrthographicProjection {
-                var amount = amount * 5
-                if amount < 0 { amount = 1 / -amount }
-                camera.orthographicScale /= Double(amount)
-
-            } else {
-                let point = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
-                let target: SCNVector3
-                if let match = sceneView.hitTest(point, options: [.rootNode: sceneController.modelContainer, .searchMode: NSNumber(value: SCNHitTestSearchMode.any.rawValue)]).first {
-                    target = match.worldCoordinates
-                } else {
-                    target = sceneView.xyPlanePoint(forViewPoint: point)
-                }
-
-                let distance = target.distance(from: pointOfView.worldPosition)
-                let distanceFactor = amount > 0 ? amount : amount / (1.0 + amount)
-
-                sceneView.defaultCameraController.translateInCameraSpaceBy(x: 0, y: 0, z: -Float(distance * distanceFactor))
-            }
+        let point = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
+        let target: SCNVector3
+        if let match = sceneView.hitTest(point, options: [.rootNode: sceneController.modelContainer, .searchMode: NSNumber(value: SCNHitTestSearchMode.any.rawValue)]).first {
+            target = match.worldCoordinates
+        } else {
+            target = sceneView.xyPlanePoint(forViewPoint: point)
         }
+
+        let distance = target.distance(from: pointOfView.worldPosition)
+        let distanceFactor = amount > 0 ? amount : amount / (1.0 + amount)
+        let transform = SCNMatrix4Mult(SCNMatrix4MakeTranslation(0, 0, -CGFloat(distance * distanceFactor)), cameraNode.presentation.transform)
+
+        var amount = amount * 5
+        if amount < 0 { amount = 1 / -amount }
+        let newOrthoScale = camera.orthographicScale / Double(amount)
+
+        return (transform, newOrthoScale)
     }
 
     func zoomIn() {

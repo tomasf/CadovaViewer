@@ -130,7 +130,7 @@ struct DocumentView: View {
                             viewportController.clearRoll()
                         } label: {
                             Label {
-                                Text("Level View")
+                                Text("Straighten Camera")
                             } icon: {
                                 Image(systemName: "level")
                             }
