@@ -60,11 +60,20 @@ extension ComplexMaterial {
 
 extension ThreeMF.Color {
     var scnVector4: SCNVector4 {
-        .init(Double(red) / 255.0, Double(green) / 255.0, Double(blue) / 255.0, Double(alpha) / 255.0)
+        func sRGB8bToLinear(_ int: UInt8) -> Double {
+            let d = Double(int) / 255.0
+            if (d < 0.04045) {
+                return d * 0.0773993808
+            } else {
+                return pow(d * 0.9478672986 + 0.0521327014, 2.4)
+            }
+        }
+
+        return SCNVector4(sRGB8bToLinear(red), sRGB8bToLinear(green), sRGB8bToLinear(blue), Double(alpha) / 255.0)
     }
 
     var nsColor: NSColor {
-        .init(red: Double(red) / 255.0, green: Double(green) / 255.0, blue: Double(blue) / 255.0, alpha: Double(alpha) / 255.0)
+        .init(srgbRed: Double(red) / 255.0, green: Double(green) / 255.0, blue: Double(blue) / 255.0, alpha: Double(alpha) / 255.0)
     }
 
     static let white = Self.init(red: 0xFF, green: 0xFF, blue: 0xFF)
