@@ -50,9 +50,10 @@ struct DocumentView: View {
                             Text("\(stats.triangleCount) triangles")
                             Text("\(stats.vertexCount) vertices")
                         }
-                        .foregroundStyle(.gray)
-                        .font(.caption)
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .foregroundStyle(Color(white: 0.85))
+                        .font(.system(size: 11))
+                        .shadow(color: .black, radius: 3, x: 0, y: 1)
+                        .shadow(color: .black, radius: 3, x: 0, y: 1)
                         .opacity(isLoading ? 0 : 1)
                     }
 

@@ -161,7 +161,22 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     }
 
     func viewDidChange() {
+        if cameraNode.camera == nil {
+            return
+        }
         viewOptions.cameraTransform = cameraNode.transform
+
+        let canReset = canResetRoll()
+        if canReset != canResetCameraRoll {
+            DispatchQueue.main.async { self.canResetCameraRoll = canReset }
+        }
+
+        let presetFlags = Dictionary(uniqueKeysWithValues: ViewPreset.allCases.map {
+            ($0, canShowViewPreset($0))
+        })
+        if canShowPresets != presetFlags {
+            DispatchQueue.main.async { self.canShowPresets = presetFlags }
+        }
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
@@ -176,18 +191,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         )
 
         coordinateIndicatorValueStream.send(indicatorValues)
-
-        let canReset = canResetRoll()
-        if canReset != canResetCameraRoll {
-            DispatchQueue.main.async { self.canResetCameraRoll = canReset }
-        }
-
-        let presetFlags = Dictionary(uniqueKeysWithValues: ViewPreset.allCases.map {
-            ($0, canShowViewPreset($0))
-        })
-        if canShowPresets != presetFlags {
-            DispatchQueue.main.async { self.canShowPresets = presetFlags }
-        }
 
         // Calculate a suitable distance for offsetting edges
         let localHitTestPoints: [CGPoint] = [
