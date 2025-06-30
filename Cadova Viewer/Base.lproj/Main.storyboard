@@ -91,18 +91,6 @@
                                                 <action selector="performClose:" target="Ady-hI-5gd" id="HmO-Ls-i7Q"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem isSeparatorItem="YES" id="aJh-i4-bef"/>
-                                        <menuItem title="Page Setup…" keyEquivalent="P" id="qIS-W8-SiK">
-                                            <modifierMask key="keyEquivalentModifierMask" shift="YES" command="YES"/>
-                                            <connections>
-                                                <action selector="runPageLayout:" target="Ady-hI-5gd" id="Din-rz-gC5"/>
-                                            </connections>
-                                        </menuItem>
-                                        <menuItem title="Print…" keyEquivalent="p" id="aTl-1u-JFS">
-                                            <connections>
-                                                <action selector="print:" target="Ady-hI-5gd" id="qaZ-4w-aoO"/>
-                                            </connections>
-                                        </menuItem>
                                     </items>
                                 </menu>
                             </menuItem>
@@ -330,43 +318,36 @@
                                 <menu key="submenu" title="View" id="HyV-fh-RgO">
                                     <items>
                                         <menuItem title="Isometric" keyEquivalent="0" identifier="showViewPreset" id="dvE-xW-hGN">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="4hR-r0-M39"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Front" tag="1" keyEquivalent="5" identifier="showViewPreset" id="cqO-eL-Aqq">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        <menuItem title="Front" tag="1" keyEquivalent="1" identifier="showViewPreset" id="cqO-eL-Aqq">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="brx-Ag-SlU"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Back" tag="2" keyEquivalent="1" identifier="showViewPreset" id="e3T-hN-Tyj">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        <menuItem title="Back" tag="2" keyEquivalent="2" identifier="showViewPreset" id="e3T-hN-Tyj">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="WZv-1z-LjH"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Left" tag="3" keyEquivalent="4" identifier="showViewPreset" id="3ge-oa-aTJ">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        <menuItem title="Left" tag="3" keyEquivalent="3" identifier="showViewPreset" id="3ge-oa-aTJ">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="cON-21-980"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Right" tag="4" keyEquivalent="6" identifier="showViewPreset" id="vqS-9A-gY9">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        <menuItem title="Right" tag="4" keyEquivalent="4" identifier="showViewPreset" id="vqS-9A-gY9">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="VuO-yX-a7X"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Top" tag="5" keyEquivalent="8" identifier="showViewPreset" id="LgA-Bq-yn4">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        <menuItem title="Top" tag="5" keyEquivalent="5" identifier="showViewPreset" id="LgA-Bq-yn4">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="Qmi-S3-QLs"/>
                                             </connections>
                                         </menuItem>
-                                        <menuItem title="Bottom" tag="6" keyEquivalent="2" identifier="showViewPreset" id="1gm-RH-oin">
-                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                        <menuItem title="Bottom" tag="6" keyEquivalent="6" identifier="showViewPreset" id="1gm-RH-oin">
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="Zyq-QG-PPO"/>
                                             </connections>
@@ -433,7 +414,7 @@
                                             </connections>
                                         </menuItem>
                                         <menuItem isSeparatorItem="YES" id="TPR-oC-l2X"/>
-                                        <menuItem title="Show Rendering Options" tag="3" keyEquivalent="r" identifier="showRenderingOptions" id="9bL-A3-KkI">
+                                        <menuItem title="SceneKit Debug Inspector" tag="3" keyEquivalent="r" identifier="showRenderingOptions" id="9bL-A3-KkI">
                                             <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
                                             <connections>
                                                 <action selector="performSceneControllerMenuCommand:" target="Ady-hI-5gd" id="k5h-P0-rBh"/>

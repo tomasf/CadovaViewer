@@ -7,6 +7,7 @@ extension ViewportController {
     func startNavLib() {
         do {
             try navLibSession.start(stateProvider: self, applicationName: "Model Viewer")
+            navLibIsActive = true
         } catch {
             print("NavLib initialization failed: \(error)")
         }
@@ -18,10 +19,13 @@ extension ViewportController {
         })
 
         NSWorkspace.shared.publisher(for: \.frontmostApplication).sink { [weak self] runningApp in
-            guard let runningApp else { return }
+            guard let self else { return }
+            guard let runningApp, navLibIsActive else { return }
+
+            print("Frontmost: \(runningApp.bundleIdentifier ?? "nil bundle id")")
 
             if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
-                self?.navLibSession.applicationHasFocus = true
+                navLibSession.applicationHasFocus = true
                 return
             }
 
@@ -30,13 +34,18 @@ extension ViewportController {
             case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
             case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
             }
-            self?.navLibSession.applicationHasFocus = active
+
+            print("navlib active \(active), for \(Preferences().navLibActivationBehavior)")
+            navLibSession.applicationHasFocus = active
         }.store(in: &observers)
     }
 
     func updateNavLibFocus() {
         if let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) == document {
             navLibSession.setAsActiveSession()
+            navLibIsActive = true
+        } else {
+            navLibIsActive = false
         }
     }
 
@@ -136,6 +145,8 @@ extension ViewportController: NavLibStateProvider {
         guard !navLibIsSuspended else { return }
         if active {
             sceneView.defaultCameraController.stopInertia()
+        } else {
+            viewDidChange()
         }
         sceneView.allowsCameraControl = !active
     }

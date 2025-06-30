@@ -8,6 +8,8 @@ struct DocumentView: View {
     let url: URL
     let errorHandler: (Error) -> ()
     @ObservedObject var viewportController: ViewportController
+    @State var isLoading = false
+    @State var stats: ModelData.Statistics?
 
     struct StandardView {
         let name: String
@@ -26,7 +28,7 @@ struct DocumentView: View {
     let spacer = ToolbarItem(id: NSToolbarItem.Identifier.space.rawValue, placement: .primaryAction, showsByDefault: true) { Color.clear }
 
     var body: some View {
-        ViewerSceneView(sceneController: viewportController)
+        ViewerSceneView(viewportController: viewportController)
             .onGeometryChange(for: CGSize.self, of: { $0.size }) {
                 viewportController.sceneViewSize = $0
                 viewportController.sceneView.overlaySKScene?.size = $0
@@ -41,117 +43,156 @@ struct DocumentView: View {
                         .padding()
                 }
             }
-            .toolbar(id: "document") {
-                Group {
-                    ToolbarItem(id: "projection", placement: .primaryAction) {
-                        Picker("Projection", selection: $viewportController.projection) {
-                            Image(systemName: "perspective")
-                                .help("Perspective")
-                                .tag(ViewportController.CameraProjection.perspective)
-
-                            Image(systemName: "grid")
-                                .help("Orthographic")
-                                .tag(ViewportController.CameraProjection.orthographic)
+            .overlay(alignment: .bottom) {
+                ZStack(alignment: .bottom) {
+                    if let stats {
+                        HStack {
+                            Text("\(stats.triangleCount) triangles")
+                            Text("\(stats.vertexCount) vertices")
                         }
-                        .pickerStyle(.segmented)
+                        .foregroundStyle(.gray)
+                        .font(.caption)
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                        .opacity(isLoading ? 0 : 1)
                     }
 
-                    spacer
-
-                    ToolbarItem(id: "zoom", placement: .primaryAction) {
-                        ControlGroup {
-                            Button {
-                                viewportController.zoomOut()
-                            } label: {
-                                Label { Text("Zoom Out") } icon: { Image(systemName: "minus.magnifyingglass") }
-                            }
-
-                            Button {
-                                viewportController.zoomIn()
-                            } label: {
-                                Label { Text("Zoom In") } icon: { Image(systemName: "plus.magnifyingglass") }
-                            }
+                    Text("Loading")
+                        .font(.title2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(.black)
+                        .background {
+                            Capsule()
+                                .fill(Color.yellow.opacity(0.8))
+                                .shadow(color: .black, radius: 2, x: 0, y: 0)
                         }
-                    }
-
-                    spacer
+                        .opacity(isLoading ? 1 : 0)
                 }
-
-                let itemForStandardView = { (view: StandardView) in
-                    ToolbarItem(id: "standard-view-\(view.name.lowercased())", placement: .primaryAction) {
-                        Button {
-                            viewportController.showViewPreset(view.viewPreset, animated: true)
-                        } label: {
-                            Label { Text(view.name) } icon: { view.icon }
-                        }
-                        .help(view.name)
-                        .disabled(viewportController.canShowPresets[view.viewPreset] == false)
-                    }
-                }
-
-                Group {
-                    itemForStandardView(standardViewIsometric)
-                    itemForStandardView(standardViewFront)
-                    itemForStandardView(standardViewBack)
-                    itemForStandardView(standardViewLeft)
-                    itemForStandardView(standardViewRight)
-                    itemForStandardView(standardViewTop)
-                    itemForStandardView(standardViewBottom)
-                }
-
-                Group {
-                    ToolbarItem(id: "openIn", placement: .primaryAction, showsByDefault: true) {
-                        Menu {
-                            ForEach(openInApps, id: \.url) { app in
-                                Button {
-                                    app.open(file: url, errorHandler: errorHandler)
-                                } label: {
-                                    HStack {
-                                        Image(nsImage: app.icon)
-                                        Text(app.name)
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label {
-                                Text("Open in…")
-                            } icon: {
-                                Image(systemName: "arrowshape.turn.up.forward.fill")
-                            }
-                        }
-                        .disabled(openInApps.isEmpty)
-                    }
-                }
-
-                // Non-default
-                Group {
-                    ToolbarItem(id: "clear-roll", placement: .primaryAction, showsByDefault: false) {
-                        Button {
-                            viewportController.clearRoll()
-                        } label: {
-                            Label {
-                                Text("Straighten Camera")
-                            } icon: {
-                                Image(systemName: "level")
-                            }
-                        }
-                        .disabled(viewportController.canResetCameraRoll == false)
-                    }
-
-                    ToolbarItem(id: "share", placement: .primaryAction, showsByDefault: false) {
-                        ShareLink(item: url)
-                    }
-                }
+                .padding()
+                .allowsHitTesting(false)
             }
+            .colorScheme(.dark)
+            .toolbar(id: "document") { toolbar }
             .onContinuousHover(coordinateSpace: .local) { phase in
                 switch phase {
                 case .active(let point): viewportController.hoverPoint = point
                 case .ended: viewportController.hoverPoint = nil
                 }
             }
-            .colorScheme(.dark)
+            .onReceive(viewportController.document!.loadingStream) { status in
+                withAnimation(.easeInOut) {
+                    isLoading = status
+                }
+            }
+            .onReceive(viewportController.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
+                stats = modelData.statistics
+            }
     }
 
+    @ToolbarContentBuilder
+    var toolbar: some CustomizableToolbarContent {
+        Group {
+            ToolbarItem(id: "projection", placement: .primaryAction) {
+                Picker("Projection", selection: $viewportController.projection) {
+                    Image(systemName: "perspective")
+                        .help("Perspective")
+                        .tag(ViewportController.CameraProjection.perspective)
+
+                    Image(systemName: "grid")
+                        .help("Orthographic")
+                        .tag(ViewportController.CameraProjection.orthographic)
+                }
+                .pickerStyle(.segmented)
+            }
+
+            spacer
+
+            ToolbarItem(id: "zoom", placement: .primaryAction) {
+                ControlGroup {
+                    Button {
+                        viewportController.zoomOut()
+                    } label: {
+                        Label { Text("Zoom Out") } icon: { Image(systemName: "minus.magnifyingglass") }
+                    }
+
+                    Button {
+                        viewportController.zoomIn()
+                    } label: {
+                        Label { Text("Zoom In") } icon: { Image(systemName: "plus.magnifyingglass") }
+                    }
+                }
+            }
+
+            spacer
+        }
+
+        let itemForStandardView = { (view: StandardView, isDefault: Bool) in
+            ToolbarItem(id: "standard-view-\(view.name.lowercased())", placement: .primaryAction, showsByDefault: isDefault) {
+                Button {
+                    viewportController.showViewPreset(view.viewPreset, animated: true)
+                } label: {
+                    Label { Text(view.name) } icon: { view.icon }
+                }
+                .help(view.name)
+                .disabled(viewportController.canShowPresets[view.viewPreset] == false)
+            }
+        }
+
+        Group {
+            itemForStandardView(standardViewIsometric, true)
+            itemForStandardView(standardViewFront, true)
+            itemForStandardView(standardViewBack, false)
+            itemForStandardView(standardViewLeft, false)
+            itemForStandardView(standardViewRight, false)
+            itemForStandardView(standardViewTop, true)
+            itemForStandardView(standardViewBottom, false)
+        }
+        spacer
+
+        Group {
+            ToolbarItem(id: "openIn", placement: .primaryAction, showsByDefault: true) {
+                Menu {
+                    ForEach(openInApps, id: \.url) { app in
+                        Button {
+                            app.open(file: url, errorHandler: errorHandler)
+                        } label: {
+                            HStack {
+                                Image(nsImage: app.icon)
+                                Text(app.name)
+                            }
+                        }
+                    }
+                } label: {
+                    Label {
+                        Text("Open in…")
+                    } icon: {
+                        Image(systemName: "arrowshape.turn.up.forward.fill")
+                    }
+                }
+                .disabled(openInApps.isEmpty)
+            }
+        }
+
+        // Non-default
+        Group {
+            ToolbarItem(id: "clear-roll", placement: .primaryAction, showsByDefault: false) {
+                Button {
+                    viewportController.clearRoll()
+                } label: {
+                    Label {
+                        Text("Straighten Camera")
+                    } icon: {
+                        Image(systemName: "level")
+                    }
+                }
+                .disabled(viewportController.canResetCameraRoll == false)
+            }
+
+            ToolbarItem(id: "share", placement: .primaryAction, showsByDefault: false) {
+                ShareLink(item: url)
+            }
+        }
+    }
 
     var openInApps: [OpenInApp] {
         let fileManager = FileManager()

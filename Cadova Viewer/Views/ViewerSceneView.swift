@@ -5,10 +5,10 @@ import ObjectiveC
 import Combine
 
 struct ViewerSceneView: NSViewRepresentable {
-    let sceneController: ViewportController
+    let viewportController: ViewportController
 
     func makeCoordinator() -> ViewportController {
-        sceneController
+        viewportController
     }
 
     func makeNSView(context: Context) -> CustomSceneView {

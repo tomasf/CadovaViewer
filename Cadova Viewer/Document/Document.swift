@@ -9,12 +9,11 @@ import ThreeMF
 import Zip
 
 class Document: NSDocument, NSWindowDelegate {
-    typealias ModelStream = AnyPublisher<ModelData, Never>
-    var modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData(rootNode: .init(), parts: []))
+    private let modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData(rootNode: .init(), parts: []))
+    private let loadingSubject: CurrentValueSubject<Bool, Never> = .init(false)
 
-    var modelStream: ModelStream {
-        modelSubject.eraseToAnyPublisher()
-    }
+    var modelStream: AnyPublisher<ModelData, Never> { modelSubject.eraseToAnyPublisher() }
+    var loadingStream: AnyPublisher<Bool, Never> { loadingSubject.eraseToAnyPublisher() }
 
     override class func canConcurrentlyReadDocuments(ofType typeName: String) -> Bool {
         true
@@ -31,9 +30,11 @@ class Document: NSDocument, NSWindowDelegate {
 
     override func read(from url: URL, ofType typeName: String) throws {
         do {
+            loadingSubject.send(true)
             let threeMF = try PackageReader(url: url)
             let start = CFAbsoluteTimeGetCurrent()
             modelSubject.value = try threeMF.modelData()
+            loadingSubject.send(false)
             let end = CFAbsoluteTimeGetCurrent()
             Swift.print("Loading time: \(end - start)")
         } catch {
@@ -49,6 +50,7 @@ class Document: NSDocument, NSWindowDelegate {
     private static let viewOptionsKey = "viewOptions"
 
     override func encodeRestorableState(with coder: NSCoder) {
+        super.encodeRestorableState(with: coder)
         guard let viewOptions = documentHostingController?.viewportController.viewOptions,
               let data = try? JSONEncoder().encode(viewOptions)
         else { return }
@@ -57,11 +59,16 @@ class Document: NSDocument, NSWindowDelegate {
     }
 
     override func restoreState(with coder: NSCoder) {
+        super.restoreState(with: coder)
         if let data = coder.decodeObject(forKey: Self.viewOptionsKey) as? Data,
            let viewOptions = try? JSONDecoder().decode(ViewportController.ViewOptions.self, from: data)
         {
-            documentHostingController?.viewportController.viewOptions = viewOptions
+            documentHostingController?.viewportController.setViewOptions(viewOptions)
         }
+    }
+
+    override class func allowedClasses(forRestorableStateKeyPath keyPath: String) -> [AnyClass] {
+        [NSData.self]
     }
 
     override func presentedItemDidChange() {

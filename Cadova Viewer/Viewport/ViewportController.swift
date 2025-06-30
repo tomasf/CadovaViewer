@@ -3,6 +3,7 @@ import Foundation
 import Combine
 import AppKit
 import NavLib
+import simd
 
 class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let sceneView = CustomSceneView(frame: .zero)
@@ -22,12 +23,13 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let grid: ViewportGrid
     @Published var viewOptions = Preferences().viewOptions {
         didSet {
-            viewOptionsDidChange()
             document?.invalidateRestorableState()
         }
     }
+    var hasSetInitialView = false
 
     var navLibSession = NavLibSession<SCNVector3>()
+    var navLibIsActive = false
 
     var notificationTokens: [any NSObjectProtocol] = []
     var navLibIsSuspended = false
@@ -81,7 +83,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.showsStatistics = false
 
         sceneView.mouseInteractionActive.sink { [weak self] active in
-            self?.setNavLibSuspended(active)
+            guard let self else { return }
+            setNavLibSuspended(active)
+
+            if !active {
+                viewDidChange()
+            }
         }.store(in: &observers)
 
 
@@ -122,7 +129,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         updateCameraProjection()
 
-        var hasSetInitialView = false
         sceneController.modelWasLoaded.sink { [weak self] in
             guard let self else { return }
 
@@ -136,7 +142,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         cameraNodeChanged(cameraNode)
         startNavLib()
-        viewOptionsDidChange()
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
@@ -153,6 +158,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         newCameraNode.light = cameraLight
 
         cameraNode.camera?.categoryBitMask = GlobalCategoryMasks.universal.rawValue | (1 << categoryID)
+    }
+
+    func viewDidChange() {
+        viewOptions.cameraTransform = cameraNode.transform
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
@@ -181,7 +190,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         }
 
         // Calculate a suitable distance for offsetting edges
-
         let localHitTestPoints: [CGPoint] = [
             CGPoint(x: sceneViewSize.width / 2, y: sceneViewSize.height / 2),
             CGPoint(x: 0, y: 0),
@@ -267,10 +275,13 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         updateNavLibPointerPosition()
     }
 
-    private func viewOptionsDidChange() {
+    func setViewOptions(_ viewOptions: ViewOptions) {
+        self.viewOptions = viewOptions
         grid.showGrid = viewOptions.showGrid
         grid.showOrigin = viewOptions.showOrigin
         Preferences().viewOptions = viewOptions
+        cameraNode.transform = viewOptions.cameraTransform
+        hasSetInitialView = true
     }
 
     private func contextMenu() -> NSMenu {
@@ -383,5 +394,31 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         var showGrid = true
         var showOrigin = true
         var showCoordinateSystemIndicator = true
+        var cameraTransform: SCNMatrix4 = SCNMatrix4Identity
+
+        enum CodingKeys: String, CodingKey {
+            case showGrid
+            case showOrigin
+            case showCoordinateSystemIndicator
+            case cameraTransform
+        }
+
+        init() {}
+
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            showGrid = try container.decode(Bool.self, forKey: .showGrid)
+            showOrigin = try container.decode(Bool.self, forKey: .showOrigin)
+            showCoordinateSystemIndicator = try container.decode(Bool.self, forKey: .showCoordinateSystemIndicator)
+            cameraTransform = try container.decode(SCNMatrix4.CodingWrapper.self, forKey: .cameraTransform).scnMatrix4
+        }
+
+        func encode(to encoder: any Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(showGrid, forKey: .showGrid)
+            try container.encode(showOrigin, forKey: .showOrigin)
+            try container.encode(showCoordinateSystemIndicator, forKey: .showCoordinateSystemIndicator)
+            try container.encode(SCNMatrix4.CodingWrapper(cameraTransform), forKey: .cameraTransform)
+        }
     }
 }

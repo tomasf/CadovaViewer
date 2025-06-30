@@ -36,18 +36,48 @@ extension ViewportController {
 
         switch preset {
         case .isometric:
-            //position = SCNVector3(min.x - distanceX, min.y - distanceY, max.z + distanceZ)
-            let isometricAngle = 35.264 * (.pi / 180)
-            let isometricDistance = Swift.max(distanceX, distanceY, distanceZ)
+            let isoAngle = 35.264 * (.pi / 180)
+            let isoDist  = Swift.max(distanceX, distanceY, distanceZ)
 
-            // Position the camera for isometric view
             position = SCNVector3(
-                x: center.x - isometricDistance * cos(isometricAngle),
-                y: center.y - isometricDistance * cos(isometricAngle),
-                z: center.z + isometricDistance * sin(isometricAngle)
+                x: center.x - isoDist * cos(isoAngle),
+                y: center.y - isoDist * cos(isoAngle),
+                z: center.z + isoDist * sin(isoAngle)
             )
-            width = sqrt(distanceX * distanceX + distanceY * distanceY + distanceZ * distanceZ) * 0.70
-            height = width
+
+            // 2. Build the transform once so we know right / up vectors
+            let isoTransform = makeCameraTransform(
+                position: .init(position),
+                target:   .init(center)
+            )
+            let right = isoTransform.columns.0.xyz   // camera-space +X in world
+            let up = isoTransform.columns.1.xyz   // camera-space +Y in world
+
+            // 3. Project the 8 bbox corners onto (right, up)
+            let corners: [SIMD3<Double>] = [
+                SIMD3(min.x, min.y, min.z), SIMD3(min.x, min.y, max.z),
+                SIMD3(min.x, max.y, min.z), SIMD3(min.x, max.y, max.z),
+                SIMD3(max.x, min.y, min.z), SIMD3(max.x, min.y, max.z),
+                SIMD3(max.x, max.y, min.z), SIMD3(max.x, max.y, max.z)
+            ]
+
+            var minU: Double = .greatestFiniteMagnitude, maxU: Double = -.greatestFiniteMagnitude
+            var minV: Double = .greatestFiniteMagnitude, maxV: Double = -.greatestFiniteMagnitude
+
+            let camPos = SIMD3<Double>(position)
+            for c in corners {
+                let diff = c - camPos
+                let u = simd_dot(diff, SIMD3<Double>(right))   // horizontal
+                let v = simd_dot(diff, SIMD3<Double>(up))      // vertical
+                minU = Swift.min(minU, u)
+                maxU = Swift.max(maxU, u)
+                minV = Swift.min(minV, v)
+                maxV = Swift.max(maxV, v)
+            }
+
+            width  = maxU - minU
+            height = maxV - minV
+
         case .front:
             position.y = min.y - distanceY
         case .back:
@@ -71,14 +101,31 @@ extension ViewportController {
         let fitHeightScale = height / 2
         let orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
 
-        return captureView {
-            cameraNode.position = position
-            cameraNode.look(at: center, up: SCNVector3(0, 0, 1), localFront: SCNNode.localFront)
-            if preset == .top || preset == .bottom {
-                cameraNode.eulerAngles.z = 0
-            }
-            camera.orthographicScale = orthoScale
+        return (SCNMatrix4(makeCameraTransform(position: .init(position), target: .init(center))), orthoScale)
+    }
+
+    func makeCameraTransform(position: simd_float3, target: simd_float3) -> float4x4 {
+        let worldUp = simd_float3(0, 0, 1)
+        var forward = target - position
+        if simd_length_squared(forward) < 1.0e-12 {
+            return matrix_identity_float4x4
         }
+        forward = simd_normalize(forward)
+
+        var right = simd_cross(forward, worldUp)
+        if simd_length_squared(right) < 1.0e-6 {
+            right = simd_dot(forward, worldUp) > 0
+            ? simd_float3(-1, 0, 0) // X points left for bottom view
+            : simd_float3( 1, 0, 0) // X points right for top view
+        }
+        right = simd_normalize(right)
+
+        return float4x4(columns: (
+            simd_float4(right, 0),
+            simd_float4(simd_normalize(simd_cross(right, forward)), 0),
+            simd_float4(-forward,    0),
+            simd_float4(position, 1)
+        ))
     }
 
     enum MovementType {
@@ -103,17 +150,7 @@ extension ViewportController {
         cameraNode.transform = view.transform
         cameraNode.camera!.orthographicScale = view.orthographicScale
         SCNTransaction.commit()
-    }
-
-    func captureView(for actions: () -> ()) -> CameraView {
-        let savedTransform = cameraNode.transform
-        let savedScale = cameraNode.camera!.orthographicScale
-        actions()
-        let t = cameraNode.transform
-        let s = cameraNode.camera!.orthographicScale
-        cameraNode.transform = savedTransform
-        cameraNode.camera!.orthographicScale = savedScale
-        return (t, s)
+        viewDidChange()
     }
 
     func canResetRoll() -> Bool {
