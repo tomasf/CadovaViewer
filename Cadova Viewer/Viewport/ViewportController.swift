@@ -74,7 +74,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         self.document = document
         super.init()
-
+        
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
         sceneView.sceneController = sceneController

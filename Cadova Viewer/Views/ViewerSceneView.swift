@@ -125,6 +125,8 @@ class CustomSceneView: SCNView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    private let snapshotScale = 2.0
+
     @objc
     func copy(_ sender: AnyObject) {
         let renderer = SCNRenderer(device: device, options: nil)
@@ -133,10 +135,25 @@ class CustomSceneView: SCNView {
         renderer.pointOfView = pointOfView
         renderer.debugOptions = debugOptions
 
-        let image = renderer.snapshot(atTime: sceneTime, with: CGSize(width: bounds.size.width * 2, height: bounds.size.width * 2), antialiasingMode: antialiasingMode)
+        let image = renderer.snapshot(
+            atTime: sceneTime,
+            with: CGSize(width: bounds.size.width * snapshotScale, height: bounds.size.height * snapshotScale),
+            antialiasingMode: antialiasingMode
+        )
         let rect = NSRect(origin: .zero, size: image.size)
 
-        guard let imageRep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(rect.width), pixelsHigh: Int(rect.height), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        guard let imageRep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(rect.width),
+            pixelsHigh: Int(rect.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return }
 
         guard let context = NSGraphicsContext(bitmapImageRep: imageRep) else { return }
         NSGraphicsContext.saveGraphicsState()
@@ -159,7 +176,7 @@ extension CustomSceneView: SCNSceneRendererDelegate {
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
         let encoder = renderer.currentRenderCommandEncoder as! NSObject
         if encoder.responds(to: NSSelectorFromString("setLineWidth:")) {
-            encoder.setValue(2, forKey: "lineWidth")
+            encoder.setValue(snapshotScale, forKey: "lineWidth")
         }
     }
 }
