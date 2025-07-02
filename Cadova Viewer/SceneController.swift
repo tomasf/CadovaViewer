@@ -32,7 +32,7 @@ final class SceneController: ObservableObject {
             modelContainer.addChildNode(modelData.rootNode)
 
             let previousVisibility = Dictionary(parts.map {
-                ($0.id, $0.node.categoryBitMask)
+                ($0.id, $0.nodes.model.categoryBitMask)
             }, uniquingKeysWith: { $1 })
 
             parts = modelData.parts
@@ -40,9 +40,9 @@ final class SceneController: ObservableObject {
             // Should the viewport controllers do this instead? They know their hidden IDs
             for part in parts {
                 if let previousCategoryBitMask = previousVisibility[part.id] {
-                    part.node.treeCategoryBitMask = previousCategoryBitMask
+                    part.nodes.model.treeCategoryBitMask = previousCategoryBitMask
                 } else {
-                    part.node.treeCategoryBitMask = ~1
+                    part.nodes.model.treeCategoryBitMask = ~1
                 }
             }
 

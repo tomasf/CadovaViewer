@@ -3,11 +3,11 @@ import ThreeMF
 import SceneKit
 
 enum Material {
-    case colors (Color, Color, Color)
-    case complex (ComplexMaterial)
+    case vertexColors (Color, Color, Color)
+    case pbr (PBRMaterial)
 
     var isFullyTransparent: Bool {
-        if case let .colors(color, color2, color3) = self {
+        if case let .vertexColors(color, color2, color3) = self {
             color.isFullyTransparent && color2.isFullyTransparent && color3.isFullyTransparent
         } else {
             false
@@ -15,7 +15,7 @@ enum Material {
     }
 
     var colorValues: [Color]? {
-        if case let .colors(color, color2, color3) = self {
+        if case let .vertexColors(color, color2, color3) = self {
             [color, color2, color3]
         } else {
             nil
@@ -23,39 +23,26 @@ enum Material {
     }
 }
 
-enum ComplexMaterial: Hashable {
-    case metallic (diffuse: Color, metallicness: Double, roughness: Double, name: String?)
-    case specular (diffuse: Color, specularColor: Color, glossiness: Double, name: String?)
-}
+struct PBRMaterial: Hashable {
+    let diffuse: Color
+    let metallicness: Double
+    let roughness: Double
+    let name: String?
 
-extension ComplexMaterial {
     var scnMaterial: SCNMaterial {
         let material = SCNMaterial()
-        switch self {
-        case .metallic(let diffuse, let metallicness, let roughness, let name):
-            material.lightingModel = .physicallyBased
-            material.diffuse.contents = diffuse.nsColor
-            material.metalness.contents = metallicness as NSNumber
-            material.roughness.contents = roughness as NSNumber
-            material.name = name
-            if !diffuse.isOpaque {
-                material.transparencyMode = .dualLayer
-            }
-
-        case .specular(let diffuse, let specularColor, let glossiness, let name):
-            material.diffuse.contents = diffuse.nsColor
-            material.specular.contents = specularColor.nsColor
-            material.shininess = glossiness
-            material.lightingModel = .blinn
-            material.name = name
-            if !diffuse.isOpaque {
-                material.transparencyMode = .dualLayer
-            }
+        material.lightingModel = .physicallyBased
+        material.diffuse.contents = diffuse.nsColor
+        material.metalness.contents = metallicness as NSNumber
+        material.roughness.contents = roughness as NSNumber
+        material.name = name
+        if !diffuse.isOpaque {
+            material.transparencyMode = .dualLayer
         }
-
         material.emission.intensity = 0
         return material
     }
+
 }
 
 extension ThreeMF.Color {
@@ -105,20 +92,15 @@ extension ThreeMF.Model {
         }
     }
 
-    func complexMaterial(for property: PropertyReference, baseColor: Color) -> ComplexMaterial? {
-        guard let group = resources.resource(for: property.groupID) else {
+    func pbrMaterial(for property: PropertyReference, baseColor: Color) -> PBRMaterial? {
+        guard let group = resources.resource(for: property.groupID),
+              let displayProperties = group as? MetallicDisplayProperties,
+              let item = displayProperties.metallics[safe: property.index]
+        else {
             return nil
         }
-        if let displayProperties = group as? MetallicDisplayProperties, let item = displayProperties.metallics[safe: property.index] {
-            return .metallic(diffuse: baseColor, metallicness: item.metallicness, roughness: item.roughness, name: item.name)
 
-        } else if let displayProperties = group as? SpecularDisplayProperties, let item = displayProperties.speculars[safe: property.index] {
-            let (specularColor, glossiness) = item.effectiveValues
-            return .specular(diffuse: baseColor, specularColor: specularColor, glossiness: glossiness, name: item.name)
-
-        } else {
-            return nil
-        }
+        return PBRMaterial(diffuse: baseColor, metallicness: item.metallicness, roughness: item.roughness, name: item.name)
     }
 
     func material(for triangle: Mesh.Triangle, in object: Object) -> Material? {
@@ -130,14 +112,14 @@ extension ThreeMF.Model {
             guard let colors = refs.map({ color(for: $0)?.color }) as? [Color] else {
                 return nil
             }
-            return .colors(colors[0], colors[1], colors[2])
+            return .vertexColors(colors[0], colors[1], colors[2])
 
         } else if refs.count == 1 {
             guard let (color, displayPropsID) = color(for: refs[0]) else { return nil }
-            if let displayPropsID, let complex = complexMaterial(for: displayPropsID, baseColor: color) {
-                return .complex(complex)
+            if let displayPropsID, let pbr = pbrMaterial(for: displayPropsID, baseColor: color) {
+                return .pbr(pbr)
             } else {
-                return .colors(color, color, color)
+                return .vertexColors(color, color, color)
             }
         } else {
             return nil

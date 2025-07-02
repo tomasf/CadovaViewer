@@ -9,14 +9,14 @@ struct ModelData {
     struct Part: Identifiable {
         typealias ID = String
 
-        let node: SCNNode
+        let nodes: Nodes
         let name: String?
         let id: ID
         let semantic: PartSemantic
         let statistics: Statistics
 
-        init(node: SCNNode, name: String?, id: ID?, semantic: PartSemantic, stats: Statistics) {
-            self.node = node
+        init(nodes: Nodes, name: String?, id: ID?, semantic: PartSemantic, stats: Statistics) {
+            self.nodes = nodes
             self.name = name
             self.id = id ?? UUID().uuidString
             self.semantic = semantic
@@ -25,6 +25,16 @@ struct ModelData {
 
         var displayName: String {
             name ?? "Object"
+        }
+
+        struct Nodes {
+            var model: SCNNode
+            var sharpEdges: SCNNode?
+            var smoothEdges: SCNNode?
+
+            init() {
+                model = SCNNode()
+            }
         }
     }
 
@@ -76,7 +86,8 @@ extension ThreeMF.Model {
 
         let parts = try buildItems.enumerated().map { index, item -> ModelData.Part in
             let part = try buildPart(item: item, index: index)
-            container.addChildNode(part.node)
+            part.nodes.smoothEdges?.isHidden = true
+            container.addChildNode(part.nodes.model)
             return part
         }
 
@@ -85,76 +96,89 @@ extension ThreeMF.Model {
 
     func buildPart(item: Item, index: Int) throws -> ModelData.Part {
         let object = try object(for: item.objectID)
-        let (node, stats) = try self.node(for: object, with: item.semantic)
+        let (nodes, stats) = try self.node(for: object, with: item.semantic)
 
         let quotedName = if let name = object.name { " \"\(name)\"" } else { "" }
-        node.name = "Object id \(object.id)\(quotedName) for item #\(index)"
-        node.transform = item.scnTransform
+        nodes.model.name = "Object id \(object.id)\(quotedName) for item #\(index)"
+        nodes.model.transform = item.scnTransform
 
-        return ModelData.Part(node: node, name: object.name, id: item.partNumber, semantic: item.semantic, stats: stats)
+        return ModelData.Part(nodes: nodes, name: object.name, id: item.partNumber, semantic: item.semantic, stats: stats)
     }
 
-    func node(for object: ThreeMF.Object, with semantic: PartSemantic) throws -> (SCNNode, ModelData.Statistics) {
-        let node = SCNNode()
+    func node(for object: ThreeMF.Object, with semantic: PartSemantic) throws -> (ModelData.Part.Nodes, ModelData.Statistics) {
+        var nodes = ModelData.Part.Nodes()
         let quotedName = if let name = object.name { " \"\(name)\"" } else { "" }
-        node.name = "Object id \(object.id)" + quotedName
+        nodes.model.name = "Object id \(object.id)" + quotedName
         let stats: ModelData.Statistics
 
         switch object.content {
         case .mesh (let mesh):
-            node.geometry = geometry(for: mesh, in: object)
+            nodes.model.geometry = geometry(for: mesh, in: object)
             stats = mesh.statistics
 
             if semantic == .solid {
-                let edgeNode = SCNNode(geometry: mesh.visibleEdgeGeometry())
-                node.addChildNode(edgeNode)
-                edgeNode.name = "edges"
+                let (sharpEdgesGeometry, smoothEdgesGeometry) = mesh.edgeGeometries()
+
+                let sharpEdges = SCNNode(geometry: sharpEdgesGeometry)
+                nodes.model.addChildNode(sharpEdges)
+                sharpEdges.name = "edges"
+                nodes.sharpEdges = sharpEdges
+
+                let smoothEdges = SCNNode(geometry: smoothEdgesGeometry)
+                nodes.model.addChildNode(smoothEdges)
+                smoothEdges.name = "edges"
+                nodes.smoothEdges = smoothEdges
             }
 
         case .components (let components):
             var componentStats: [ModelData.Statistics] = []
+            nodes.sharpEdges = SCNNode()
+            nodes.smoothEdges = SCNNode()
             for component in components {
                 let subobject = try self.object(for: component.objectID)
-                let (subnode, stats) = try self.node(for: subobject, with: semantic)
-                subnode.transform = component.scnTransform
-                node.addChildNode(subnode)
+                let (subnodes, stats) = try self.node(for: subobject, with: semantic)
+
+                subnodes.model.transform = component.scnTransform
+                nodes.model.addChildNode(subnodes.model)
+                if let sharpEdges = subnodes.sharpEdges {
+                    nodes.sharpEdges?.addChildNode(sharpEdges)
+                }
+                if let smoothEdges = subnodes.smoothEdges {
+                    nodes.smoothEdges?.addChildNode(smoothEdges)
+                }
                 componentStats.append(stats)
             }
             stats = .init(componentStats)
         }
 
-        return (node, stats)
+        return (nodes, stats)
     }
 
     func geometry(for mesh: ThreeMF.Mesh, in object: Object) -> SCNGeometry {
         var colors: [SCNVector4] = []
         var positions: [SCNVector3] = []
-        let defaultColor = Color.white
-
-        var elementPerMaterial: [ComplexMaterial?: [Int32]] = [:]
+        var elementPerMaterial: [PBRMaterial?: [Int32]] = [:]
 
         for triangle in mesh.triangles {
             let material = material(for: triangle, in: object)
-            let colorValues = material?.colorValues ?? [defaultColor, defaultColor, defaultColor]
-
-            if material?.isFullyTransparent == true {
+            guard material?.isFullyTransparent == false else {
                 continue
             }
 
             let vertexIndices = (positions.count..<positions.count + 3).map(Int32.init)
-
             positions += [
                 mesh.vertices[triangle.v1].scnVector3,
                 mesh.vertices[triangle.v2].scnVector3,
                 mesh.vertices[triangle.v3].scnVector3
             ]
 
-            if case .complex (let complexMaterial) = material {
-                elementPerMaterial[complexMaterial, default: []].append(contentsOf: vertexIndices)
+            if case .pbr (let pbrMaterial) = material {
+                elementPerMaterial[pbrMaterial, default: []].append(contentsOf: vertexIndices)
             } else {
                 elementPerMaterial[nil, default: []].append(contentsOf: vertexIndices)
             }
 
+            let colorValues = material?.colorValues ?? [.white, .white, .white]
             colors += colorValues.map(\.scnVector4)
         }
 
@@ -167,19 +191,14 @@ extension ThreeMF.Model {
         }
 
         let defaultMaterial = SCNMaterial()
-        defaultMaterial.diffuse.contents = defaultColor.nsColor
+        defaultMaterial.diffuse.contents = NSColor.white
         defaultMaterial.emission.intensity = 0
         defaultMaterial.transparencyMode = .singleLayer
         defaultMaterial.name = "Non-PBR material"
 
-        let materials = orderedMaterials.map {
-            $0?.scnMaterial ?? defaultMaterial
-        }
-
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: elements)
-        geometry.materials = materials
+        geometry.materials = orderedMaterials.map { $0?.scnMaterial ?? defaultMaterial }
         geometry.name = UUID().uuidString
-
         return geometry
     }
 }
@@ -188,25 +207,30 @@ enum ThreeMFError: Swift.Error {
     case missingObject
 }
 
-
 extension Mesh {
     var statistics: ModelData.Statistics {
         .init(vertexCount: vertices.count, triangleCount: triangles.count)
     }
 
-    func visibleEdgeGeometry() -> SCNGeometry {
-        let positions: [SCNVector3] = vertices.map(\.scnVector3)
-        let vertexSource = SCNGeometrySource(vertices: positions)
-        let element = visibleEdgeSegments()
-        let geometry = SCNGeometry(sources: [vertexSource], elements: [element])
+    func edgeGeometries() -> (sharp: SCNGeometry, smooth: SCNGeometry) {
         let material = SCNMaterial()
         material.lightingModel = .constant
         material.diffuse.contents = NSColor.black
-        geometry.materials = [material]
-        return geometry
+
+        let positions: [SCNVector3] = vertices.map(\.scnVector3)
+        let vertexSource = SCNGeometrySource(vertices: positions)
+        let (sharpEdgesElement, smoothEdgesElement) = extractEdgeSegments()
+
+        let sharpGeometry = SCNGeometry(sources: [vertexSource], elements: [sharpEdgesElement])
+        sharpGeometry.materials = [material]
+
+        let smoothGeometry = SCNGeometry(sources: [vertexSource], elements: [smoothEdgesElement])
+        smoothGeometry.materials = [material]
+
+        return (sharpGeometry, smoothGeometry)
     }
 
-    func visibleEdgeSegments() -> SCNGeometryElement {
+    func extractEdgeSegments() -> (sharp: SCNGeometryElement, smooth: SCNGeometryElement) {
         struct Edge: Hashable {
             let v1: Int
             let v2: Int
@@ -250,6 +274,7 @@ extension Mesh {
         let maxSmoothAngleDegrees = 30.0 //3.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
         var featureEdges: [Edge] = []
+        var smoothEdges: [Edge] = []
 
         for (edge, faces) in edgeToTriangles {
             if faces.count == 1 {
@@ -261,11 +286,15 @@ extension Mesh {
                 let dot = simd_dot(n1, n2)
                 if dot < angleThreshold {
                     featureEdges.append(edge)
+                } else {
+                    smoothEdges.append(edge)
                 }
             }
         }
 
-        let indices = featureEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }
-        return SCNGeometryElement(indices: indices, primitiveType: .line)
+        return (
+            sharp: SCNGeometryElement(indices: featureEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line),
+            smooth: SCNGeometryElement(indices: smoothEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line),
+        )
     }
 }

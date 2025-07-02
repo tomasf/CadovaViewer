@@ -47,7 +47,7 @@ extension ViewportController {
         if let highlightedPartID, let part = part(withID: highlightedPartID) {
             updatePartNodeVisibility()
 
-            let clone = part.node.clone()
+            let clone = part.nodes.model.clone()
             clone.opacity = 1
             clone.name = "Highlight node"
             clone.childNodes.forEach { $0.removeFromParentNode() }
@@ -61,7 +61,7 @@ extension ViewportController {
             let color1 = #colorLiteral(red: 0.5083055715, green: 0.5790938085, blue: 0.6365426183, alpha: 0.5)
             highlight.diffuse.contents = color1
 
-            guard let oldGeometry = part.node.geometry else { return }
+            guard let oldGeometry = part.nodes.model.geometry else { return }
             let newGeometry = SCNGeometry(sources: oldGeometry.sources(for: .vertex), elements: oldGeometry.elements)
             newGeometry.materials = [highlight]
             clone.geometry = newGeometry
@@ -85,7 +85,7 @@ extension ViewportController {
     func updatePartNodeVisibility() {
         for part in sceneController.parts {
             let visibility = hiddenPartIDs.contains(part.id) == false && highlightedPartID != part.id
-            part.node.setVisible(visibility, forViewportID: categoryID)
+            part.nodes.model.setVisible(visibility, forViewportID: categoryID)
         }
     }
 }
