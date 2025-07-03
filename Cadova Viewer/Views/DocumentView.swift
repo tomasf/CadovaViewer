@@ -9,7 +9,8 @@ struct DocumentView: View {
     let errorHandler: (Error) -> ()
     @ObservedObject var viewportController: ViewportController
     @State var isLoading = false
-    @State var stats: ModelData.Statistics?
+    @State var infoData: InformationView.Model?
+    @State var modelData: ModelData?
 
     struct StandardView {
         let name: String
@@ -26,6 +27,12 @@ struct DocumentView: View {
     let standardViewBottom = StandardView(name: "Bottom", icon: Image("bottom"), viewPreset: .bottom)
 
     let spacer = ToolbarItem(id: NSToolbarItem.Identifier.space.rawValue, placement: .primaryAction, showsByDefault: true) { Color.clear }
+
+    init(url: URL, errorHandler: @escaping (Error) -> Void, viewportController: ViewportController) {
+        self.url = url
+        self.errorHandler = errorHandler
+        self.viewportController = viewportController
+    }
 
     var body: some View {
         ViewerSceneView(viewportController: viewportController)
@@ -44,33 +51,19 @@ struct DocumentView: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                ZStack(alignment: .bottom) {
-                    if let stats {
-                        HStack {
-                            Text("\(stats.triangleCount) triangles")
-                            Text("\(stats.vertexCount) vertices")
-                        }
-                        .foregroundStyle(Color(white: 0.85))
-                        .font(.system(size: 11))
-                        .shadow(color: .black, radius: 3, x: 0, y: 1)
-                        .shadow(color: .black, radius: 3, x: 0, y: 1)
-                        .opacity(isLoading ? 0 : 1)
+                Text("Loading")
+                    .font(.title2)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .foregroundStyle(.black)
+                    .background {
+                        Capsule()
+                            .fill(Color.yellow.opacity(0.8))
+                            .shadow(color: .black, radius: 2, x: 0, y: 0)
                     }
-
-                    Text("Loading")
-                        .font(.title2)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .foregroundStyle(.black)
-                        .background {
-                            Capsule()
-                                .fill(Color.yellow.opacity(0.8))
-                                .shadow(color: .black, radius: 2, x: 0, y: 0)
-                        }
-                        .opacity(isLoading ? 1 : 0)
-                }
-                .padding()
-                .allowsHitTesting(false)
+                    .opacity(isLoading ? 1 : 0)
+                    .padding()
+                    .allowsHitTesting(false)
             }
             .colorScheme(.dark)
             .toolbar(id: "document") { toolbar }
@@ -86,7 +79,15 @@ struct DocumentView: View {
                 }
             }
             .onReceive(viewportController.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
-                stats = modelData.statistics
+                self.modelData = modelData
+            }
+            .onReceive(viewportController.showInfoSignal) { _ in
+                if let modelData, let document = viewportController.document {
+                    self.infoData = .init(document: document, modelData: modelData)
+                }
+            }
+            .sheet(item: $infoData) { infoModel in
+                InformationView(model: infoModel)
             }
     }
 
@@ -150,10 +151,11 @@ struct DocumentView: View {
         }
         spacer
 
+        let apps = ExternalApplication.appsAbleToOpen(url: url)
         Group {
             ToolbarItem(id: "openIn", placement: .primaryAction, showsByDefault: true) {
                 Menu {
-                    ForEach(openInApps, id: \.url) { app in
+                    ForEach(apps, id: \.url) { app in
                         Button {
                             app.open(file: url, errorHandler: errorHandler)
                         } label: {
@@ -170,7 +172,7 @@ struct DocumentView: View {
                         Image(systemName: "arrowshape.turn.up.forward.fill")
                     }
                 }
-                .disabled(openInApps.isEmpty)
+                .disabled(apps.isEmpty)
             }
         }
 
@@ -191,31 +193,6 @@ struct DocumentView: View {
 
             ToolbarItem(id: "share", placement: .primaryAction, showsByDefault: false) {
                 ShareLink(item: url)
-            }
-        }
-    }
-
-    var openInApps: [OpenInApp] {
-        let fileManager = FileManager()
-        return NSWorkspace.shared.urlsForApplications(toOpen: url).compactMap { appURL -> OpenInApp? in
-            guard appURL != Bundle.main.bundleURL else { return nil }
-            let path = appURL.path(percentEncoded: false)
-            return OpenInApp(url: appURL, name: fileManager.displayName(atPath: path) , icon: NSWorkspace.shared.icon(forFile: path))
-        }
-    }
-
-    struct OpenInApp {
-        let url: URL
-        let name: String
-        let icon: NSImage
-
-        func open(file fileURL: URL, errorHandler: @escaping (Error) -> ()) {
-            Task {
-                do {
-                    try await NSWorkspace.shared.open([fileURL], withApplicationAt: url, configuration: NSWorkspace.OpenConfiguration())
-                } catch {
-                    errorHandler(error)
-                }
             }
         }
     }

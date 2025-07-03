@@ -44,7 +44,6 @@ class Preferences: ObservableObject {
         set { self[Self.viewOptionsDataKey] = newValue }
     }
 
-
     var navLibActivationBehavior: NavLibAppActivationBehavior {
         get {
             let string = defaults.string(forKey: Self.navLibActivationBehaviorKey) ?? "foregroundOnly"

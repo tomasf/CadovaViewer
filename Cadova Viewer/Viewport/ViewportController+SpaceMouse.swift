@@ -12,11 +12,11 @@ extension ViewportController {
             print("NavLib initialization failed: \(error)")
         }
 
-        notificationTokens.append(NotificationCenter.default.addObserver(forName: NSWindow.didBecomeMainNotification, object: nil, queue: .main) { [weak self] _ in
-            DispatchQueue.main.async {
+        NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
                 self?.updateNavLibFocus()
-            }
-        })
+            }.store(in: &observers)
 
         NSWorkspace.shared.publisher(for: \.frontmostApplication).sink { [weak self] runningApp in
             guard let self else { return }

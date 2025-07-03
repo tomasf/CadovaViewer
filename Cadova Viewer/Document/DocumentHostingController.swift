@@ -6,7 +6,7 @@ enum GlobalCategoryMasks: Int {
     case universal = 1
 }
 
-class DocumentHostingController: NSHostingController<DocumentView>, NSMenuItemValidation {
+class DocumentHostingController: NSHostingController<DocumentView> {
     var viewportControllers: [ViewportController] = []
     let sceneController: SceneController
 
@@ -35,26 +35,17 @@ class DocumentHostingController: NSHostingController<DocumentView>, NSMenuItemVa
     }
 
     var viewportController: ViewportController {
-        viewportControllers[0] // Remove this hack once we have proper support for multiple viewports
+        viewportControllers[0] // Remove this hack once we have support for multiple viewports
     }
 
-    @IBAction func performSceneControllerMenuCommand(_ sender: NSMenuItem) {
-        guard let identifier = sender.identifier?.rawValue, let command = ViewportController.MenuCommand(rawValue: identifier) else {
-            preconditionFailure("Invalid command")
-        }
-        viewportController.performMenuCommand(command, tag: sender.tag)
-    }
-
-    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(performSceneControllerMenuCommand(_:)),
-           let identifier = menuItem.identifier?.rawValue,
-           let command = ViewportController.MenuCommand(rawValue: identifier)
-        {
-            return viewportController.canPerformMenuCommand(command, tag: menuItem.tag)
-        } else {
-            return true
+    func buildMenu(_ type: MenuType, with menuBuilder: MenuBuilder) {
+        switch type {
+        case .file:
+            viewportController.buildFileMenu(with: menuBuilder)
+        case .view:
+            viewportController.buildViewMenu(with: menuBuilder)
+        case .window:
+            viewportController.buildWindowMenu(with: menuBuilder)
         }
     }
 }
-
-//if menuItem.action == #selector(copy:)

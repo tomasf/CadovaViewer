@@ -5,6 +5,17 @@ import SceneKit
 struct ModelData {
     let rootNode: SCNNode
     let parts: [Part]
+    let metadata: [ThreeMF.Metadata]
+
+    init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata]) {
+        self.rootNode = rootNode
+        self.parts = parts
+        self.metadata = metadata
+    }
+
+    init() {
+        self.init(rootNode: .init(), parts: [], metadata: [])
+    }
 
     struct Part: Identifiable {
         typealias ID = String
@@ -91,7 +102,7 @@ extension ThreeMF.Model {
             return part
         }
 
-        return ModelData(rootNode: container, parts: parts)
+        return ModelData(rootNode: container, parts: parts, metadata: metadata)
     }
 
     func buildPart(item: Item, index: Int) throws -> ModelData.Part {

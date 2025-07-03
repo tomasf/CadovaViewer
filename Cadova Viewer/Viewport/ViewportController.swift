@@ -30,8 +30,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     var navLibSession = NavLibSession<SCNVector3>()
     var navLibIsActive = false
-
-    var notificationTokens: [any NSObjectProtocol] = []
     var navLibIsSuspended = false
 
     @Published var projection: CameraProjection = .perspective {
@@ -43,18 +41,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         didSet { updatePartNodeVisibility() }
     }
 
-    var highlightNode: SCNNode?
-    var savedMaterials: [SCNMaterial] = []
     @Published var highlightedPartID: ModelData.Part.ID? {
-        didSet {
-            updateHighlightedPart(oldID: oldValue, newID: highlightedPartID)
-        }
+        didSet { updateHighlightedPart(oldID: oldValue, newID: highlightedPartID) }
     }
 
     @Published private(set) var canResetCameraRoll: Bool = false
     @Published var canShowPresets: [ViewPreset: Bool] = [:]
-
-    var isAnimatingView = false
 
     private let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
@@ -62,8 +54,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var hoverPoint: CGPoint? {
         didSet { hoverPointDidChange() }
     }
-
+    
+    var highlightNode: SCNNode?
     var observers: Set<AnyCancellable> = []
+
+    let showInfoCallbackSignals = PassthroughSubject<Void, Never>()
+    var showInfoSignal: AnyPublisher<Void, Never> { showInfoCallbackSignals.eraseToAnyPublisher() }
 
     init(document: Document, sceneController: SceneController, categoryID: Int, privateContainer: SCNNode) {
         self.sceneController = sceneController
@@ -138,6 +134,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             }
 
             grid.updateBounds(geometry: sceneController.modelContainer)
+            setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+        }.store(in: &observers)
+
+        $viewOptions.sink { [weak self] viewOptions in
+            guard let self else { return }
+            setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+            grid.showGrid = viewOptions.showGrid
+            grid.showOrigin = viewOptions.showOrigin
         }.store(in: &observers)
 
         cameraNodeChanged(cameraNode)
@@ -218,7 +222,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             node.simdPosition = .zero
             let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
             let minDistance = min(closestHitTestDistance, distanceToPart)
-            let offset = minDistance / -5000.0
+            let offset = minDistance / -1000.0
             //print(minDistance, offset)
             node.simdWorldPosition += cameraNode.presentation.simdWorldFront * offset
         }
@@ -265,10 +269,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         updateNavLibProjection()
     }
 
-    func showViewPreset(_ preset: ViewPreset, animated: Bool) {
-        setCameraView(cameraView(for: preset), movement: animated ? .large : .instant)
-    }
-
     func clearRoll() {
         setCameraView(clearRollView(), movement: .small)
     }
@@ -284,90 +284,16 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         grid.showOrigin = viewOptions.showOrigin
         Preferences().viewOptions = viewOptions
         cameraNode.transform = viewOptions.cameraTransform
+        setEdgeVisibilityInParts(viewOptions.edgeVisibility)
         hasSetInitialView = true
     }
 
-    private func contextMenu() -> NSMenu {
-        let builder = MenuBuilder()
-        if sceneController.parts.count > 1 {
-            builder.addHeader("Parts")
-
-            for part in self.sceneController.parts {
-                builder.addItem(label: part.displayName, checked: self.hiddenPartIDs.contains(part.id) == false) {
-                    self.hiddenPartIDs.formSymmetricDifference([part.id])
-                } onHighlight: { h in
-                    self.highlightedPartID = h ? part.id : nil
-                }
-
-                builder.addItem(label: "Show only \"\(part.displayName)\"", alternateForModifiers: .option) {
-                    self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id)).subtracting([part.id])
-                } onHighlight: { h in
-                    self.highlightedPartID = h ? part.id : nil
-                }
-            }
-
-            builder.addSeparator()
-            if self.hiddenPartIDs.isEmpty {
-                builder.addItem(label: "Hide All") {
-                    self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id))
-                }
-            } else {
-                builder.addItem(label: "Show All") {
-                    self.hiddenPartIDs = []
-                }
-            }
-            builder.addSeparator()
-        }
-
-        builder.addItem(label: "Show Grid", checked: viewOptions.showGrid) {
-            self.viewOptions.showGrid = !self.viewOptions.showGrid
-        }
-
-        builder.addItem(label: "Show Origin", checked: viewOptions.showOrigin) {
-            self.viewOptions.showOrigin = !self.viewOptions.showOrigin
-        }
-
-        builder.addItem(label: "Show Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
-            self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
-        }
-
-        return builder.makeMenu()
-    }
-
-    func performMenuCommand(_ command: MenuCommand, tag: Int) {
-        switch command {
-        case .showViewPreset:
-            guard let preset = ViewPreset(rawValue: tag) else {
-                preconditionFailure("Invalid preset index")
-            }
-            showViewPreset(preset, animated: true)
-        case .zoomIn:
-            zoomIn()
-        case .zoomOut:
-            zoomOut()
-        case .showRenderingOptions:
-            let panelClass: AnyObject? = NSClassFromString("SCNRendererOptionsPanel")
-            let panel = panelClass?.perform(NSSelectorFromString("rendererOptionsPanelForView:"), with: sceneView).takeUnretainedValue() as? NSPanel
-            panel?.hidesOnDeactivate = true
-            panel?.isFloatingPanel = true
-            panel?.makeKeyAndOrderFront(nil)
-        case .clearRoll:
-            clearRoll()
-        }
-    }
-
-    func canPerformMenuCommand(_ command: MenuCommand, tag: Int) -> Bool {
-        switch command {
-        case .showViewPreset:
-            guard let preset = ViewPreset(rawValue: tag) else {
-                preconditionFailure("Invalid preset index")
-            }
-            return canShowViewPreset(preset)
-        case .clearRoll:
-            return canResetRoll()
-        default:
-            return true
-        }
+    func showSceneKitRenderingOptions() {
+        let panelClass: AnyObject? = NSClassFromString("SCNRendererOptionsPanel")
+        let panel = panelClass?.perform(NSSelectorFromString("rendererOptionsPanelForView:"), with: sceneView).takeUnretainedValue() as? NSPanel
+        panel?.hidesOnDeactivate = true
+        panel?.isFloatingPanel = true
+        panel?.makeKeyAndOrderFront(nil)
     }
 
     enum CameraProjection {
@@ -375,28 +301,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         case perspective
     }
 
-    enum ViewPreset: Int, CaseIterable {
-        case isometric
-        case front
-        case back
-        case left
-        case right
-        case top
-        case bottom
-    }
-
-    enum MenuCommand: String {
-        case showViewPreset
-        case zoomIn
-        case zoomOut
-        case showRenderingOptions
-        case clearRoll
-    }
-
     struct ViewOptions: Codable {
         var showGrid = true
         var showOrigin = true
         var showCoordinateSystemIndicator = true
+        var edgeVisibility: EdgeVisibility = .sharp
         var cameraTransform: SCNMatrix4 = SCNMatrix4Identity
 
         enum CodingKeys: String, CodingKey {
@@ -404,6 +313,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             case showOrigin
             case showCoordinateSystemIndicator
             case cameraTransform
+            case edgeVisibility
         }
 
         init() {}
@@ -414,6 +324,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             showOrigin = try container.decode(Bool.self, forKey: .showOrigin)
             showCoordinateSystemIndicator = try container.decode(Bool.self, forKey: .showCoordinateSystemIndicator)
             cameraTransform = try container.decode(SCNMatrix4.CodingWrapper.self, forKey: .cameraTransform).scnMatrix4
+            edgeVisibility = (try? container.decode(EdgeVisibility.self, forKey: .edgeVisibility)) ?? .sharp
         }
 
         func encode(to encoder: any Encoder) throws {
@@ -422,6 +333,13 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             try container.encode(showOrigin, forKey: .showOrigin)
             try container.encode(showCoordinateSystemIndicator, forKey: .showCoordinateSystemIndicator)
             try container.encode(SCNMatrix4.CodingWrapper(cameraTransform), forKey: .cameraTransform)
+            try container.encode(edgeVisibility, forKey: .edgeVisibility)
+        }
+
+        enum EdgeVisibility: String, Codable {
+            case none
+            case sharp
+            case all
         }
     }
 }

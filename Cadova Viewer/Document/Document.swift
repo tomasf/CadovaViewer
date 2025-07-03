@@ -9,7 +9,7 @@ import ThreeMF
 import Zip
 
 class Document: NSDocument, NSWindowDelegate {
-    private let modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData(rootNode: .init(), parts: []))
+    private let modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData())
     private let loadingSubject: CurrentValueSubject<Bool, Never> = .init(false)
 
     var modelStream: AnyPublisher<ModelData, Never> { modelSubject.eraseToAnyPublisher() }
@@ -24,7 +24,6 @@ class Document: NSDocument, NSWindowDelegate {
         let window = NSWindow(contentViewController: viewController)
         let windowController = NSWindowController(window: window)
         window.delegate = self
-        //window.toolbarStyle = .expanded
         self.addWindowController(windowController)
     }
 
@@ -43,7 +42,7 @@ class Document: NSDocument, NSWindowDelegate {
         }
     }
 
-    private var documentHostingController: DocumentHostingController? {
+    var documentHostingController: DocumentHostingController? {
         windowControllers.first?.contentViewController as? DocumentHostingController
     }
 

@@ -88,6 +88,13 @@ extension ViewportController {
             part.nodes.model.setVisible(visibility, forViewportID: categoryID)
         }
     }
+
+    func setEdgeVisibilityInParts(_ visibility: ViewOptions.EdgeVisibility) {
+        for part in sceneController.parts {
+            part.nodes.sharpEdges?.isHidden = (visibility == .none)
+            part.nodes.smoothEdges?.isHidden = (visibility != .all)
+        }
+    }
 }
 
 extension SCNNode {
@@ -98,9 +105,9 @@ extension SCNNode {
             } else {
                 node.treeCategoryBitMask &= ~(1 << categoryID)
             }
-
-            // This won't work with multiple viewports, but line geometries don't seem to respect categoryBitMask
-            node.isHidden = !visibility
         }
+
+        // This won't work with multiple viewports, but line geometries don't seem to respect categoryBitMask
+        isHidden = !visibility
     }
 }

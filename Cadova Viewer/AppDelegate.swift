@@ -29,7 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if preferencesWindow == nil {
             preferencesWindow = NSWindow(contentViewController: NSHostingController(rootView: PreferencesView()))
             preferencesWindow?.setFrameAutosaveName("preferences")
-            preferencesWindow?.title = "Preferences"
+            preferencesWindow?.title = "Settings"
         }
 
         preferencesWindow?.makeKeyAndOrderFront(nil)
