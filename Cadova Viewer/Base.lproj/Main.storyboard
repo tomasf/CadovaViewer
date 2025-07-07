@@ -128,6 +128,11 @@
                                                 <action selector="copy:" target="Ady-hI-5gd" id="G1f-GL-Joy"/>
                                             </connections>
                                         </menuItem>
+                                        <menuItem title="Copy without Background" alternate="YES" keyEquivalent="C" id="YjX-my-ekk">
+                                            <connections>
+                                                <action selector="copyWithoutBackground:" target="Ady-hI-5gd" id="Arv-Ha-vjO"/>
+                                            </connections>
+                                        </menuItem>
                                         <menuItem title="Paste" keyEquivalent="v" id="gVA-U4-sdL">
                                             <connections>
                                                 <action selector="paste:" target="Ady-hI-5gd" id="UvS-8e-Qdg"/>

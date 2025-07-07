@@ -5,7 +5,7 @@ import Combine
 final class SceneController: ObservableObject {
     let scene = SCNScene()
     let modelContainer = SCNNode()
-    private let viewportPrivateContainer = SCNNode()
+    let viewportPrivateContainer = SCNNode()
 
     @Published var parts: [ModelData.Part] = []
 

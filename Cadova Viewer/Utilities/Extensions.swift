@@ -151,3 +151,13 @@ extension SCNMatrix4 {
         }
     }
 }
+
+extension MTLRenderCommandEncoder {
+    func setLineWidthPrivate(_ width: Float) {
+        guard let self = self as? NSObject,
+              self.responds(to: NSSelectorFromString("setLineWidth:"))
+        else { return }
+
+        self.setValue(width, forKey: "lineWidth")
+    }
+}
