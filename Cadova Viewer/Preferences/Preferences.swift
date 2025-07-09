@@ -39,7 +39,7 @@ class Preferences: ObservableObject {
         set { self[Self.navLibWhitelistedAppsDataKey] = newValue }
     }
 
-    var viewOptions: ViewportController.ViewOptions {
+    var viewOptions: ViewOptions {
         get { self[Self.viewOptionsDataKey] ?? .init() }
         set { self[Self.viewOptionsDataKey] = newValue }
     }

@@ -15,6 +15,11 @@ extension ViewportController {
         }
     }
 
+    var hiddenPartIDs: Set<ModelData.Part.ID> {
+        get { viewOptions.hiddenPartIDs }
+        set { viewOptions.hiddenPartIDs = newValue }
+    }
+
     var visibleParts: Set<ModelData.Part.ID> {
         get {
             Set(sceneController.parts.map(\.id)).subtracting(hiddenPartIDs)
@@ -42,10 +47,10 @@ extension ViewportController {
         if oldValue != nil {
             highlightNode?.removeFromParentNode()
             highlightNode = nil
-            updatePartNodeVisibility()
+            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         }
         if let highlightedPartID, let part = part(withID: highlightedPartID) {
-            updatePartNodeVisibility()
+            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
 
             let clone = part.nodes.model.clone()
             clone.opacity = 1
@@ -82,7 +87,7 @@ extension ViewportController {
         }
     }
 
-    func updatePartNodeVisibility() {
+    func updatePartNodeVisibility(_ hiddenPartIDs: Set<ModelData.Part.ID>) {
         for part in sceneController.parts {
             let visibility = hiddenPartIDs.contains(part.id) == false && highlightedPartID != part.id
             part.nodes.model.setVisible(visibility, forViewportID: categoryID)

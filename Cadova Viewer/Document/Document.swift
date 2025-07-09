@@ -60,7 +60,7 @@ class Document: NSDocument, NSWindowDelegate {
     override func restoreState(with coder: NSCoder) {
         super.restoreState(with: coder)
         if let data = coder.decodeObject(forKey: Self.viewOptionsKey) as? Data,
-           let viewOptions = try? JSONDecoder().decode(ViewportController.ViewOptions.self, from: data)
+           let viewOptions = try? JSONDecoder().decode(ViewOptions.self, from: data)
         {
             documentHostingController?.viewportController.setViewOptions(viewOptions)
         }

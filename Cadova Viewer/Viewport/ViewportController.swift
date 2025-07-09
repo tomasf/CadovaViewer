@@ -36,11 +36,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         didSet { updateCameraProjection() }
     }
 
-    // Parts
-    @Published var hiddenPartIDs: Set<ModelData.Part.ID> = [] {
-        didSet { updatePartNodeVisibility() }
-    }
-
     @Published var highlightedPartID: ModelData.Part.ID? {
         didSet { updateHighlightedPart(oldID: oldValue, newID: highlightedPartID) }
     }
@@ -135,6 +130,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
             grid.updateBounds(geometry: sceneController.modelContainer)
             setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
+            objectWillChange.send()
         }.store(in: &observers)
 
         $viewOptions.sink { [weak self] viewOptions in
@@ -142,6 +139,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             setEdgeVisibilityInParts(viewOptions.edgeVisibility)
             grid.showGrid = viewOptions.showGrid
             grid.showOrigin = viewOptions.showOrigin
+            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         }.store(in: &observers)
 
         cameraNodeChanged(cameraNode)
@@ -282,10 +280,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         self.viewOptions = viewOptions
         grid.showGrid = viewOptions.showGrid
         grid.showOrigin = viewOptions.showOrigin
-        Preferences().viewOptions = viewOptions
         cameraNode.transform = viewOptions.cameraTransform
         setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+        updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         hasSetInitialView = true
+        Preferences().viewOptions = viewOptions
     }
 
     func showSceneKitRenderingOptions() {
@@ -299,47 +298,5 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     enum CameraProjection {
         case orthographic
         case perspective
-    }
-
-    struct ViewOptions: Codable {
-        var showGrid = true
-        var showOrigin = true
-        var showCoordinateSystemIndicator = true
-        var edgeVisibility: EdgeVisibility = .sharp
-        var cameraTransform: SCNMatrix4 = SCNMatrix4Identity
-
-        enum CodingKeys: String, CodingKey {
-            case showGrid
-            case showOrigin
-            case showCoordinateSystemIndicator
-            case cameraTransform
-            case edgeVisibility
-        }
-
-        init() {}
-
-        init(from decoder: any Decoder) throws {
-            let container = try decoder.container(keyedBy: CodingKeys.self)
-            showGrid = try container.decode(Bool.self, forKey: .showGrid)
-            showOrigin = try container.decode(Bool.self, forKey: .showOrigin)
-            showCoordinateSystemIndicator = try container.decode(Bool.self, forKey: .showCoordinateSystemIndicator)
-            cameraTransform = try container.decode(SCNMatrix4.CodingWrapper.self, forKey: .cameraTransform).scnMatrix4
-            edgeVisibility = (try? container.decode(EdgeVisibility.self, forKey: .edgeVisibility)) ?? .sharp
-        }
-
-        func encode(to encoder: any Encoder) throws {
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(showGrid, forKey: .showGrid)
-            try container.encode(showOrigin, forKey: .showOrigin)
-            try container.encode(showCoordinateSystemIndicator, forKey: .showCoordinateSystemIndicator)
-            try container.encode(SCNMatrix4.CodingWrapper(cameraTransform), forKey: .cameraTransform)
-            try container.encode(edgeVisibility, forKey: .edgeVisibility)
-        }
-
-        enum EdgeVisibility: String, Codable {
-            case none
-            case sharp
-            case all
-        }
     }
 }
