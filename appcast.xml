@@ -1,0 +1,14 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Cadova Viewer</title>
+        <item>
+            <title>0.1</title>
+            <pubDate>Wed, 09 Jul 2025 23:42:47 +0200</pubDate>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/0.1.0/CadovaViewer0.1.zip" length="16295033" type="application/octet-stream" sparkle:edSignature="svNwQqgWIHhNVA9Xa9mM8WJ6LIwJLwL0Bf9uLq3QDQVLhEZZ0l6Bha1FvoGoa6WSj1glgwWnElCS36FSZmsgAQ=="/>
+        </item>
+    </channel>
+</rss>
