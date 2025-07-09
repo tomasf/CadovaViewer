@@ -6,6 +6,8 @@
 	<true/>
 	<key>SUPublicEDKey</key>
 	<string>Hl+DHkOAf2F6jEpjIk8xwx7HyaK/VUsJL7J9tiUprDI=</string>
+	<key>SUFeedURL</key>
+	<string>https://cadova.org/viewer/appcast</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
