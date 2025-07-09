@@ -1,13 +1,13 @@
 {
-  "originHash" : "4074a854d4e3c62f55de21c09c5e095985f3b3daebee68632c6926f6800f53ae",
+  "originHash" : "5292d810fc4aabd5a03f14677d14788e4879d8264a872bcf5ee5847dcd9f9d33",
   "pins" : [
     {
-      "identity" : "nodal",
+      "identity" : "sparkle",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tomasf/Nodal.git",
+      "location" : "https://github.com/sparkle-project/Sparkle",
       "state" : {
-        "revision" : "763efeebe6bf1c26958dcbb29661a9af45cced52",
-        "version" : "0.3.1"
+        "revision" : "df074165274afaa39539c05d57b0832620775b11",
+        "version" : "2.7.1"
       }
     },
     {

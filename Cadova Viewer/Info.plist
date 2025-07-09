@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUPublicEDKey</key>
+	<string>Hl+DHkOAf2F6jEpjIk8xwx7HyaK/VUsJL7J9tiUprDI=</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -15,12 +19,11 @@
 			<string>Default</string>
 			<key>NSDocumentClass</key>
 			<string>$(PRODUCT_MODULE_NAME).Document</string>
-            <key>CFBundleTypeExtensions</key>
-            <array>
-                <string>3mf</string>
-            </array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>3mf</string>
+			</array>
 		</dict>
 	</array>
-
 </dict>
 </plist>

@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C90E33532D84621F002DC32F /* NavLibSwift */; };
 		C914C3EE2DE75E7000363AFF /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C914C3ED2DE75E7000363AFF /* ThreeMF */; };
+		C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C926DC262E1BF9BC00F38DB7 /* Sparkle */; };
 		C932E69F2D0F6711006E5D17 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = C932E69E2D0F6711006E5D17 /* Zip */; };
 		C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */; };
 		C94754082D305F740085380D /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C94754072D305F740085380D /* ThreeMF */; };
@@ -46,6 +47,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */,
 				C914C3EE2DE75E7000363AFF /* ThreeMF in Frameworks */,
 				C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */,
 				C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */,
@@ -108,6 +110,7 @@
 				C90E33532D84621F002DC32F /* NavLibSwift */,
 				C9C7D33D2DE0981E00480B4E /* NavLibSwift */,
 				C914C3ED2DE75E7000363AFF /* ThreeMF */,
+				C926DC262E1BF9BC00F38DB7 /* Sparkle */,
 			);
 			productName = "Model Viewer";
 			productReference = C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */;
@@ -140,6 +143,7 @@
 			packageReferences = (
 				C9C7D33C2DE0981E00480B4E /* XCLocalSwiftPackageReference "../NavLibSwift" */,
 				C914C3EC2DE75E7000363AFF /* XCLocalSwiftPackageReference "../ThreeMF" */,
+				C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C932E6432D0F5A01006E5D17 /* Products */;
@@ -181,7 +185,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 4R2KAE48H2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -224,7 +228,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 4R2KAE48H2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -412,6 +416,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		C90E33532D84621F002DC32F /* NavLibSwift */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -420,6 +435,11 @@
 		C914C3ED2DE75E7000363AFF /* ThreeMF */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ThreeMF;
+		};
+		C926DC262E1BF9BC00F38DB7 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 		C932E69E2D0F6711006E5D17 /* Zip */ = {
 			isa = XCSwiftPackageProductDependency;
