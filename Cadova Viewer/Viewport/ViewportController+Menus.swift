@@ -78,7 +78,7 @@ extension ViewportController {
             }
         })
 
-        builder.addItem(label: "Straighten Camera", keyEquivalent: "L", modifiers: []) {
+        builder.addItem(label: "Straighten Camera", keyEquivalent: "l") {
             self.clearRoll()
         }
 
@@ -89,7 +89,7 @@ extension ViewportController {
 
     func buildFileMenu(with builder: MenuBuilder) {
         builder.addSeparator()
-        builder.addItem(label: "Show Info", keyEquivalent: "I", modifiers: .command) {
+        builder.addItem(label: "Show Info", keyEquivalent: "i", modifiers: .command) {
             self.showInfoCallbackSignals.send()
         }
         builder.addItem(label: "Open in", submenu: { builder in
