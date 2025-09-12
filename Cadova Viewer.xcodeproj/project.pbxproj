@@ -182,7 +182,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 4R2KAE48H2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -201,7 +201,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "";
 				OTHER_LDFLAGS = (
 					"-weak_framework",
@@ -225,7 +225,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 4R2KAE48H2;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -244,7 +244,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "";
 				OTHER_LDFLAGS = (
 					"-weak_framework",
