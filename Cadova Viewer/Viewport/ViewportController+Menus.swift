@@ -5,23 +5,16 @@ extension ViewportController {
     func contextMenu() -> NSMenu {
         let builder = MenuBuilder()
         if sceneController.parts.count > 1 {
-            builder.addHeader("Parts")
-
-            for part in self.sceneController.parts {
-                builder.addItem(label: part.displayName, checked: hiddenPartIDs.contains(part.id) == false) {
-                    self.hiddenPartIDs.formSymmetricDifference([part.id])
-                } onHighlight: { h, _ in
-                    self.highlightedPartID = h ? part.id : nil
-                }
-
-                builder.addItem(label: "Show only \"\(part.displayName)\"", checked: onlyVisiblePartID == part.id, modifiers: .option) {
-                    self.onlyVisiblePartID = part.id
-                } onHighlight: { h, _ in
-                    self.highlightedPartID = h ? part.id : nil
-                }
+            if sceneController.parts.count >= 10 {
+                builder.addItem(label: "Parts", submenu: { builder in
+                    self.buildPartsMenuItems(with: builder)
+                })
+            } else {
+                builder.addHeader("Parts")
+                buildPartsMenuItems(with: builder)
+                builder.addSeparator()
             }
 
-            builder.addSeparator()
             if hiddenPartIDs.isEmpty {
                 builder.addItem(label: "Hide All") {
                     self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id))
@@ -38,6 +31,23 @@ extension ViewportController {
         builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
         return builder.makeMenu()
     }
+
+    func buildPartsMenuItems(with builder: MenuBuilder) {
+        for part in self.sceneController.parts {
+            builder.addItem(label: part.displayName, checked: hiddenPartIDs.contains(part.id) == false) {
+                self.hiddenPartIDs.formSymmetricDifference([part.id])
+            } onHighlight: { h, _ in
+                self.highlightedPartID = h ? part.id : nil
+            }
+
+            builder.addItem(label: "Show only \"\(part.displayName)\"", checked: onlyVisiblePartID == part.id, modifiers: .option) {
+                self.onlyVisiblePartID = part.id
+            } onHighlight: { h, _ in
+                self.highlightedPartID = h ? part.id : nil
+            }
+        }
+    }
+
 
     func buildViewMenu(with builder: MenuBuilder) {
         let currentView = currentCameraView
