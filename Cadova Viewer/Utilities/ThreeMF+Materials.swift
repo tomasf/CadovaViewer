@@ -103,8 +103,8 @@ extension ThreeMF.Model {
         return PBRMaterial(diffuse: baseColor, metallicness: item.metallicness, roughness: item.roughness, name: item.name)
     }
 
-    func material(for triangle: Mesh.Triangle, in object: Object) -> Material? {
-        guard let refs = triangle.resolvedProperties(in: object) else {
+    func material(for triangle: Mesh.Triangle, inheritedProperty: PartialPropertyReference) -> Material? {
+        guard let refs = triangle.resolvedProperties(inheritedProperty: inheritedProperty) else {
             return nil
         }
 
@@ -123,6 +123,34 @@ extension ThreeMF.Model {
             }
         } else {
             return nil
+        }
+    }
+}
+
+struct PartialPropertyReference {
+    let groupID: ResourceID?
+    let index: ResourceIndex?
+}
+
+extension Mesh.Triangle {
+    func resolvedProperties(inheritedProperty: PartialPropertyReference) -> [PropertyReference]? {
+        guard let groupID = propertyGroup ?? inheritedProperty.groupID else {
+            return nil
+        }
+
+        switch propertyIndex {
+        case .perVertex (let p1, let p2, let p3):
+            return [p1, p2, p3].map { PropertyReference(groupID: groupID, index: $0) }
+
+        case .uniform (let index):
+            return [PropertyReference(groupID: groupID, index: index)]
+
+        case .none:
+            if let index = inheritedProperty.index {
+                return [PropertyReference(groupID: groupID, index: index)]
+            } else {
+                return nil
+            }
         }
     }
 }

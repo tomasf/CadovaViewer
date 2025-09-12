@@ -45,52 +45,60 @@ extension ViewportController {
 
     func updateHighlightedPart(oldID oldValue: ModelData.Part.ID?, newID newValue: ModelData.Part.ID?) {
         if oldValue != nil {
-            highlightNode?.removeFromParentNode()
-            highlightNode = nil
+            removeHighlight()
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         }
         if let highlightedPartID, let part = part(withID: highlightedPartID) {
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
+            highlightPart(part)
+        }
+    }
 
-            let clone = part.nodes.model.clone()
-            clone.opacity = 1
-            clone.name = "Highlight node"
-            clone.childNodes.forEach { $0.removeFromParentNode() }
-            highlightNode = clone
-            sceneController.viewportPrivateNode(for: categoryID).addChildNode(clone)
-            highlightNode?.setVisible(true, forViewportID: categoryID)
+    private func highlightPart(_ part: ModelData.Part) {
+        let clone = part.nodes.model.clone()
+        clone.opacity = 1
+        clone.name = "Highlight node"
+        highlightNode = clone
+        sceneController.viewportPrivateNode(for: categoryID).addChildNode(clone)
+        highlightNode?.setVisible(true, forViewportID: categoryID)
 
-            let highlight = SCNMaterial()
-            highlight.lightingModel = .constant
-            highlight.transparencyMode = .singleLayer
-            let color1 = #colorLiteral(red: 0.5083055715, green: 0.5790938085, blue: 0.6365426183, alpha: 0.5)
-            highlight.diffuse.contents = color1
+        let highlight = SCNMaterial()
+        highlight.lightingModel = .constant
+        highlight.transparencyMode = .singleLayer
+        let color1 = #colorLiteral(red: 0.3659334006, green: 0.6078522355, blue: 0.8041835711, alpha: 0.7)
+        highlight.diffuse.contents = color1
 
-            guard let oldGeometry = part.nodes.model.geometry else { return }
+        for child in clone.childNodes {
+            guard let oldGeometry = child.geometry else { continue }
             let newGeometry = SCNGeometry(sources: oldGeometry.sources(for: .vertex), elements: oldGeometry.elements)
             newGeometry.materials = [highlight]
-            clone.geometry = newGeometry
-
-            let color2 = #colorLiteral(red: 0.4434132788, green: 0.5500227634, blue: 0.6365426183, alpha: 0.6046981293)
-            let duration = 0.5
-            let action = SCNAction.customAction(duration: duration) { node, time in
-                highlight.diffuse.contents = color1.blended(withFraction: time / duration, of: color2)
-            }
-            action.timingMode = .easeIn
-
-            let action2 = SCNAction.customAction(duration: duration) { node, time in
-                highlight.diffuse.contents = color2.blended(withFraction: time / duration, of: color1)
-            }
-            clone.runAction(.repeatForever(.sequence([action, action2])))
-            action2.timingMode = .easeOut
-
+            child.geometry = newGeometry
         }
+
+        let color2 = #colorLiteral(red: 0.3659334006, green: 0.6078522355, blue: 0.8041835711, alpha: 0.5)
+        let duration = 0.4
+        let action = SCNAction.customAction(duration: duration) { node, time in
+            highlight.diffuse.contents = color1.blended(withFraction: time / duration, of: color2)
+        }
+        action.timingMode = .easeInEaseOut
+
+        let action2 = SCNAction.customAction(duration: duration) { node, time in
+            highlight.diffuse.contents = color2.blended(withFraction: time / duration, of: color1)
+        }
+        action2.timingMode = .easeInEaseOut
+
+        clone.runAction(.sequence([.wait(duration: 0.3), .repeatForever(.sequence([action, action2]))]))
+    }
+
+    private func removeHighlight() {
+        highlightNode?.removeFromParentNode()
+        highlightNode = nil
     }
 
     func updatePartNodeVisibility(_ hiddenPartIDs: Set<ModelData.Part.ID>) {
         for part in sceneController.parts {
             let visibility = hiddenPartIDs.contains(part.id) == false && highlightedPartID != part.id
-            part.nodes.model.setVisible(visibility, forViewportID: categoryID)
+            part.nodes.container.setVisible(visibility, forViewportID: categoryID)
         }
     }
 

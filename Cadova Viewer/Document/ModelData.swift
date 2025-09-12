@@ -39,12 +39,15 @@ struct ModelData {
         }
 
         struct Nodes {
+            var container: SCNNode
             var model: SCNNode
             var sharpEdges: SCNNode?
             var smoothEdges: SCNNode?
 
             init() {
+                container = SCNNode()
                 model = SCNNode()
+                container.addChildNode(model)
             }
         }
     }
@@ -73,10 +76,107 @@ extension ModelData {
     }
 }
 
-extension PackageReader {
-    func modelData() throws -> ModelData {
-        let model = try model()
-        return try model.buildModelData()
+extension ModelData {
+    init(url: URL) async throws {
+        let loader = ModelLoader(url: url)
+        let loadedModel = try await loader.load()
+
+        struct ComponentProducts {
+            let mainGeometry: SCNGeometry
+            let sharpEdgesGeometry: SCNGeometry
+            let smoothEdgesGeometry: SCNGeometry
+            let stats: ModelData.Statistics
+            let transform: SCNMatrix4
+        }
+
+        let indexedEdgeGeometries = await loadedModel.meshes.asyncMap { $0.mesh.edgeGeometries() }
+
+        let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
+            let products = await loadedItem.components.asyncMap { loadedComponent in
+                let property = PartialPropertyReference(groupID: loadedComponent.propertyGroupID, index: loadedComponent.propertyIndex)
+                let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
+                let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
+                let model = loadedModel.models[loadedMesh.modelIndex]
+
+                let geometry = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
+                return ComponentProducts(
+                    mainGeometry: geometry,
+                    sharpEdgesGeometry: sharp,
+                    smoothEdgesGeometry: smooth,
+                    stats: loadedMesh.mesh.statistics,
+                    transform: loadedComponent.scnMatrix
+                )
+            }
+
+            var nodes = Part.Nodes()
+            nodes.container.name = "Item \(itemIndex)"
+
+            if loadedItem.item.semantic == .solid {
+                let sharpEdgesGroupNode = SCNNode()
+                let smoothEdgesGroupNode = SCNNode()
+                nodes.sharpEdges = sharpEdgesGroupNode
+                nodes.smoothEdges = smoothEdgesGroupNode
+                sharpEdgesGroupNode.name = "Sharp edges"
+                smoothEdgesGroupNode.name = "Smooth edges"
+                nodes.container.addChildNode(sharpEdgesGroupNode)
+                nodes.container.addChildNode(smoothEdgesGroupNode)
+
+                for product in products {
+                    let sharpNodeContainer = SCNNode()
+                    sharpNodeContainer.name = "Sharp edges transformer"
+                    sharpNodeContainer.transform = product.transform
+                    sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
+
+                    let sharpNode = SCNNode(geometry: product.sharpEdgesGeometry)
+                    sharpNode.name = "Sharp edges geometry"
+                    sharpNodeContainer.addChildNode(sharpNode)
+
+                    let smoothNodeContainer = SCNNode()
+                    smoothNodeContainer.name = "Smooth edges transformer"
+                    smoothNodeContainer.transform = product.transform
+                    smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
+
+                    let smoothNode = SCNNode(geometry: product.smoothEdgesGeometry)
+                    smoothNode.name = "Smooth edges geometry"
+                    smoothNodeContainer.addChildNode(smoothNode)
+                }
+            }
+
+            for product in products {
+                let modelNode = SCNNode(geometry: product.mainGeometry)
+                modelNode.name = "Main geometry"
+                modelNode.transform = product.transform
+                nodes.model.addChildNode(modelNode)
+            }
+
+            return Part(
+                nodes: nodes,
+                name: loadedItem.rootObject.name,
+                id: loadedItem.item.partNumber,
+                semantic: loadedItem.item.semantic,
+                stats: Statistics(products.map(\.stats))
+            )
+        }
+
+        let container = SCNNode()
+        container.name = "Model root"
+        if let multiplier = loadedModel.rootModel.unit?.millimetersPerUnit {
+            container.transform = SCNMatrix4MakeScale(multiplier, multiplier, multiplier)
+        }
+
+        for part in parts {
+            container.addChildNode(part.nodes.container)
+        }
+
+        self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata)
+    }
+}
+
+extension ModelLoader.LoadedModel.LoadedComponent {
+    var scnMatrix: SCNMatrix4 {
+        transforms.reduce(SCNMatrix4Identity) { transform, matrix in
+            SCNMatrix4Mult(matrix.scnMatrix, transform)
+        }
     }
 }
 
@@ -88,91 +188,14 @@ extension ThreeMF.Model {
         return object
     }
 
-    func buildModelData() throws -> ModelData {
-        let container = SCNNode()
-        container.name = "Model root"
-        if let multiplier = unit?.millimetersPerUnit {
-            container.transform = SCNMatrix4MakeScale(multiplier, multiplier, multiplier)
-        }
-
-        let parts = try buildItems.enumerated().map { index, item -> ModelData.Part in
-            let part = try buildPart(item: item, index: index)
-            part.nodes.smoothEdges?.isHidden = true
-            container.addChildNode(part.nodes.model)
-            return part
-        }
-
-        return ModelData(rootNode: container, parts: parts, metadata: metadata)
-    }
-
-    func buildPart(item: Item, index: Int) throws -> ModelData.Part {
-        let object = try object(for: item.objectID)
-        let (nodes, stats) = try self.node(for: object, with: item.semantic)
-
-        let quotedName = if let name = object.name { " \"\(name)\"" } else { "" }
-        nodes.model.name = "Object id \(object.id)\(quotedName) for item #\(index)"
-        nodes.model.transform = item.scnTransform
-
-        return ModelData.Part(nodes: nodes, name: object.name, id: item.partNumber, semantic: item.semantic, stats: stats)
-    }
-
-    func node(for object: ThreeMF.Object, with semantic: PartSemantic) throws -> (ModelData.Part.Nodes, ModelData.Statistics) {
-        var nodes = ModelData.Part.Nodes()
-        let quotedName = if let name = object.name { " \"\(name)\"" } else { "" }
-        nodes.model.name = "Object id \(object.id)" + quotedName
-        let stats: ModelData.Statistics
-
-        switch object.content {
-        case .mesh (let mesh):
-            nodes.model.geometry = geometry(for: mesh, in: object)
-            stats = mesh.statistics
-
-            if semantic == .solid {
-                let (sharpEdgesGeometry, smoothEdgesGeometry) = mesh.edgeGeometries()
-
-                let sharpEdges = SCNNode(geometry: sharpEdgesGeometry)
-                nodes.model.addChildNode(sharpEdges)
-                sharpEdges.name = "edges"
-                nodes.sharpEdges = sharpEdges
-
-                let smoothEdges = SCNNode(geometry: smoothEdgesGeometry)
-                nodes.model.addChildNode(smoothEdges)
-                smoothEdges.name = "edges"
-                nodes.smoothEdges = smoothEdges
-            }
-
-        case .components (let components):
-            var componentStats: [ModelData.Statistics] = []
-            nodes.sharpEdges = SCNNode()
-            nodes.smoothEdges = SCNNode()
-            for component in components {
-                let subobject = try self.object(for: component.objectID)
-                let (subnodes, stats) = try self.node(for: subobject, with: semantic)
-
-                subnodes.model.transform = component.scnTransform
-                nodes.model.addChildNode(subnodes.model)
-                if let sharpEdges = subnodes.sharpEdges {
-                    nodes.sharpEdges?.addChildNode(sharpEdges)
-                }
-                if let smoothEdges = subnodes.smoothEdges {
-                    nodes.smoothEdges?.addChildNode(smoothEdges)
-                }
-                componentStats.append(stats)
-            }
-            stats = .init(componentStats)
-        }
-
-        return (nodes, stats)
-    }
-
-    func geometry(for mesh: ThreeMF.Mesh, in object: Object) -> SCNGeometry {
+    func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> SCNGeometry {
         var colors: [SCNVector4] = []
         var positions: [SCNVector3] = []
         var elementPerMaterial: [PBRMaterial?: [Int32]] = [:]
 
         for triangle in mesh.triangles {
-            let material = material(for: triangle, in: object)
-            guard material?.isFullyTransparent == false else {
+            let material = material(for: triangle, inheritedProperty: inheritedProperty)
+            guard material?.isFullyTransparent != true else {
                 continue
             }
 
@@ -241,7 +264,7 @@ extension Mesh {
         return (sharpGeometry, smoothGeometry)
     }
 
-    func extractEdgeSegments() -> (sharp: SCNGeometryElement, smooth: SCNGeometryElement) {
+    private func extractEdgeSegments() -> (sharp: SCNGeometryElement, smooth: SCNGeometryElement) {
         struct Edge: Hashable {
             let v1: Int
             let v2: Int
@@ -282,15 +305,15 @@ extension Mesh {
 
         let triangleNormals = triangles.map { normal(of: $0) }
 
-        let maxSmoothAngleDegrees = 30.0 //3.0
+        let maxSmoothAngleDegrees = 30.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
         var featureEdges: [Edge] = []
         var smoothEdges: [Edge] = []
 
         for (edge, faces) in edgeToTriangles {
-            if faces.count == 1 {
-                // Non-manifold?
-                featureEdges.append(edge)
+            if faces.count == 1 { // Non-manifold?
+                smoothEdges.append(edge)
+                
             } else if faces.count == 2 {
                 let n1 = triangleNormals[faces[0]]
                 let n2 = triangleNormals[faces[1]]

@@ -8,21 +8,21 @@ extension ViewportController {
             builder.addHeader("Parts")
 
             for part in self.sceneController.parts {
-                builder.addItem(label: part.displayName, checked: self.hiddenPartIDs.contains(part.id) == false) {
+                builder.addItem(label: part.displayName, checked: hiddenPartIDs.contains(part.id) == false) {
                     self.hiddenPartIDs.formSymmetricDifference([part.id])
                 } onHighlight: { h, _ in
                     self.highlightedPartID = h ? part.id : nil
                 }
 
-                builder.addItem(label: "Show only \"\(part.displayName)\"", modifiers: .option) {
-                    self.visibleParts = [part.id]
+                builder.addItem(label: "Show only \"\(part.displayName)\"", checked: onlyVisiblePartID == part.id, modifiers: .option) {
+                    self.onlyVisiblePartID = part.id
                 } onHighlight: { h, _ in
                     self.highlightedPartID = h ? part.id : nil
                 }
             }
 
             builder.addSeparator()
-            if self.hiddenPartIDs.isEmpty {
+            if hiddenPartIDs.isEmpty {
                 builder.addItem(label: "Hide All") {
                     self.hiddenPartIDs = Set(self.sceneController.parts.map(\.id))
                 }
@@ -130,7 +130,6 @@ extension ViewportController {
             menuBuilder.addItem(label: label, checked: self.viewOptions.edgeVisibility == visibility) {
                 self.viewOptions.edgeVisibility = visibility
             } onHighlight: { highlighted, isClosing in
-                print("edge \(visibility) closing \(isClosing)")
                 if !isClosing {
                     self.setEdgeVisibilityInParts(highlighted ? visibility : initialEdgeVisibility)
                 }

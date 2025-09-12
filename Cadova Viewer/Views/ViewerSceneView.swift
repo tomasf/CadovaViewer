@@ -77,11 +77,12 @@ class CustomSceneView: SCNView {
 
         super.mouseDown(with: event)
         let localPoint = convert(event.locationInWindow, from: nil)
+        let edgeNodes = sceneController.edgeNodes
 
         if let result = hitTest(localPoint, options: [
             .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
             .rootNode: sceneController.modelContainer
-        ]).first(where: { $0.node.name != "edges" }) {
+        ]).first(where: { !edgeNodes.contains($0.node) }) {
             defaultCameraController.target = result.worldCoordinates
         } else {
             defaultCameraController.target = xyPlanePoint(forViewPoint: localPoint)

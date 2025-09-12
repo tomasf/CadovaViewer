@@ -8,12 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C90E33532D84621F002DC32F /* NavLibSwift */; };
-		C914C3EE2DE75E7000363AFF /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C914C3ED2DE75E7000363AFF /* ThreeMF */; };
 		C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C926DC262E1BF9BC00F38DB7 /* Sparkle */; };
 		C932E69F2D0F6711006E5D17 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = C932E69E2D0F6711006E5D17 /* Zip */; };
 		C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */; };
-		C94754082D305F740085380D /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C94754072D305F740085380D /* ThreeMF */; };
 		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
+		C9E3C20A2E716585004CF414 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C9E3C2092E716585004CF414 /* ThreeMF */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,12 +46,11 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C9E3C20A2E716585004CF414 /* ThreeMF in Frameworks */,
 				C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */,
-				C914C3EE2DE75E7000363AFF /* ThreeMF in Frameworks */,
 				C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */,
 				C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */,
 				C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */,
-				C94754082D305F740085380D /* ThreeMF in Frameworks */,
 				C932E69F2D0F6711006E5D17 /* Zip in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -106,11 +104,10 @@
 			name = "Cadova Viewer";
 			packageProductDependencies = (
 				C932E69E2D0F6711006E5D17 /* Zip */,
-				C94754072D305F740085380D /* ThreeMF */,
 				C90E33532D84621F002DC32F /* NavLibSwift */,
 				C9C7D33D2DE0981E00480B4E /* NavLibSwift */,
-				C914C3ED2DE75E7000363AFF /* ThreeMF */,
 				C926DC262E1BF9BC00F38DB7 /* Sparkle */,
+				C9E3C2092E716585004CF414 /* ThreeMF */,
 			);
 			productName = "Model Viewer";
 			productReference = C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */;
@@ -432,10 +429,6 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
 		};
-		C914C3ED2DE75E7000363AFF /* ThreeMF */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ThreeMF;
-		};
 		C926DC262E1BF9BC00F38DB7 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */;
@@ -445,13 +438,14 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = Zip;
 		};
-		C94754072D305F740085380D /* ThreeMF */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ThreeMF;
-		};
 		C9C7D33D2DE0981E00480B4E /* NavLibSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
+		};
+		C9E3C2092E716585004CF414 /* ThreeMF */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C914C3EC2DE75E7000363AFF /* XCLocalSwiftPackageReference "../ThreeMF" */;
+			productName = ThreeMF;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

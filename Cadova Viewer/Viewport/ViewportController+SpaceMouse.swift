@@ -22,7 +22,7 @@ extension ViewportController {
             guard let self else { return }
             guard let runningApp, navLibIsActive else { return }
 
-            print("Frontmost: \(runningApp.bundleIdentifier ?? "nil bundle id")")
+            //print("Frontmost: \(runningApp.bundleIdentifier ?? "nil bundle id")")
 
             if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
                 navLibSession.applicationHasFocus = true
@@ -35,7 +35,7 @@ extension ViewportController {
             case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
             }
 
-            print("navlib active \(active), for \(Preferences().navLibActivationBehavior)")
+            //print("navlib active \(active), for \(Preferences().navLibActivationBehavior)")
             navLibSession.applicationHasFocus = active
         }.store(in: &observers)
     }
@@ -123,7 +123,12 @@ extension ViewportController: NavLibStateProvider {
             y: origin.y + direction.y * length,
             z: origin.z + direction.z * length
         )
-        guard let result = sceneController.modelContainer.hitTestWithSegment(from: origin, to: end).first(where: { $0.node.name != "edges" }) else {
+        
+        let edgeNodes = sceneController.edgeNodes
+        guard let result = sceneController.modelContainer
+            .hitTestWithSegment(from: origin, to: end)
+            .first(where: { !edgeNodes.contains($0.node) })
+        else {
             return nil
         }
 

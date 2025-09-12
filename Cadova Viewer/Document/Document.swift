@@ -28,18 +28,33 @@ class Document: NSDocument, NSWindowDelegate {
     }
 
     override func read(from url: URL, ofType typeName: String) throws {
-        do {
-            loadingSubject.send(true)
-            let threeMF = try PackageReader(url: url)
-            let start = CFAbsoluteTimeGetCurrent()
-            modelSubject.value = try threeMF.modelData()
-            loadingSubject.send(false)
-            let end = CFAbsoluteTimeGetCurrent()
-            Swift.print("Loading time: \(end - start)")
-        } catch {
-            Swift.print("Error: \(error)")
-            throw error
+        loadingSubject.send(true)
+        let start = CFAbsoluteTimeGetCurrent()
+        let modelSubject = self.modelSubject
+
+        var isFinished = false
+        var loadingError: Swift.Error?
+        Task {
+            do {
+                modelSubject.value = try await ModelData(url: url)
+            } catch {
+                loadingError = error
+            }
+            isFinished = true
         }
+
+        while !isFinished {
+            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+        }
+        loadingSubject.send(false)
+
+        if let loadingError {
+            Swift.print("Error: \(loadingError)")
+            throw loadingError
+        }
+
+        let end = CFAbsoluteTimeGetCurrent()
+        Swift.print("Loading time: \(end - start)")
     }
 
     var documentHostingController: DocumentHostingController? {
