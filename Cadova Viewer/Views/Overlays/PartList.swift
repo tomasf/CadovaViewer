@@ -54,11 +54,11 @@ struct PartList: View {
                 }
             }
 
-            Button(viewportController.visibleParts.isEmpty ? "Show All" : "Hide All") {
-                if viewportController.visibleParts.isEmpty {
-                    viewportController.hiddenPartIDs = []
-                } else {
+            Button(viewportController.hiddenPartIDs.isEmpty ? "Hide All" : "Show All") {
+                if viewportController.hiddenPartIDs.isEmpty {
                     viewportController.visibleParts = []
+                } else {
+                    viewportController.hiddenPartIDs = []
                 }
             }
             .padding(.top)
