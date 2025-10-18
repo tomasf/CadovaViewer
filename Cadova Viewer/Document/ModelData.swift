@@ -21,21 +21,17 @@ struct ModelData {
         typealias ID = String
 
         let nodes: Nodes
-        let name: String?
+        let name: String
         let id: ID
         let semantic: PartSemantic
         let statistics: Statistics
 
-        init(nodes: Nodes, name: String?, id: ID?, semantic: PartSemantic, stats: Statistics) {
+        init(nodes: Nodes, name: String, id: ID?, semantic: PartSemantic, stats: Statistics) {
             self.nodes = nodes
             self.name = name
             self.id = id ?? UUID().uuidString
             self.semantic = semantic
             self.statistics = stats
-        }
-
-        var displayName: String {
-            name ?? "Object"
         }
 
         struct Nodes {
@@ -151,7 +147,7 @@ extension ModelData {
 
             return Part(
                 nodes: nodes,
-                name: loadedItem.rootObject.name,
+                name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
                 id: loadedItem.item.partNumber,
                 semantic: loadedItem.item.semantic,
                 stats: Statistics(products.map(\.stats))

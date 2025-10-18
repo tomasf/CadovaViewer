@@ -40,36 +40,39 @@ struct PartList: View {
     @State private var useExclusiveSelection = false
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading) {
+        VStack(alignment: .center) {
+            ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(viewportController.parts) { part in
                         Toggle(isOn: partVisibility(part.id)) {
-                            Text(part.displayName)
+                            Text(part.name)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                         .padding(.vertical, 4)
+                        .padding(.horizontal)
                         .contentShape(Rectangle())
                         .onHover { hovered in
                             viewportController.highlightedPartID = hovered ? part.id : nil
                         }
                     }
                 }
-                
-                Button(viewportController.hiddenPartIDs.isEmpty ? "Hide All" : "Show All") {
-                    if viewportController.hiddenPartIDs.isEmpty {
-                        viewportController.visibleParts = []
-                    } else {
-                        viewportController.hiddenPartIDs = []
-                    }
-                }
                 .padding(.top)
+                .padding(.horizontal, 8)
+                .frame(minWidth: 60)
             }
-            
-            .frame(minWidth: 70)
+
+            Button(viewportController.hiddenPartIDs.isEmpty ? "Hide All" : "Show All") {
+                if viewportController.hiddenPartIDs.isEmpty {
+                    viewportController.visibleParts = []
+                } else {
+                    viewportController.hiddenPartIDs = []
+                }
+            }
             .padding()
-            .onModifierKeysChanged { _, keys in
-                useExclusiveSelection = keys.contains(.option)
-            }
+        }
+        .onModifierKeysChanged { _, keys in
+            useExclusiveSelection = keys.contains(.option)
         }
     }
 

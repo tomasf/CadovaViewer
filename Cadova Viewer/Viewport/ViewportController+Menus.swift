@@ -34,13 +34,13 @@ extension ViewportController {
 
     func buildPartsMenuItems(with builder: MenuBuilder) {
         for part in self.sceneController.parts {
-            builder.addItem(label: part.displayName, checked: hiddenPartIDs.contains(part.id) == false) {
+            builder.addItem(label: part.name, checked: hiddenPartIDs.contains(part.id) == false) {
                 self.hiddenPartIDs.formSymmetricDifference([part.id])
             } onHighlight: { h, _ in
                 self.highlightedPartID = h ? part.id : nil
             }
 
-            builder.addItem(label: "Show only \"\(part.displayName)\"", checked: onlyVisiblePartID == part.id, modifiers: .option) {
+            builder.addItem(label: "Show only \"\(part.name)\"", checked: onlyVisiblePartID == part.id, modifiers: .option) {
                 self.onlyVisiblePartID = part.id
             } onHighlight: { h, _ in
                 self.highlightedPartID = h ? part.id : nil
