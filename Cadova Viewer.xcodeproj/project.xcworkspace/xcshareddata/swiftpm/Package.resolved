@@ -1,6 +1,15 @@
 {
-  "originHash" : "19ee13b149a34dc5d55d6d3273dcab500fd8ee7dbf693a2a5732fd65e517acb0",
+  "originHash" : "3c8b5f02e55289c13ff36a7cf2f8f0b5b031a00581cb4e907561a4677c61d8ab",
   "pins" : [
+    {
+      "identity" : "navlibswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/NavLibSwift.git",
+      "state" : {
+        "revision" : "81d275f26e3fbfe1d668ab546e3bf3679e5bc712",
+        "version" : "2.0.0"
+      }
+    },
     {
       "identity" : "nodal",
       "kind" : "remoteSourceControl",
@@ -17,6 +26,15 @@
       "state" : {
         "revision" : "df074165274afaa39539c05d57b0832620775b11",
         "version" : "2.7.1"
+      }
+    },
+    {
+      "identity" : "threemf",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/ThreeMF",
+      "state" : {
+        "revision" : "a7b65b1c8960602f4bc954bfc334b98c6a5e9099",
+        "version" : "0.2.0"
       }
     },
     {
