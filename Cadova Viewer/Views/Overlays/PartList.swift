@@ -40,33 +40,36 @@ struct PartList: View {
     @State private var useExclusiveSelection = false
 
     var body: some View {
-        VStack(alignment: .leading) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(viewportController.parts) { part in
-                    Toggle(isOn: partVisibility(part.id)) {
-                        Text(part.displayName)
-                    }
-                    .padding(.vertical, 4)
-                    .contentShape(Rectangle())
-                    .onHover { hovered in
-                        viewportController.highlightedPartID = hovered ? part.id : nil
+        ScrollView(.vertical) {
+            VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(viewportController.parts) { part in
+                        Toggle(isOn: partVisibility(part.id)) {
+                            Text(part.displayName)
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                        .onHover { hovered in
+                            viewportController.highlightedPartID = hovered ? part.id : nil
+                        }
                     }
                 }
-            }
-
-            Button(viewportController.hiddenPartIDs.isEmpty ? "Hide All" : "Show All") {
-                if viewportController.hiddenPartIDs.isEmpty {
-                    viewportController.visibleParts = []
-                } else {
-                    viewportController.hiddenPartIDs = []
+                
+                Button(viewportController.hiddenPartIDs.isEmpty ? "Hide All" : "Show All") {
+                    if viewportController.hiddenPartIDs.isEmpty {
+                        viewportController.visibleParts = []
+                    } else {
+                        viewportController.hiddenPartIDs = []
+                    }
                 }
+                .padding(.top)
             }
-            .padding(.top)
-        }
-        .frame(minWidth: 70)
-        .padding()
-        .onModifierKeysChanged { _, keys in
-            useExclusiveSelection = keys.contains(.option)
+            
+            .frame(minWidth: 70)
+            .padding()
+            .onModifierKeysChanged { _, keys in
+                useExclusiveSelection = keys.contains(.option)
+            }
         }
     }
 
