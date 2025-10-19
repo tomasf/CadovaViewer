@@ -15,7 +15,7 @@ class DocumentHostingController: NSHostingController<DocumentView> {
     init(document: Document) {
         sceneController = SceneController(document: document)
 
-        let viewportID = (~usedCategoryMasks).trailingZeroBitCount //nextUnusedCategoryIndex
+        let viewportID = (~usedCategoryMasks).trailingZeroBitCount
         let privateContainer = sceneController.viewportPrivateNode(for: viewportID)
         let viewportController = ViewportController(document: document, sceneController: sceneController, categoryID: viewportID, privateContainer: privateContainer)
         usedCategoryMasks |= (1 << viewportID)
