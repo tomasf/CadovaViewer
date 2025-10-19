@@ -1,5 +1,5 @@
 {
-  "originHash" : "3c8b5f02e55289c13ff36a7cf2f8f0b5b031a00581cb4e907561a4677c61d8ab",
+  "originHash" : "f35bb5de2c37d8a4226487c5da3db65b2aa08d2c66246b76446b60b06b6682dc",
   "pins" : [
     {
       "identity" : "navlibswift",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/Nodal.git",
       "state" : {
-        "revision" : "20fc1e770d8fe38f4c00536547d4c782824434fa",
-        "version" : "0.3.2"
+        "revision" : "275b8efd1d36d45154759a19e8cad709c2a36c64",
+        "version" : "0.3.3"
       }
     },
     {

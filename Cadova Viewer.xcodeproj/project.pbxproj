@@ -13,6 +13,7 @@
 		C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */; };
 		C9A940792EA3E6E300D5BAB2 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C9A940782EA3E6E300D5BAB2 /* ThreeMF */; };
 		C9A940C42EA3F43200D5BAB2 /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9A940C32EA3F43200D5BAB2 /* NavLibSwift */; };
+		C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */ = {isa = PBXBuildFile; productRef = C9A941A62EA5018D00D5BAB2 /* Nodal */; };
 		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
 /* End PBXBuildFile section */
 
@@ -50,6 +51,7 @@
 				C9A940792EA3E6E300D5BAB2 /* ThreeMF in Frameworks */,
 				C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */,
 				C9A940C42EA3F43200D5BAB2 /* NavLibSwift in Frameworks */,
+				C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */,
 				C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */,
 				C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */,
 				C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */,
@@ -111,6 +113,7 @@
 				C926DC262E1BF9BC00F38DB7 /* Sparkle */,
 				C9A940782EA3E6E300D5BAB2 /* ThreeMF */,
 				C9A940C32EA3F43200D5BAB2 /* NavLibSwift */,
+				C9A941A62EA5018D00D5BAB2 /* Nodal */,
 			);
 			productName = "Model Viewer";
 			productReference = C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */;
@@ -144,6 +147,7 @@
 				C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				C9A940772EA3E6E300D5BAB2 /* XCRemoteSwiftPackageReference "ThreeMF" */,
 				C9A940C22EA3F43200D5BAB2 /* XCRemoteSwiftPackageReference "NavLibSwift" */,
+				C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C932E6432D0F5A01006E5D17 /* Products */;
@@ -438,6 +442,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tomasf/Nodal";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -463,6 +475,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C9A940C22EA3F43200D5BAB2 /* XCRemoteSwiftPackageReference "NavLibSwift" */;
 			productName = NavLibSwift;
+		};
+		C9A941A62EA5018D00D5BAB2 /* Nodal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */;
+			productName = Nodal;
 		};
 		C9C7D33D2DE0981E00480B4E /* NavLibSwift */ = {
 			isa = XCSwiftPackageProductDependency;
