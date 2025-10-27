@@ -6,7 +6,7 @@ It’s a lightweight, fast viewer that updates automatically as files change, id
 
 ## Features
 * Live reloading: Automatically refreshes when the 3MF file changes on disk.
-* Materials & Colors: Supports the core 3MF spec, plus colors from the 3MF Materials and Properties Extension, including PBR.
+* Materials & Colors: Supports the core 3MF spec, plus the Production extension and colors from the 3MF Materials and Properties Extension, including PBR.
 * Object management: View all 3MF objects in a list, with toggleable visibility.
 * SpaceMouse support: Navigate freely with 3DConnexion’s SpaceMouse.
 * macOS-native: Built with native APIs for smooth integration with the macOS ecosystem.
