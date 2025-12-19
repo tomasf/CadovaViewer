@@ -89,7 +89,7 @@ class Document: NSDocument, NSWindowDelegate {
         super.presentedItemDidChange()
 
         guard let fileURL, let fileType else { return }
-        let diskModificationDate = try? FileManager().attributesOfItem(atPath: fileURL.path())[.modificationDate] as? Date
+        let diskModificationDate = try? FileManager().attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.modificationDate] as? Date
         let lastKnownModificationDate = fileModificationDate
 
         guard let diskModificationDate, let lastKnownModificationDate, diskModificationDate > lastKnownModificationDate else {
