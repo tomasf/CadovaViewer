@@ -3,6 +3,15 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>0.2.1</title>
+            <pubDate>Fri, 19 Dec 2025 22:52:58 +0100</pubDate>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/0.2.1/CadovaViewer0.2.1.zip" length="16408969" type="application/octet-stream" sparkle:edSignature="F7yHr2205ju0qs6WvdzFwN/Fwv+iHr56GcxXYDrhbUTNvN/JHVDrAIlFERPMBPxjhEK7FGn7J12w98UH9UmNAQ=="/>
+            <description>This release fixes a bug where a model would not be automatically reloaded if the filename contained spaces.</description>
+        </item>
+        <item>
             <title>0.2</title>
             <pubDate>Sun, 19 Oct 2025 13:31:11 +0200</pubDate>
             <sparkle:version>5</sparkle:version>
