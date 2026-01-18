@@ -10,7 +10,6 @@
 		C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C90E33532D84621F002DC32F /* NavLibSwift */; };
 		C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C926DC262E1BF9BC00F38DB7 /* Sparkle */; };
 		C932E69F2D0F6711006E5D17 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = C932E69E2D0F6711006E5D17 /* Zip */; };
-		C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */; };
 		C9A940792EA3E6E300D5BAB2 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = C9A940782EA3E6E300D5BAB2 /* ThreeMF */; };
 		C9A940C42EA3F43200D5BAB2 /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9A940C32EA3F43200D5BAB2 /* NavLibSwift */; };
 		C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */ = {isa = PBXBuildFile; productRef = C9A941A62EA5018D00D5BAB2 /* Nodal */; };
@@ -19,7 +18,6 @@
 
 /* Begin PBXFileReference section */
 		C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cadova Viewer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = 3DconnexionNavlib.framework; path = ../../../../../Library/Frameworks/3DconnexionNavlib.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -54,7 +52,6 @@
 				C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */,
 				C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */,
 				C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */,
-				C93DE6262D43EF170048204A /* 3DconnexionNavlib.framework in Frameworks */,
 				C932E69F2D0F6711006E5D17 /* Zip in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -66,7 +63,6 @@
 			isa = PBXGroup;
 			children = (
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
-				C93DE6242D43EF170048204A /* Frameworks */,
 				C932E6432D0F5A01006E5D17 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -77,14 +73,6 @@
 				C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		C93DE6242D43EF170048204A /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				C93DE6252D43EF170048204A /* 3DconnexionNavlib.framework */,
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -212,10 +200,6 @@
 				);
 				MARKETING_VERSION = 0.2.1;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "";
-				OTHER_LDFLAGS = (
-					"-weak_framework",
-					3DconnexionNavlib,
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer;
 				PRODUCT_MODULE_NAME = CadovaViewer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -258,10 +242,6 @@
 				);
 				MARKETING_VERSION = 0.2.1;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "";
-				OTHER_LDFLAGS = (
-					"-weak_framework",
-					3DconnexionNavlib,
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer;
 				PRODUCT_MODULE_NAME = CadovaViewer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -439,7 +419,7 @@
 			repositoryURL = "https://github.com/tomasf/NavLibSwift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 		C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */ = {
