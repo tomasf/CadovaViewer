@@ -2,7 +2,7 @@ import Foundation
 import Nodal
 import ThreeMF
 
-enum PartSemantic: String, Hashable, Sendable, Codable {
+public enum PartSemantic: String, Hashable, Sendable, Codable {
     /// A regular printable part, typically rendered as opaque and included in the physical output.
     case solid
 
@@ -33,7 +33,7 @@ fileprivate extension PartSemantic {
 }
 
 extension ThreeMF.Item {
-    var semantic: PartSemantic {
+    public var semantic: PartSemantic {
         if let attribute = customAttributes[.semantic], let parsed = PartSemantic(xmlAttributeValue: attribute) {
             return parsed
         } else {

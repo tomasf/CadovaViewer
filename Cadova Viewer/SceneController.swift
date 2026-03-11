@@ -1,6 +1,7 @@
 import Foundation
 import SceneKit
 import Combine
+import ThreeMF
 
 final class SceneController: ObservableObject {
     let scene = SCNScene()

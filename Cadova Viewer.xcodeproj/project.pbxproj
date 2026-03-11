@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AAAA00402EA6000000000040 /* Quick Look Preview.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAA00102EA6000000000010 /* Quick Look Preview.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAAA00412EA6000000000041 /* Quick Look Thumbnail.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAAA00602EA6000000000060 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = AAAA00612EA6000000000061 /* ThreeMF */; };
+		AAAA00622EA6000000000062 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = AAAA00632EA6000000000063 /* ThreeMF */; };
 		C90E33542D84621F002DC32F /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C90E33532D84621F002DC32F /* NavLibSwift */; };
 		C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C926DC262E1BF9BC00F38DB7 /* Sparkle */; };
 		C932E69F2D0F6711006E5D17 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = C932E69E2D0F6711006E5D17 /* Zip */; };
@@ -16,11 +20,59 @@
 		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AAAA00072EA6000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C932E63A2D0F5A01006E5D17 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAAA00202EA6000000000020;
+			remoteInfo = "Quick Look Preview";
+		};
+		AAAA00082EA6000000000005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C932E63A2D0F5A01006E5D17 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAAA00302EA6000000000030;
+			remoteInfo = "Quick Look Thumbnail";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AAAA00092EA6000000000006 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AAAA00402EA6000000000040 /* Quick Look Preview.appex in Embed Foundation Extensions */,
+				AAAA00412EA6000000000041 /* Quick Look Thumbnail.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		AAAA00102EA6000000000010 /* Quick Look Preview.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Quick Look Preview.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Quick Look Thumbnail.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cadova Viewer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AAAA00122EA6000000000012 /* Exceptions for "Quick Look Preview" folder in "Quick Look Preview" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AAAA00202EA6000000000020 /* Quick Look Preview */;
+		};
+		AAAA00132EA6000000000013 /* Exceptions for "Quick Look Thumbnail" folder in "Quick Look Thumbnail" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AAAA00302EA6000000000030 /* Quick Look Thumbnail */;
+		};
 		C932E6522D0F5A03006E5D17 /* Exceptions for "Cadova Viewer" folder in "Cadova Viewer" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -31,6 +83,27 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AAAA00142EA6000000000014 /* Quick Look Preview */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AAAA00122EA6000000000012 /* Exceptions for "Quick Look Preview" folder in "Quick Look Preview" target */,
+			);
+			path = "Quick Look Preview";
+			sourceTree = "<group>";
+		};
+		AAAA00152EA6000000000015 /* Quick Look Thumbnail */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AAAA00132EA6000000000013 /* Exceptions for "Quick Look Thumbnail" folder in "Quick Look Thumbnail" target */,
+			);
+			path = "Quick Look Thumbnail";
+			sourceTree = "<group>";
+		};
+		AAAA00162EA6000000000016 /* Packages/CadovaCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Packages/CadovaCore;
+			sourceTree = "<group>";
+		};
 		C932E6442D0F5A01006E5D17 /* Cadova Viewer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -42,6 +115,22 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AAAA00172EA6000000000017 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAA00602EA6000000000060 /* ThreeMF in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAA00182EA6000000000018 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAAA00622EA6000000000062 /* ThreeMF in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C932E63F2D0F5A01006E5D17 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -62,7 +151,10 @@
 		C932E6392D0F5A01006E5D17 = {
 			isa = PBXGroup;
 			children = (
+				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
+				AAAA00142EA6000000000014 /* Quick Look Preview */,
+				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
 				C932E6432D0F5A01006E5D17 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -71,6 +163,8 @@
 			isa = PBXGroup;
 			children = (
 				C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */,
+				AAAA00102EA6000000000010 /* Quick Look Preview.appex */,
+				AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -78,6 +172,54 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AAAA00202EA6000000000020 /* Quick Look Preview */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAA00212EA6000000000021 /* Build configuration list for PBXNativeTarget "Quick Look Preview" */;
+			buildPhases = (
+				AAAA00222EA6000000000022 /* Sources */,
+				AAAA00172EA6000000000017 /* Frameworks */,
+				AAAA00232EA6000000000023 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AAAA00142EA6000000000014 /* Quick Look Preview */,
+				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
+			);
+			name = "Quick Look Preview";
+			packageProductDependencies = (
+				AAAA00612EA6000000000061 /* ThreeMF */,
+			);
+			productName = "Quick Look Preview";
+			productReference = AAAA00102EA6000000000010 /* Quick Look Preview.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		AAAA00302EA6000000000030 /* Quick Look Thumbnail */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAAA00312EA6000000000031 /* Build configuration list for PBXNativeTarget "Quick Look Thumbnail" */;
+			buildPhases = (
+				AAAA00322EA6000000000032 /* Sources */,
+				AAAA00182EA6000000000018 /* Frameworks */,
+				AAAA00332EA6000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
+				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
+			);
+			name = "Quick Look Thumbnail";
+			packageProductDependencies = (
+				AAAA00632EA6000000000063 /* ThreeMF */,
+			);
+			productName = "Quick Look Thumbnail";
+			productReference = AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		C932E6412D0F5A01006E5D17 /* Cadova Viewer */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C932E6532D0F5A03006E5D17 /* Build configuration list for PBXNativeTarget "Cadova Viewer" */;
@@ -85,12 +227,16 @@
 				C932E63E2D0F5A01006E5D17 /* Sources */,
 				C932E63F2D0F5A01006E5D17 /* Frameworks */,
 				C932E6402D0F5A01006E5D17 /* Resources */,
+				AAAA00092EA6000000000006 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AAAA00192EA6000000000019 /* PBXTargetDependency */,
+				AAAA001A2EA600000000001A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
+				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
 			);
 			name = "Cadova Viewer";
@@ -117,6 +263,12 @@
 				LastSwiftUpdateCheck = 1610;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					AAAA00202EA6000000000020 = {
+						CreatedOnToolsVersion = 16.1;
+					};
+					AAAA00302EA6000000000030 = {
+						CreatedOnToolsVersion = 16.1;
+					};
 					C932E6412D0F5A01006E5D17 = {
 						CreatedOnToolsVersion = 16.1;
 					};
@@ -143,11 +295,27 @@
 			projectRoot = "";
 			targets = (
 				C932E6412D0F5A01006E5D17 /* Cadova Viewer */,
+				AAAA00202EA6000000000020 /* Quick Look Preview */,
+				AAAA00302EA6000000000030 /* Quick Look Thumbnail */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		AAAA00232EA6000000000023 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAA00332EA6000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C932E6402D0F5A01006E5D17 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -158,6 +326,20 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AAAA00222EA6000000000022 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAAA00322EA6000000000032 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C932E63E2D0F5A01006E5D17 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -167,18 +349,149 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		AAAA00192EA6000000000019 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAAA00202EA6000000000020 /* Quick Look Preview */;
+			targetProxy = AAAA00072EA6000000000004 /* PBXContainerItemProxy */;
+		};
+		AAAA001A2EA600000000001A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAAA00302EA6000000000030 /* Quick Look Thumbnail */;
+			targetProxy = AAAA00082EA6000000000005 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		AAAA00502EA6000000000050 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Quick Look Preview/QuickLookPreview.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Quick Look Preview/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Quick Look Preview";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookPreview;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AAAA00512EA6000000000051 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Quick Look Preview/QuickLookPreview.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Quick Look Preview/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Quick Look Preview";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookPreview;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AAAA00522EA6000000000052 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Quick Look Thumbnail/QuickLookThumbnail.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Quick Look Thumbnail/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Quick Look Thumbnail";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookThumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AAAA00532EA6000000000053 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Quick Look Thumbnail/QuickLookThumbnail.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Quick Look Thumbnail/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Quick Look Thumbnail";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookThumbnail;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		C932E6542D0F5A03006E5D17 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Cadova Viewer/CadovaViewer.entitlements";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -213,14 +526,16 @@
 		C932E6552D0F5A03006E5D17 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Cadova Viewer/CadovaViewer.entitlements";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -377,6 +692,24 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AAAA00212EA6000000000021 /* Build configuration list for PBXNativeTarget "Quick Look Preview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAA00502EA6000000000050 /* Debug */,
+				AAAA00512EA6000000000051 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAAA00312EA6000000000031 /* Build configuration list for PBXNativeTarget "Quick Look Thumbnail" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAAA00522EA6000000000052 /* Debug */,
+				AAAA00532EA6000000000053 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		C932E63D2D0F5A01006E5D17 /* Build configuration list for PBXProject "Cadova Viewer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -433,6 +766,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AAAA00612EA6000000000061 /* ThreeMF */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C9A940772EA3E6E300D5BAB2 /* XCRemoteSwiftPackageReference "ThreeMF" */;
+			productName = ThreeMF;
+		};
+		AAAA00632EA6000000000063 /* ThreeMF */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C9A940772EA3E6E300D5BAB2 /* XCRemoteSwiftPackageReference "ThreeMF" */;
+			productName = ThreeMF;
+		};
 		C90E33532D84621F002DC32F /* NavLibSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;

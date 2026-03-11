@@ -8,6 +8,29 @@
 	<string>Hl+DHkOAf2F6jEpjIk8xwx7HyaK/VUsJL7J9tiUprDI=</string>
 	<key>SUFeedURL</key>
 	<string>https://cadova.org/viewer/appcast</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.3mf.threemfpackage</string>
+			<key>UTTypeDescription</key>
+			<string>3MF Document</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>3mf</string>
+				</array>
+				<key>public.mime-type</key>
+				<string>application/vnd.ms-package.3dmanufacturing-3dmodel+xml</string>
+			</dict>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
