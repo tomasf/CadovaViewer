@@ -1,32 +1,33 @@
 import Foundation
 import ThreeMF
 import SceneKit
+import AppKit
 
-struct ModelData {
-    let rootNode: SCNNode
-    let parts: [Part]
-    let metadata: [ThreeMF.Metadata]
+public struct ModelData: Sendable {
+    public let rootNode: SCNNode
+    public let parts: [Part]
+    public let metadata: [ThreeMF.Metadata]
 
-    init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata]) {
+    public init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata]) {
         self.rootNode = rootNode
         self.parts = parts
         self.metadata = metadata
     }
 
-    init() {
+    public init() {
         self.init(rootNode: .init(), parts: [], metadata: [])
     }
 
-    struct Part: Identifiable {
-        typealias ID = String
+    public struct Part: Identifiable, Sendable {
+        public typealias ID = String
 
-        let nodes: Nodes
-        let name: String
-        let id: ID
-        let semantic: PartSemantic
-        let statistics: Statistics
+        public let nodes: Nodes
+        public let name: String
+        public let id: ID
+        public let semantic: PartSemantic
+        public let statistics: Statistics
 
-        init(nodes: Nodes, name: String, id: ID?, semantic: PartSemantic, stats: Statistics) {
+        public init(nodes: Nodes, name: String, id: ID?, semantic: PartSemantic, stats: Statistics) {
             self.nodes = nodes
             self.name = name
             self.id = id ?? UUID().uuidString
@@ -34,13 +35,13 @@ struct ModelData {
             self.statistics = stats
         }
 
-        struct Nodes {
-            var container: SCNNode
-            var model: SCNNode
-            var sharpEdges: SCNNode?
-            var smoothEdges: SCNNode?
+        public struct Nodes: Sendable {
+            public var container: SCNNode
+            public var model: SCNNode
+            public var sharpEdges: SCNNode?
+            public var smoothEdges: SCNNode?
 
-            init() {
+            public init() {
                 container = SCNNode()
                 model = SCNNode()
                 container.addChildNode(model)
@@ -48,22 +49,22 @@ struct ModelData {
         }
     }
 
-    var statistics: Statistics {
+    public var statistics: Statistics {
         .init(parts.map(\.statistics))
     }
 }
 
 extension ModelData {
-    struct Statistics {
-        let vertexCount: Int
-        let triangleCount: Int
+    public struct Statistics: Sendable {
+        public let vertexCount: Int
+        public let triangleCount: Int
 
-        init(vertexCount: Int, triangleCount: Int) {
+        public init(vertexCount: Int, triangleCount: Int) {
             self.vertexCount = vertexCount
             self.triangleCount = triangleCount
         }
 
-        init(_ stats: [Statistics]) {
+        public init(_ stats: [Statistics]) {
             self.init(
                 vertexCount: stats.map(\.vertexCount).reduce(0, +),
                 triangleCount: stats.map(\.triangleCount).reduce(0, +)
@@ -73,11 +74,11 @@ extension ModelData {
 }
 
 extension ModelData {
-    init(url: URL) async throws {
+    public init(url: URL, includeEdges: Bool = true) async throws {
         let loader = ModelLoader(url: url)
         let loadedModel = try await loader.load()
 
-        struct ComponentProducts {
+        struct ComponentProducts: Sendable {
             let mainGeometry: SCNGeometry
             let sharpEdgesGeometry: SCNGeometry
             let smoothEdgesGeometry: SCNGeometry
@@ -85,29 +86,46 @@ extension ModelData {
             let transform: SCNMatrix4
         }
 
-        let indexedEdgeGeometries = await loadedModel.meshes.asyncMap { $0.mesh.edgeGeometries() }
+        let indexedEdgeGeometries: [(sharp: SCNGeometry, smooth: SCNGeometry)]
+        if includeEdges {
+            indexedEdgeGeometries = await loadedModel.meshes.asyncMap { $0.mesh.edgeGeometries() }
+        } else {
+            indexedEdgeGeometries = []
+        }
 
         let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
             let products = await loadedItem.components.asyncMap { loadedComponent in
                 let property = PartialPropertyReference(groupID: loadedComponent.propertyGroupID, index: loadedComponent.propertyIndex)
-                let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
                 let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
                 let model = loadedModel.models[loadedMesh.modelIndex]
 
                 let geometry = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
-                return ComponentProducts(
-                    mainGeometry: geometry,
-                    sharpEdgesGeometry: sharp,
-                    smoothEdgesGeometry: smooth,
-                    stats: loadedMesh.mesh.statistics,
-                    transform: loadedComponent.scnMatrix
-                )
+
+                if includeEdges && loadedComponent.meshIndex < indexedEdgeGeometries.count {
+                    let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
+                    return ComponentProducts(
+                        mainGeometry: geometry,
+                        sharpEdgesGeometry: sharp,
+                        smoothEdgesGeometry: smooth,
+                        stats: loadedMesh.mesh.statistics,
+                        transform: loadedComponent.scnMatrix
+                    )
+                } else {
+                    let emptyGeometry = SCNGeometry()
+                    return ComponentProducts(
+                        mainGeometry: geometry,
+                        sharpEdgesGeometry: emptyGeometry,
+                        smoothEdgesGeometry: emptyGeometry,
+                        stats: loadedMesh.mesh.statistics,
+                        transform: loadedComponent.scnMatrix
+                    )
+                }
             }
 
             var nodes = Part.Nodes()
             nodes.container.name = "Item \(itemIndex)"
 
-            if loadedItem.item.semantic == .solid {
+            if includeEdges && loadedItem.item.semantic == .solid {
                 let sharpEdgesGroupNode = SCNNode()
                 let smoothEdgesGroupNode = SCNNode()
                 nodes.sharpEdges = sharpEdgesGroupNode
@@ -177,14 +195,14 @@ extension ModelLoader.LoadedModel.LoadedComponent {
 }
 
 extension ThreeMF.Model {
-    func object(for id: ResourceID) throws -> Object {
+    public func object(for id: ResourceID) throws -> Object {
         guard let object = resources.resource(for: id) as? Object else {
             throw ThreeMFError.missingObject
         }
         return object
     }
 
-    func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> SCNGeometry {
+    public func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> SCNGeometry {
         var colors: [SCNVector4] = []
         var positions: [SCNVector3] = []
         var elementPerMaterial: [PBRMaterial?: [Int32]] = [:]
@@ -233,16 +251,16 @@ extension ThreeMF.Model {
     }
 }
 
-enum ThreeMFError: Swift.Error {
+public enum ThreeMFError: Swift.Error {
     case missingObject
 }
 
 extension Mesh {
-    var statistics: ModelData.Statistics {
+    public var statistics: ModelData.Statistics {
         .init(vertexCount: vertices.count, triangleCount: triangles.count)
     }
 
-    func edgeGeometries() -> (sharp: SCNGeometry, smooth: SCNGeometry) {
+    public func edgeGeometries() -> (sharp: SCNGeometry, smooth: SCNGeometry) {
         let material = SCNMaterial()
         material.lightingModel = .constant
         material.diffuse.contents = NSColor.black
@@ -276,7 +294,6 @@ extension Mesh {
             }
         }
 
-        // Build adjacency map
         var edgeToTriangles: [Edge: [Int]] = [:]
         for (faceIndex, triangle) in triangles.enumerated() {
             let edges = [
@@ -289,7 +306,6 @@ extension Mesh {
             }
         }
 
-        // Compute normals
         func normal(of triangle: Triangle) -> SIMD3<Double> {
             let a = vertices[triangle.v1].simd
             let b = vertices[triangle.v2].simd
@@ -307,7 +323,7 @@ extension Mesh {
         var smoothEdges: [Edge] = []
 
         for (edge, faces) in edgeToTriangles {
-            if faces.count == 1 { // Non-manifold?
+            if faces.count == 1 {
                 smoothEdges.append(edge)
                 
             } else if faces.count == 2 {
@@ -324,7 +340,7 @@ extension Mesh {
 
         return (
             sharp: SCNGeometryElement(indices: featureEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line),
-            smooth: SCNGeometryElement(indices: smoothEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line),
+            smooth: SCNGeometryElement(indices: smoothEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line)
         )
     }
 }

@@ -1,8 +1,9 @@
 import Foundation
 import SceneKit
+import AppKit
 
-final class ViewportGrid {
-    let node = SCNNode()
+public final class ViewportGrid {
+    public let node = SCNNode()
     private let originCross = SCNNode()
     private let gridContainer = SCNNode()
     private let perimeter = SCNNode()
@@ -13,13 +14,13 @@ final class ViewportGrid {
     private var gridCenter = SCNVector3Zero
     private var gridRadius = 0.0
 
-    var showGrid = true { didSet { updateVisibility() }}
-    var showOrigin = true { didSet { updateVisibility() }}
+    public var showGrid = true { didSet { updateVisibility() }}
+    public var showOrigin = true { didSet { updateVisibility() }}
     private var cameraHidesGrid = false
 
     private let maxGridOpacity = 0.15
 
-    init(categoryID: Int) {
+    public init(categoryID: Int = 0) {
         node.name = "Grid"
 
         coarseGrid.name = "Coarse grid"
@@ -44,7 +45,7 @@ final class ViewportGrid {
         updateVisibility()
     }
 
-    func updateBounds(geometry: SCNNode) {
+    public func updateBounds(geometry: SCNNode) {
         let box = geometry.boundingBox
         let modelRadius = sqrt(pow(box.max.x - box.min.x, 2) + pow(box.max.y - box.min.y, 2)) * 0.5
         let modelCenter = SCNVector3(
@@ -55,7 +56,7 @@ final class ViewportGrid {
 
         gridRadius = ceil(Double(modelRadius * 1.5) / 20.0) * 20.0
         gridCenter = SCNVector3(round(modelCenter.x / 10.0) * 10, round(modelCenter.y / 10.0) * 10, 0)
-        currentCoarseSpacing = 0 // Invalidate grid
+        currentCoarseSpacing = 0
 
         let resolution = 100
         let perimeterLines = (0..<resolution).map {
@@ -70,7 +71,7 @@ final class ViewportGrid {
         perimeter.geometry = .lines(perimeterLines, color: .init(white: 1, alpha: maxGridOpacity))
     }
 
-    func updateVisibility(cameraNode: SCNNode) {
+    public func updateVisibility(cameraNode: SCNNode) {
         let z = cameraNode.presentation.convertVector(SCNVector3(0, 0, -1), from: nil).z
         cameraHidesGrid = z > 0 && cameraNode.camera!.usesOrthographicProjection
         updateVisibility()
@@ -81,7 +82,7 @@ final class ViewportGrid {
         originCross.isHidden = !showOrigin
     }
 
-    func updateScale(renderer: SCNSceneRenderer, viewSize: CGSize) {
+    public func updateScale(renderer: SCNSceneRenderer, viewSize: CGSize) {
         let bounds = CGRect(origin: .zero, size: viewSize)
         let effectiveScale = min(max(calculateGridScale(renderer: renderer, sceneViewBounds: bounds), 0.11), 400.0)
         buildGrid(effectiveScale)

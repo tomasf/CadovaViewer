@@ -1,12 +1,51 @@
 import Foundation
 import ThreeMF
 import SceneKit
+import AppKit
 
-enum Material {
-    case vertexColors (Color, Color, Color)
+// MARK: - Matrix and Vector Conversions
+
+extension ThreeMF.Matrix3D {
+    public var scnMatrix: SCNMatrix4 {
+        let v = values
+        return SCNMatrix4(
+            m11: v[0][0], m12: v[0][1], m13: v[0][2], m14: 0,
+            m21: v[1][0], m22: v[1][1], m23: v[1][2], m24: 0,
+            m31: v[2][0], m32: v[2][1], m33: v[2][2], m34: 0,
+            m41: v[3][0], m42: v[3][1], m43: v[3][2], m44: 1
+        )
+    }
+}
+
+extension ThreeMF.Mesh.Vertex {
+    public var scnVector3: SCNVector3 {
+        .init(x, y, z)
+    }
+
+    public var simd: SIMD3<Double> {
+        .init(x, y, z)
+    }
+}
+
+extension ThreeMF.Item {
+    public var scnTransform: SCNMatrix4 {
+        transform?.scnMatrix ?? SCNMatrix4Identity
+    }
+}
+
+extension ThreeMF.Component {
+    public var scnTransform: SCNMatrix4 {
+        transform?.scnMatrix ?? SCNMatrix4Identity
+    }
+}
+
+// MARK: - Materials
+
+public enum Material {
+    case vertexColors (ThreeMF.Color, ThreeMF.Color, ThreeMF.Color)
     case pbr (PBRMaterial)
 
-    var isFullyTransparent: Bool {
+    public var isFullyTransparent: Bool {
         if case let .vertexColors(color, color2, color3) = self {
             color.isFullyTransparent && color2.isFullyTransparent && color3.isFullyTransparent
         } else {
@@ -14,7 +53,7 @@ enum Material {
         }
     }
 
-    var colorValues: [Color]? {
+    public var colorValues: [ThreeMF.Color]? {
         if case let .vertexColors(color, color2, color3) = self {
             [color, color2, color3]
         } else {
@@ -23,13 +62,20 @@ enum Material {
     }
 }
 
-struct PBRMaterial: Hashable {
-    let diffuse: Color
-    let metallicness: Double
-    let roughness: Double
-    let name: String?
+public struct PBRMaterial: Hashable {
+    public let diffuse: ThreeMF.Color
+    public let metallicness: Double
+    public let roughness: Double
+    public let name: String?
 
-    var scnMaterial: SCNMaterial {
+    public init(diffuse: ThreeMF.Color, metallicness: Double, roughness: Double, name: String?) {
+        self.diffuse = diffuse
+        self.metallicness = metallicness
+        self.roughness = roughness
+        self.name = name
+    }
+
+    public var scnMaterial: SCNMaterial {
         let material = SCNMaterial()
         material.lightingModel = .physicallyBased
         material.diffuse.contents = diffuse.nsColor
@@ -42,11 +88,10 @@ struct PBRMaterial: Hashable {
         material.emission.intensity = 0
         return material
     }
-
 }
 
 extension ThreeMF.Color {
-    var scnVector4: SCNVector4 {
+    public var scnVector4: SCNVector4 {
         func sRGB8bToLinear(_ int: UInt8) -> Double {
             let d = Double(int) / 255.0
             return d < 0.04045 ? d * 0.0773993808 : pow(d * 0.9478672986 + 0.0521327014, 2.4)
@@ -55,26 +100,30 @@ extension ThreeMF.Color {
         return SCNVector4(sRGB8bToLinear(red), sRGB8bToLinear(green), sRGB8bToLinear(blue), Double(alpha) / 255.0)
     }
 
-    var nsColor: NSColor {
+    public var nsColor: NSColor {
         .init(srgbRed: Double(red) / 255.0, green: Double(green) / 255.0, blue: Double(blue) / 255.0, alpha: Double(alpha) / 255.0)
     }
 
-    static let white = Self(red: 0xFF, green: 0xFF, blue: 0xFF)
+    public static let white = Self(red: 0xFF, green: 0xFF, blue: 0xFF)
 
-    var isFullyTransparent: Bool {
+    public var isFullyTransparent: Bool {
         alpha == 0
+    }
+
+    public var isOpaque: Bool {
+        alpha == 255
     }
 }
 
 extension ThreeMF.Model {
-    func colorGroup(for resourceID: ResourceID) -> ColorGroup? {
+    public func colorGroup(for resourceID: ResourceID) -> ColorGroup? {
         guard let match = resources.resource(for: resourceID) as? ColorGroup else {
             return nil
         }
         return match
     }
 
-    func color(for propertyReference: PropertyReference) -> (color: Color, displayProperties: PropertyReference?)? {
+    public func color(for propertyReference: PropertyReference) -> (color: ThreeMF.Color, displayProperties: PropertyReference?)? {
         let group = resources.resource(for: propertyReference.groupID)
 
         if let colorGroup = group as? ColorGroup {
@@ -92,7 +141,7 @@ extension ThreeMF.Model {
         }
     }
 
-    func pbrMaterial(for property: PropertyReference, baseColor: Color) -> PBRMaterial? {
+    public func pbrMaterial(for property: PropertyReference, baseColor: ThreeMF.Color) -> PBRMaterial? {
         guard let group = resources.resource(for: property.groupID),
               let displayProperties = group as? MetallicDisplayProperties,
               let item = displayProperties.metallics[safe: property.index]
@@ -103,13 +152,13 @@ extension ThreeMF.Model {
         return PBRMaterial(diffuse: baseColor, metallicness: item.metallicness, roughness: item.roughness, name: item.name)
     }
 
-    func material(for triangle: Mesh.Triangle, inheritedProperty: PartialPropertyReference) -> Material? {
+    public func material(for triangle: Mesh.Triangle, inheritedProperty: PartialPropertyReference) -> Material? {
         guard let refs = triangle.resolvedProperties(inheritedProperty: inheritedProperty) else {
             return nil
         }
 
         if refs.count == 3 {
-            guard let colors = refs.map({ color(for: $0)?.color }) as? [Color] else {
+            guard let colors = refs.map({ color(for: $0)?.color }) as? [ThreeMF.Color] else {
                 return nil
             }
             return .vertexColors(colors[0], colors[1], colors[2])
@@ -127,13 +176,18 @@ extension ThreeMF.Model {
     }
 }
 
-struct PartialPropertyReference {
-    let groupID: ResourceID?
-    let index: ResourceIndex?
+public struct PartialPropertyReference {
+    public let groupID: ResourceID?
+    public let index: ResourceIndex?
+
+    public init(groupID: ResourceID?, index: ResourceIndex?) {
+        self.groupID = groupID
+        self.index = index
+    }
 }
 
 extension Mesh.Triangle {
-    func resolvedProperties(inheritedProperty: PartialPropertyReference) -> [PropertyReference]? {
+    public func resolvedProperties(inheritedProperty: PartialPropertyReference) -> [PropertyReference]? {
         guard let groupID = propertyGroup ?? inheritedProperty.groupID else {
             return nil
         }
