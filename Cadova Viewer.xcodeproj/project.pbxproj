@@ -99,9 +99,9 @@
 			path = "Quick Look Thumbnail";
 			sourceTree = "<group>";
 		};
-		AAAA00162EA6000000000016 /* Packages/CadovaCore */ = {
+		AAAA00162EA6000000000016 /* Packages/ViewerCore */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Packages/CadovaCore;
+			path = Packages/ViewerCore;
 			sourceTree = "<group>";
 		};
 		C932E6442D0F5A01006E5D17 /* Cadova Viewer */ = {
@@ -151,7 +151,7 @@
 		C932E6392D0F5A01006E5D17 = {
 			isa = PBXGroup;
 			children = (
-				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
+				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
 				AAAA00142EA6000000000014 /* Quick Look Preview */,
 				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
@@ -186,7 +186,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AAAA00142EA6000000000014 /* Quick Look Preview */,
-				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
+				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 			);
 			name = "Quick Look Preview";
 			packageProductDependencies = (
@@ -210,7 +210,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
-				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
+				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 			);
 			name = "Quick Look Thumbnail";
 			packageProductDependencies = (
@@ -236,7 +236,7 @@
 				AAAA001A2EA600000000001A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				AAAA00162EA6000000000016 /* Packages/CadovaCore */,
+				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
 			);
 			name = "Cadova Viewer";
