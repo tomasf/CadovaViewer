@@ -57,8 +57,12 @@
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES"
       launchAutomaticallySubstyle = "2">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
+      <RemoteRunnable
+         runnableDebuggingMode = "2"
+         BundleIdentifier = "com.apple.quicklook.QuickLookSimulator"
+         RemotePath = "/System/Library/Frameworks/Quartz.framework/Versions/Current/Frameworks/QuickLookUI.framework/Versions/Current/Resources/Quick Look Simulator.app">
+      </RemoteRunnable>
+      <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "C932E6412D0F5A01006E5D17"
@@ -66,7 +70,7 @@
             BlueprintName = "Cadova Viewer"
             ReferencedContainer = "container:Cadova Viewer.xcodeproj">
          </BuildableReference>
-      </BuildableProductRunnable>
+      </MacroExpansion>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

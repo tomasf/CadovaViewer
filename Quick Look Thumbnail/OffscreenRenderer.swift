@@ -3,14 +3,14 @@ import SceneKit
 import AppKit
 import Metal
 
-public struct OffscreenRenderer {
-    public enum RenderError: Error {
+struct OffscreenRenderer {
+    enum RenderError: Error {
         case modelLoadFailed
         case renderFailed
         case imageConversionFailed
     }
 
-    public static func renderThumbnail(
+    static func renderThumbnail(
         for url: URL,
         size: CGSize,
         includeEdges: Bool = false
@@ -19,7 +19,7 @@ public struct OffscreenRenderer {
         return try await renderScene(with: modelData, size: size)
     }
 
-    public static func renderScene(
+    private static func renderScene(
         with modelData: ModelData,
         size: CGSize
     ) async throws -> CGImage {
@@ -35,6 +35,15 @@ public struct OffscreenRenderer {
         scene.rootNode.addChildNode(ambientLightNode)
 
         let cameraNode = setupCamera(for: modelData.rootNode, in: scene)
+
+        let edgeNodes = modelData.parts.flatMap {
+            [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 }
+        }.flatMap { $0.childNodes { node, _ in node.geometry != nil } }
+
+        for node in edgeNodes {
+            let distanceToPart = simd_distance(cameraNode.simdWorldPosition, node.simdWorldPosition)
+            node.simdWorldPosition += cameraNode.simdWorldFront * (distanceToPart / -1000.0)
+        }
 
         let image = try renderToImage(scene: scene, pointOfView: cameraNode, size: size)
 
