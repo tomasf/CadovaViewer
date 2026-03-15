@@ -27,7 +27,12 @@ public struct OffscreenRenderer {
         scene.background.contents = NSColor(white: 0.05, alpha: 1)
         scene.rootNode.addChildNode(modelData.rootNode)
 
-        setupDefaultLighting(in: scene)
+        let ambientLight = SCNLight()
+        ambientLight.type = .ambient
+        ambientLight.intensity = 30
+        let ambientLightNode = SCNNode()
+        ambientLightNode.light = ambientLight
+        scene.rootNode.addChildNode(ambientLightNode)
 
         let cameraNode = setupCamera(for: modelData.rootNode, in: scene)
 
@@ -73,8 +78,13 @@ public struct OffscreenRenderer {
             center.z + isoDist * sin(isoAngle)
         )
 
+        let cameraLight = SCNLight()
+        cameraLight.type = .directional
+        cameraLight.intensity = 800
+
         let cameraNode = SCNNode()
         cameraNode.camera = camera
+        cameraNode.light = cameraLight
         cameraNode.simdTransform = makeCameraTransform(position: position, target: center)
 
         scene.rootNode.addChildNode(cameraNode)
