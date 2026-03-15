@@ -45,13 +45,13 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             sceneView.delegate = self
 
             setupCamera(for: modelData.rootNode, in: scene, sceneView: sceneView)
-            
+
+            let worldCenter = modelData.rootNode.convertPosition(modelData.rootNode.boundingSphere.center, to: nil)
+            sceneView.defaultCameraController.target = worldCenter
+
             sceneView.defaultCameraController.worldUp = SCNVector3(0, 0, 1)
             sceneView.defaultCameraController.automaticTarget = true
             sceneView.defaultCameraController.interactionMode = .orbitTurntable
-            
-            let worldCenter = modelData.rootNode.convertPosition(modelData.rootNode.boundingSphere.center, to: nil)
-            sceneView.defaultCameraController.target = worldCenter
 
             view.addSubview(sceneView)
             self.sceneView = sceneView
