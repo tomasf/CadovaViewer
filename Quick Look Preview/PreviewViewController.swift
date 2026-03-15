@@ -2,6 +2,8 @@ import Cocoa
 import QuickLookUI
 import SceneKit
 import ThreeMF
+import SwiftUI
+import Combine
 
 class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneRendererDelegate {
     private var sceneView: SCNView?
@@ -11,6 +13,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     private var toolbar: NSVisualEffectView?
     
     private var edgeNodes: Set<SCNNode> = []
+    private let orientationSubject = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     private var edgeVisibility: EdgeVisibility = .sharp {
         didSet { updateEdgeVisibility() }
     }
@@ -59,6 +62,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             self.sceneView = sceneView
             
             setupToolbar()
+            setupCoordinateIndicator()
             updateEdgeVisibility()
         }
     }
@@ -236,6 +240,17 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         showViewPreset(preset)
     }
 
+    private func setupCoordinateIndicator() {
+        let indicatorView = CoordinateSystemIndicator(stream: orientationSubject.eraseToAnyPublisher())
+        let hostingView = NSHostingView(rootView: indicatorView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+            hostingView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
+        ])
+    }
+
     // MARK: - SCNSceneRendererDelegate
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
@@ -246,6 +261,13 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
         guard let sceneView, let cameraNode = sceneView.pointOfView else { return }
         grid?.updateVisibility(cameraNode: cameraNode)
+
+        let pov = cameraNode.presentation
+        orientationSubject.send(OrientationIndicatorValues(
+            x: pov.convertVector(SCNVector3(1, 0, 0), from: nil),
+            y: pov.convertVector(SCNVector3(0, 1, 0), from: nil),
+            z: pov.convertVector(SCNVector3(0, 0, 1), from: nil)
+        ))
 
         let viewSize = sceneView.bounds.size
         let localHitTestPoints: [CGPoint] = [
