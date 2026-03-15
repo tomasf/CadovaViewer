@@ -1,5 +1,6 @@
 import Cocoa
 import SceneKit
+import ViewerCore
 
 extension ViewportController {
     func contextMenu() -> NSMenu {

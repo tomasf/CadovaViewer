@@ -3,15 +3,19 @@ import SwiftUI
 import Combine
 import SceneKit
 
-struct CoordinateSystemIndicator: View {
+public struct CoordinateSystemIndicator: View {
     let stream: AnyPublisher<OrientationIndicatorValues, Never>
     @State private var axes: OrientationIndicatorValues = .init(x: .zero, y: .zero, z: .zero)
+
+    public init(stream: AnyPublisher<OrientationIndicatorValues, Never>) {
+        self.stream = stream
+    }
 
     private let width = 120.0
     private let radius = 50.0
     private let textRadius = 60.0
 
-    var body: some View {
+    public var body: some View {
         ZStack {
             Axis(value: axes.x, color: .red, label: "X", width: width, radius: radius, textRadius: textRadius)
             Axis(value: axes.y, color: .green, label: "Y", width: width, radius: radius, textRadius: textRadius)
@@ -46,18 +50,18 @@ struct CoordinateSystemIndicator: View {
     }
 }
 
-struct OrientationIndicatorValues {
-    let x: CGPoint
-    let y: CGPoint
-    let z: CGPoint
+public struct OrientationIndicatorValues {
+    public let x: CGPoint
+    public let y: CGPoint
+    public let z: CGPoint
 
-    init(x: CGPoint, y: CGPoint, z: CGPoint) {
+    public init(x: CGPoint, y: CGPoint, z: CGPoint) {
         self.x = x
         self.y = y
         self.z = z
     }
 
-    init(x: SCNVector3, y: SCNVector3, z: SCNVector3) {
+    public init(x: SCNVector3, y: SCNVector3, z: SCNVector3) {
         self.x = CGPoint(x: x.x, y: x.y)
         self.y = CGPoint(x: y.x, y: y.y)
         self.z = CGPoint(x: z.x, y: z.y)

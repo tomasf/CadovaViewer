@@ -2,6 +2,7 @@ import Cocoa
 import SwiftUI
 import SceneKit
 import ThreeMF
+import ViewerCore
 
 struct InformationView: View {
     let model: Model

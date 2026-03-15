@@ -18,6 +18,9 @@
 		C9A940C42EA3F43200D5BAB2 /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9A940C32EA3F43200D5BAB2 /* NavLibSwift */; };
 		C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */ = {isa = PBXBuildFile; productRef = C9A941A62EA5018D00D5BAB2 /* Nodal */; };
 		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
+		E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = FD012F8F219446A99E10DAB0 /* ViewerCore */; };
+		56CA3E05AB8B49268CD94C56 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = D544785F95E7471F82221DBA /* ViewerCore */; };
+		CC81DD5586A646E8AD257888 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = F067A6B312C9480CB8822D14 /* ViewerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +59,7 @@
 		AAAA00102EA6000000000010 /* Quick Look Preview.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Quick Look Preview.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Quick Look Thumbnail.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cadova Viewer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C98E716E2F672980007FD032 /* pugixml.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = pugixml.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -99,11 +103,7 @@
 			path = "Quick Look Thumbnail";
 			sourceTree = "<group>";
 		};
-		AAAA00162EA6000000000016 /* Packages/ViewerCore */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Packages/ViewerCore;
-			sourceTree = "<group>";
-		};
+
 		C932E6442D0F5A01006E5D17 /* Cadova Viewer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -120,6 +120,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAAA00602EA6000000000060 /* ThreeMF in Frameworks */,
+				E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,6 +129,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAAA00622EA6000000000062 /* ThreeMF in Frameworks */,
+				56CA3E05AB8B49268CD94C56 /* ViewerCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -136,6 +138,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C9A940792EA3E6E300D5BAB2 /* ThreeMF in Frameworks */,
+				CC81DD5586A646E8AD257888 /* ViewerCore in Frameworks */,
 				C926DC272E1BF9BC00F38DB7 /* Sparkle in Frameworks */,
 				C9A940C42EA3F43200D5BAB2 /* NavLibSwift in Frameworks */,
 				C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */,
@@ -151,7 +154,6 @@
 		C932E6392D0F5A01006E5D17 = {
 			isa = PBXGroup;
 			children = (
-				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
 				AAAA00142EA6000000000014 /* Quick Look Preview */,
 				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
@@ -165,6 +167,13 @@
 				C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */,
 				AAAA00102EA6000000000010 /* Quick Look Preview.appex */,
 				AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		C98E71E92F672980007FD032 /* Products */ = {
+			isa = PBXGroup;
+			children = (
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -186,11 +195,11 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AAAA00142EA6000000000014 /* Quick Look Preview */,
-				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 			);
 			name = "Quick Look Preview";
 			packageProductDependencies = (
 				AAAA00612EA6000000000061 /* ThreeMF */,
+				FD012F8F219446A99E10DAB0 /* ViewerCore */,
 			);
 			productName = "Quick Look Preview";
 			productReference = AAAA00102EA6000000000010 /* Quick Look Preview.appex */;
@@ -210,11 +219,11 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
-				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 			);
 			name = "Quick Look Thumbnail";
 			packageProductDependencies = (
 				AAAA00632EA6000000000063 /* ThreeMF */,
+				D544785F95E7471F82221DBA /* ViewerCore */,
 			);
 			productName = "Quick Look Thumbnail";
 			productReference = AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */;
@@ -236,7 +245,6 @@
 				AAAA001A2EA600000000001A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				AAAA00162EA6000000000016 /* Packages/ViewerCore */,
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
 			);
 			name = "Cadova Viewer";
@@ -248,6 +256,7 @@
 				C9A940782EA3E6E300D5BAB2 /* ThreeMF */,
 				C9A940C32EA3F43200D5BAB2 /* NavLibSwift */,
 				C9A941A62EA5018D00D5BAB2 /* Nodal */,
+				F067A6B312C9480CB8822D14 /* ViewerCore */,
 			);
 			productName = "Model Viewer";
 			productReference = C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */;
@@ -288,10 +297,17 @@
 				C9A940772EA3E6E300D5BAB2 /* XCRemoteSwiftPackageReference "ThreeMF" */,
 				C9A940C22EA3F43200D5BAB2 /* XCRemoteSwiftPackageReference "NavLibSwift" */,
 				C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */,
+				9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C932E6432D0F5A01006E5D17 /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = C98E71E92F672980007FD032 /* Products */;
+					ProjectRef = C98E716E2F672980007FD032 /* pugixml.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				C932E6412D0F5A01006E5D17 /* Cadova Viewer */,
@@ -730,6 +746,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/ViewerCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -807,6 +830,21 @@
 		C9C7D33D2DE0981E00480B4E /* NavLibSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
+		};
+		FD012F8F219446A99E10DAB0 /* ViewerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
+			productName = ViewerCore;
+		};
+		D544785F95E7471F82221DBA /* ViewerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
+			productName = ViewerCore;
+		};
+		F067A6B312C9480CB8822D14 /* ViewerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
+			productName = ViewerCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

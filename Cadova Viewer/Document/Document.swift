@@ -7,6 +7,7 @@ import SwiftUI
 import Combine
 import ThreeMF
 import Zip
+import ViewerCore
 
 class Document: NSDocument, NSWindowDelegate {
     private let modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData())

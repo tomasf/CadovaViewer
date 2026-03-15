@@ -4,6 +4,7 @@ import Combine
 import AppKit
 import NavLib
 import simd
+import ViewerCore
 
 class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let sceneView = CustomSceneView(frame: .zero)

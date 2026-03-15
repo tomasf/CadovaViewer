@@ -4,6 +4,7 @@ import SceneKit
 import ThreeMF
 import SwiftUI
 import Combine
+import ViewerCore
 
 class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneRendererDelegate {
     private var sceneView: SCNView?

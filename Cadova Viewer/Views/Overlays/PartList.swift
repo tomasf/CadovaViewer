@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import SceneKit
+import ViewerCore
 
 struct PartListOverlay: View {
     @ObservedObject var viewportController: ViewportController

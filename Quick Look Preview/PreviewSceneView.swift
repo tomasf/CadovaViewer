@@ -1,5 +1,6 @@
 import SceneKit
 import AppKit
+import ViewerCore
 
 class PreviewSceneView: SCNView {
     weak var modelNode: SCNNode?

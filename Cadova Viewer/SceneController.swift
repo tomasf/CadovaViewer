@@ -2,6 +2,7 @@ import Foundation
 import SceneKit
 import Combine
 import ThreeMF
+import ViewerCore
 
 final class SceneController: ObservableObject {
     let scene = SCNScene()

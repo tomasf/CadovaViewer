@@ -2,6 +2,7 @@ import Foundation
 import SceneKit
 import AppKit
 import Metal
+import ViewerCore
 
 struct OffscreenRenderer {
     enum RenderError: Error {

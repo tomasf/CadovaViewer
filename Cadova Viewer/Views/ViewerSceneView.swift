@@ -3,6 +3,7 @@ import AppKit
 import SwiftUI
 import ObjectiveC
 import Combine
+import ViewerCore
 
 struct ViewerSceneView: NSViewRepresentable {
     let viewportController: ViewportController

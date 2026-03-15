@@ -1,5 +1,6 @@
 import Foundation
 import SceneKit
+import ViewerCore
 
 extension ViewportController {
     typealias CameraView = (transform: SCNMatrix4, orthographicScale: Double)

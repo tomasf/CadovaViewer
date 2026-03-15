@@ -3,6 +3,7 @@ import SceneKit
 import SceneKit.ModelIO
 import ModelIO
 import AppKit
+import ViewerCore
 
 struct DocumentView: View {
     let url: URL

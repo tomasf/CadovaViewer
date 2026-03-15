@@ -1,5 +1,6 @@
 import Foundation
 import SceneKit
+import ViewerCore
 
 struct ViewOptions: Codable {
     var showGrid = true

@@ -1,6 +1,7 @@
 import SceneKit
 import ModelIO
 import SwiftUI
+import ViewerCore
 
 extension SCNSceneRenderer {
     func render() {
