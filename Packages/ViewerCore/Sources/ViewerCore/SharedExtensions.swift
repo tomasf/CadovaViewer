@@ -109,6 +109,41 @@ extension Collection {
     }
 }
 
+// MARK: - SCNView Extensions
+
+extension SCNView {
+    public func applyEdgeDepthOffset(edgeNodes: [SCNNode], cameraNode: SCNNode, modelNode: SCNNode) {
+        let viewSize = bounds.size
+        let hitTestPoints: [CGPoint] = [
+            CGPoint(x: viewSize.width / 2, y: viewSize.height / 2),
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: viewSize.width, y: 0),
+            CGPoint(x: viewSize.width, y: viewSize.height),
+            CGPoint(x: 0, y: viewSize.height),
+        ]
+        let edgeNodeSet = Set(edgeNodes)
+        var closestHitTestDistance: Float = 1000.0
+        for viewPoint in hitTestPoints {
+            let hit = hitTest(viewPoint, options: [
+                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
+                .rootNode: modelNode
+            ]).first(where: { !edgeNodeSet.contains($0.node) })
+            if let hit {
+                closestHitTestDistance = min(
+                    Float(hit.worldCoordinates.distance(from: cameraNode.presentation.worldPosition)),
+                    closestHitTestDistance
+                )
+            }
+        }
+        for node in edgeNodes {
+            node.simdPosition = .zero
+            let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
+            let minDistance = min(closestHitTestDistance, distanceToPart)
+            node.simdWorldPosition += cameraNode.presentation.simdWorldFront * (minDistance / -1000.0)
+        }
+    }
+}
+
 // MARK: - MTLRenderCommandEncoder Extensions
 
 extension MTLRenderCommandEncoder {

@@ -94,7 +94,7 @@ struct OffscreenRenderer {
         let cameraNode = SCNNode()
         cameraNode.camera = camera
         cameraNode.light = cameraLight
-        cameraNode.simdTransform = makeCameraTransform(position: position, target: center)
+        cameraNode.simdTransform = float4x4(lookingFrom: position, at: center)
 
         scene.rootNode.addChildNode(cameraNode)
 

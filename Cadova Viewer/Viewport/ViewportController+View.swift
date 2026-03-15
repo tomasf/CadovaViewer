@@ -150,10 +150,7 @@ extension ViewportController {
             )
 
             // 2. Build the transform once so we know right / up vectors
-            let isoTransform = makeCameraTransform(
-                position: .init(position),
-                target:   .init(center)
-            )
+            let isoTransform = float4x4(lookingFrom: .init(position), at: .init(center))
             let right = isoTransform.columns.0.xyz   // camera-space +X in world
             let up = isoTransform.columns.1.xyz   // camera-space +Y in world
 
@@ -205,7 +202,7 @@ extension ViewportController {
         let fitHeightScale = height / 2
         let orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
 
-        return (SCNMatrix4(makeCameraTransform(position: .init(position), target: .init(center))), orthoScale)
+        return (SCNMatrix4(float4x4(lookingFrom: .init(position), at: .init(center))), orthoScale)
     }
 }
 

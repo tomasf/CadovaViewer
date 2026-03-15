@@ -194,37 +194,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         coordinateIndicatorValueStream.send(indicatorValues)
 
-        // Calculate a suitable distance for offsetting edges
-        let localHitTestPoints: [CGPoint] = [
-            CGPoint(x: sceneViewSize.width / 2, y: sceneViewSize.height / 2),
-            CGPoint(x: 0, y: 0),
-            CGPoint(x: sceneViewSize.width, y: 0),
-            CGPoint(x: sceneViewSize.width, y: sceneViewSize.height),
-            CGPoint(x: 0, y: sceneViewSize.height),
-        ]
-
-        let edgeNodes = sceneController.edgeNodes
-
-        var closestHitTestDistance: Float = 1000.0
-        for viewPoint in localHitTestPoints {
-            let hitTestResult = sceneView.hitTest(viewPoint, options: [
-                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
-                .rootNode: sceneController.modelContainer
-            ]).first(where: { !edgeNodes.contains($0.node) })
-
-            if let hitTestResult {
-                closestHitTestDistance = min(Float(hitTestResult.worldCoordinates.distance(from: cameraNode.presentation.worldPosition)), closestHitTestDistance)
-            }
-        }
-
-        for node in edgeNodes {
-            node.simdPosition = .zero
-            let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
-            let minDistance = min(closestHitTestDistance, distanceToPart)
-            let offset = minDistance / -1000.0
-            //print(minDistance, offset)
-            node.simdWorldPosition += cameraNode.presentation.simdWorldFront * offset
-        }
+        sceneView.applyEdgeDepthOffset(
+            edgeNodes: sceneController.edgeNodes,
+            cameraNode: cameraNode,
+            modelNode: sceneController.modelContainer
+        )
 
         let encoder = renderer.currentRenderCommandEncoder as! NSObject
         if encoder.responds(to: NSSelectorFromString("setLineWidth:")) {

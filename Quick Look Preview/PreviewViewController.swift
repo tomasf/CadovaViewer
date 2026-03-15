@@ -154,7 +154,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             position.x += 0.001
         }
         
-        return makeCameraTransform(position: position, target: center)
+        return float4x4(lookingFrom: position, at: center)
     }
 
     // MARK: - Edge Visibility
@@ -284,30 +284,11 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             z: pov.convertVector(SCNVector3(0, 0, 1), from: nil)
         ))
 
-        let viewSize = sceneView.bounds.size
-        let localHitTestPoints: [CGPoint] = [
-            CGPoint(x: viewSize.width / 2, y: viewSize.height / 2),
-            CGPoint(x: 0, y: 0),
-            CGPoint(x: viewSize.width, y: 0),
-            CGPoint(x: viewSize.width, y: viewSize.height),
-            CGPoint(x: 0, y: viewSize.height),
-        ]
-        var closestHitTestDistance: Float = 1000.0
-        for viewPoint in localHitTestPoints {
-            let hit = sceneView.hitTest(viewPoint, options: [
-                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
-                .rootNode: modelNode!
-            ]).first(where: { !edgeNodes.contains($0.node) })
-            if let hit {
-                closestHitTestDistance = min(Float(hit.worldCoordinates.distance(from: cameraNode.presentation.worldPosition)), closestHitTestDistance)
-            }
-        }
-        for node in edgeNodes {
-            node.simdPosition = .zero
-            let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
-            let minDistance = min(closestHitTestDistance, distanceToPart)
-            node.simdWorldPosition += cameraNode.presentation.simdWorldFront * (minDistance / -1000.0)
-        }
+        sceneView.applyEdgeDepthOffset(
+            edgeNodes: Array(edgeNodes),
+            cameraNode: cameraNode,
+            modelNode: modelNode!
+        )
 
         renderer.currentRenderCommandEncoder?.setLineWidthPrivate(1.0)
     }
