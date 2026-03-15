@@ -198,7 +198,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.applyEdgeDepthOffset(
             edgeNodes: sceneController.edgeNodes,
             cameraNode: cameraNode,
-            modelNode: sceneController.modelContainer
+            modelNode: sceneController.modelContainer,
+            viewSize: sceneViewSize
         )
 
         let encoder = renderer.currentRenderCommandEncoder as! NSObject

@@ -112,8 +112,7 @@ extension Collection {
 // MARK: - SCNView Extensions
 
 extension SCNView {
-    public func applyEdgeDepthOffset(edgeNodes: [SCNNode], cameraNode: SCNNode, modelNode: SCNNode) {
-        let viewSize = bounds.size
+    public func applyEdgeDepthOffset(edgeNodes: [SCNNode], cameraNode: SCNNode, modelNode: SCNNode, viewSize: CGSize) {
         let hitTestPoints: [CGPoint] = [
             CGPoint(x: viewSize.width / 2, y: viewSize.height / 2),
             CGPoint(x: 0, y: 0),

@@ -15,6 +15,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     
     private var edgeNodes: Set<SCNNode> = []
     private var cameraLightNode: SCNNode?
+    private var sceneViewSize: CGSize = .zero
     private let orientationSubject = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     private var edgeVisibility: EdgeVisibility = .sharp {
         didSet { updateEdgeVisibility() }
@@ -266,11 +267,16 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         ])
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        sceneViewSize = sceneView?.bounds.size ?? .zero
+    }
+
     // MARK: - SCNSceneRendererDelegate
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         guard let sceneView = sceneView else { return }
-        grid?.updateScale(renderer: sceneView, viewSize: sceneView.bounds.size)
+        grid?.updateScale(renderer: sceneView, viewSize: sceneViewSize)
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
@@ -288,7 +294,8 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         sceneView.applyEdgeDepthOffset(
             edgeNodes: Array(edgeNodes),
             cameraNode: cameraNode,
-            modelNode: modelNode!
+            modelNode: modelNode!,
+            viewSize: sceneViewSize
         )
 
         renderer.currentRenderCommandEncoder?.setLineWidthPrivate(1.0)
