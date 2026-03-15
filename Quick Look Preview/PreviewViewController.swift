@@ -13,6 +13,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     private var toolbar: NSVisualEffectView?
     
     private var edgeNodes: Set<SCNNode> = []
+    private var cameraLightNode: SCNNode?
     private let orientationSubject = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     private var edgeVisibility: EdgeVisibility = .sharp {
         didSet { updateEdgeVisibility() }
@@ -32,7 +33,12 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             self.parts = modelData.parts
             self.edgeNodes = Set(modelData.parts.flatMap { [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 } })
 
-            setupDefaultLighting(in: scene)
+            let ambientLight = SCNLight()
+            ambientLight.type = .ambient
+            ambientLight.intensity = 30
+            let ambientLightNode = SCNNode()
+            ambientLightNode.light = ambientLight
+            scene.rootNode.addChildNode(ambientLightNode)
 
             let grid = ViewportGrid(categoryID: 0)
             grid.updateBounds(geometry: modelData.rootNode)
@@ -72,12 +78,20 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         camera.automaticallyAdjustsZRange = true
         camera.fieldOfView = 30
 
+        let cameraLight = SCNLight()
+        cameraLight.type = .directional
+        cameraLight.intensity = 800
+        let lightNode = SCNNode()
+        lightNode.light = cameraLight
+        scene.rootNode.addChildNode(lightNode)
+        cameraLightNode = lightNode
+
         let cameraNode = SCNNode()
         cameraNode.camera = camera
-        
+
         scene.rootNode.addChildNode(cameraNode)
         sceneView.pointOfView = cameraNode
-        
+
         cameraNode.simdTransform = cameraTransform(for: .isometric)
     }
 
@@ -263,6 +277,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         grid?.updateVisibility(cameraNode: cameraNode)
 
         let pov = cameraNode.presentation
+        cameraLightNode?.simdWorldTransform = pov.simdWorldTransform
         orientationSubject.send(OrientationIndicatorValues(
             x: pov.convertVector(SCNVector3(1, 0, 0), from: nil),
             y: pov.convertVector(SCNVector3(0, 1, 0), from: nil),
