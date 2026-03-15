@@ -15,7 +15,7 @@ struct DocumentView: View {
     struct StandardView {
         let name: String
         let icon: Image
-        let viewPreset: ViewportController.ViewPreset
+        let viewPreset: ViewPreset
     }
 
     let standardViewIsometric = StandardView(name: "Isometric", icon: Image(systemName: "cube"), viewPreset: .isometric)

@@ -10,6 +10,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     private var parts: [ModelData.Part] = []
     private var toolbar: NSVisualEffectView?
     
+    private var edgeNodes: Set<SCNNode> = []
     private var edgeVisibility: EdgeVisibility = .sharp {
         didSet { updateEdgeVisibility() }
     }
@@ -26,8 +27,9 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             scene.rootNode.addChildNode(modelData.rootNode)
             self.modelNode = modelData.rootNode
             self.parts = modelData.parts
+            self.edgeNodes = Set(modelData.parts.flatMap { [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 } })
 
-            setupLighting(in: scene)
+            setupDefaultLighting(in: scene)
 
             let grid = ViewportGrid(categoryID: 0)
             grid.updateBounds(geometry: modelData.rootNode)
@@ -61,34 +63,6 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         }
     }
 
-    private func setupLighting(in scene: SCNScene) {
-        let ambientLight = SCNLight()
-        ambientLight.type = .ambient
-        ambientLight.intensity = 30
-        let ambientLightNode = SCNNode()
-        ambientLightNode.light = ambientLight
-        scene.rootNode.addChildNode(ambientLightNode)
-
-        let directionalLight = SCNLight()
-        directionalLight.type = .directional
-        directionalLight.intensity = 500
-        directionalLight.color = NSColor.white
-        directionalLight.castsShadow = false
-        let directionalLightNode = SCNNode()
-        directionalLightNode.light = directionalLight
-        directionalLightNode.eulerAngles = SCNVector3(-Float.pi / 4, Float.pi / 4, 0)
-        scene.rootNode.addChildNode(directionalLightNode)
-
-        let fillLight = SCNLight()
-        fillLight.type = .directional
-        fillLight.intensity = 200
-        fillLight.color = NSColor.white
-        let fillLightNode = SCNNode()
-        fillLightNode.light = fillLight
-        fillLightNode.eulerAngles = SCNVector3(Float.pi / 6, -Float.pi / 3, 0)
-        scene.rootNode.addChildNode(fillLightNode)
-    }
-
     private func setupCamera(for modelNode: SCNNode, in scene: SCNScene, sceneView: SCNView) {
         let camera = SCNCamera()
         camera.automaticallyAdjustsZRange = true
@@ -104,29 +78,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     }
 
     // MARK: - View Presets
-    
-    enum ViewPreset: Int, CaseIterable {
-        case isometric
-        case front
-        case back
-        case left
-        case right
-        case top
-        case bottom
-        
-        var title: String {
-            switch self {
-            case .isometric: return "Iso"
-            case .front: return "Front"
-            case .back: return "Back"
-            case .left: return "Left"
-            case .right: return "Right"
-            case .top: return "Top"
-            case .bottom: return "Bottom"
-            }
-        }
-    }
-    
+
     func showViewPreset(_ preset: ViewPreset) {
         guard let cameraNode = sceneView?.pointOfView else { return }
         
@@ -187,30 +139,6 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         return makeCameraTransform(position: position, target: center)
     }
 
-    private func makeCameraTransform(position: simd_float3, target: simd_float3) -> float4x4 {
-        let worldUp = simd_float3(0, 0, 1)
-        var forward = target - position
-        if simd_length_squared(forward) < 1.0e-12 {
-            return matrix_identity_float4x4
-        }
-        forward = simd_normalize(forward)
-
-        var right = simd_cross(forward, worldUp)
-        if simd_length_squared(right) < 1.0e-6 {
-            right = simd_dot(forward, worldUp) > 0
-                ? simd_float3(-1, 0, 0)
-                : simd_float3(1, 0, 0)
-        }
-        right = simd_normalize(right)
-
-        return float4x4(columns: (
-            simd_float4(right, 0),
-            simd_float4(simd_normalize(simd_cross(right, forward)), 0),
-            simd_float4(-forward, 0),
-            simd_float4(position, 1)
-        ))
-    }
-    
     // MARK: - Edge Visibility
     
     enum EdgeVisibility: Int {
@@ -316,7 +244,34 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
-        guard let cameraNode = sceneView?.pointOfView else { return }
+        guard let sceneView, let cameraNode = sceneView.pointOfView else { return }
         grid?.updateVisibility(cameraNode: cameraNode)
+
+        let viewSize = sceneView.bounds.size
+        let localHitTestPoints: [CGPoint] = [
+            CGPoint(x: viewSize.width / 2, y: viewSize.height / 2),
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: viewSize.width, y: 0),
+            CGPoint(x: viewSize.width, y: viewSize.height),
+            CGPoint(x: 0, y: viewSize.height),
+        ]
+        var closestHitTestDistance: Float = 1000.0
+        for viewPoint in localHitTestPoints {
+            let hit = sceneView.hitTest(viewPoint, options: [
+                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
+                .rootNode: modelNode!
+            ]).first(where: { !edgeNodes.contains($0.node) })
+            if let hit {
+                closestHitTestDistance = min(Float(hit.worldCoordinates.distance(from: cameraNode.presentation.worldPosition)), closestHitTestDistance)
+            }
+        }
+        for node in edgeNodes {
+            node.simdPosition = .zero
+            let distanceToPart = Float(cameraNode.presentation.worldPosition.distance(from: node.worldPosition))
+            let minDistance = min(closestHitTestDistance, distanceToPart)
+            node.simdWorldPosition += cameraNode.presentation.simdWorldFront * (minDistance / -1000.0)
+        }
+
+        renderer.currentRenderCommandEncoder?.setLineWidthPrivate(1.0)
     }
 }

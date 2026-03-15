@@ -4,7 +4,8 @@ import AppKit
 extension NSEvent {
     private static var originalGetter: IMP?
 
-    static var overriddenModifierFlags: ModifierFlags? {
+    // Set this property to swizzle +modifierFlags. Set it to nil to de-swizzle.
+    public static var overriddenModifierFlags: ModifierFlags? {
         didSet {
             updateSwizzle()
         }

@@ -1,5 +1,6 @@
 import SceneKit
 import AppKit
+import Metal
 
 // MARK: - SCNVector3 Extensions
 
@@ -105,5 +106,17 @@ extension Collection where Element: Sendable {
 extension Collection {
     public subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil
+    }
+}
+
+// MARK: - MTLRenderCommandEncoder Extensions
+
+extension MTLRenderCommandEncoder {
+    public func setLineWidthPrivate(_ width: Float) {
+        guard let self = self as? NSObject,
+              self.responds(to: NSSelectorFromString("setLineWidth:"))
+        else { return }
+
+        self.setValue(width, forKey: "lineWidth")
     }
 }

@@ -4,30 +4,6 @@ import SceneKit
 extension ViewportController {
     typealias CameraView = (transform: SCNMatrix4, orthographicScale: Double)
 
-    func makeCameraTransform(position: simd_float3, target: simd_float3) -> float4x4 {
-        let worldUp = simd_float3(0, 0, 1)
-        var forward = target - position
-        if simd_length_squared(forward) < 1.0e-12 {
-            return matrix_identity_float4x4
-        }
-        forward = simd_normalize(forward)
-
-        var right = simd_cross(forward, worldUp)
-        if simd_length_squared(right) < 1.0e-6 {
-            right = simd_dot(forward, worldUp) > 0
-            ? simd_float3(-1, 0, 0) // X points left for bottom view
-            : simd_float3( 1, 0, 0) // X points right for top view
-        }
-        right = simd_normalize(right)
-
-        return float4x4(columns: (
-            simd_float4(right, 0),
-            simd_float4(simd_normalize(simd_cross(right, forward)), 0),
-            simd_float4(-forward,    0),
-            simd_float4(position, 1)
-        ))
-    }
-
     enum MovementType {
         case instant
         case small
@@ -128,15 +104,6 @@ extension ViewportController {
 }
 
 extension ViewportController {
-    enum ViewPreset: Int, CaseIterable {
-        case isometric
-        case front
-        case back
-        case left
-        case right
-        case top
-        case bottom
-    }
 
     func showViewPreset(_ preset: ViewPreset, animated: Bool) {
         setCameraView(cameraView(for: preset), movement: animated ? .large : .instant)
