@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		56CA3E05AB8B49268CD94C56 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = D544785F95E7471F82221DBA /* ViewerCore */; };
 		AAAA00402EA6000000000040 /* Quick Look Preview.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAA00102EA6000000000010 /* Quick Look Preview.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAA00412EA6000000000041 /* Quick Look Thumbnail.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAAA00602EA6000000000060 /* ThreeMF in Frameworks */ = {isa = PBXBuildFile; productRef = AAAA00612EA6000000000061 /* ThreeMF */; };
@@ -18,9 +19,8 @@
 		C9A940C42EA3F43200D5BAB2 /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9A940C32EA3F43200D5BAB2 /* NavLibSwift */; };
 		C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */ = {isa = PBXBuildFile; productRef = C9A941A62EA5018D00D5BAB2 /* Nodal */; };
 		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
-		E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = FD012F8F219446A99E10DAB0 /* ViewerCore */; };
-		56CA3E05AB8B49268CD94C56 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = D544785F95E7471F82221DBA /* ViewerCore */; };
 		CC81DD5586A646E8AD257888 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = F067A6B312C9480CB8822D14 /* ViewerCore */; };
+		E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = FD012F8F219446A99E10DAB0 /* ViewerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,7 +103,6 @@
 			path = "Quick Look Thumbnail";
 			sourceTree = "<group>";
 		};
-
 		C932E6442D0F5A01006E5D17 /* Cadova Viewer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -384,7 +383,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Quick Look Preview/QuickLookPreview.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -398,7 +397,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookPreview;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -413,7 +412,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Quick Look Preview/QuickLookPreview.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -427,7 +426,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookPreview;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -442,7 +441,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Quick Look Thumbnail/QuickLookThumbnail.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -456,7 +455,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookThumbnail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -471,7 +470,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Quick Look Thumbnail/QuickLookThumbnail.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -485,7 +484,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer.QuickLookThumbnail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -505,7 +504,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -527,7 +526,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer;
 				PRODUCT_MODULE_NAME = CadovaViewer;
@@ -549,7 +548,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -571,7 +570,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.2.1;
+				MARKETING_VERSION = 0.3.0;
 				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = se.tomasf.CadovaViewer;
 				PRODUCT_MODULE_NAME = CadovaViewer;
@@ -831,17 +830,17 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
 		};
-		FD012F8F219446A99E10DAB0 /* ViewerCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
-			productName = ViewerCore;
-		};
 		D544785F95E7471F82221DBA /* ViewerCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
 			productName = ViewerCore;
 		};
 		F067A6B312C9480CB8822D14 /* ViewerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
+			productName = ViewerCore;
+		};
+		FD012F8F219446A99E10DAB0 /* ViewerCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
 			productName = ViewerCore;
