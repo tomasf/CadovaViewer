@@ -1,15 +1,15 @@
 import Foundation
 
-@objc public protocol CadovaPreviewService {
+@objc protocol CadovaPreviewService {
     func openModel(named name: String,
                    threeMFData: Data,
                    reply: @escaping (Bool, String?) -> Void)
 }
 
-public enum CadovaPreview {
-    public static let machServiceName = "se.tomasf.CadovaViewer.preview"
+enum CadovaPreview {
+    static let machServiceName = "se.tomasf.CadovaViewer.preview"
 
-    public static var xpcInterface: NSXPCInterface {
+    static var xpcInterface: NSXPCInterface {
         NSXPCInterface(with: CadovaPreviewService.self)
     }
 }

@@ -6,7 +6,7 @@ import AppKit
 import ViewerCore
 
 struct DocumentView: View {
-    let url: URL
+    let url: URL?
     let errorHandler: (Error) -> ()
     @ObservedObject var viewportController: ViewportController
     @State var isLoading = false
@@ -29,7 +29,7 @@ struct DocumentView: View {
 
     let spacer = ToolbarItem(id: NSToolbarItem.Identifier.space.rawValue, placement: .primaryAction, showsByDefault: true) { Color.clear }
 
-    init(url: URL, errorHandler: @escaping (Error) -> Void, viewportController: ViewportController) {
+    init(url: URL?, errorHandler: @escaping (Error) -> Void, viewportController: ViewportController) {
         self.url = url
         self.errorHandler = errorHandler
         self.viewportController = viewportController
@@ -152,28 +152,30 @@ struct DocumentView: View {
         }
         spacer
 
-        let apps = ExternalApplication.appsAbleToOpen(url: url)
         Group {
             ToolbarItem(id: "openIn", placement: .primaryAction, showsByDefault: true) {
-                Menu {
-                    ForEach(apps, id: \.url) { app in
-                        Button {
-                            app.open(file: url, errorHandler: errorHandler)
-                        } label: {
-                            HStack {
-                                Image(nsImage: app.icon)
-                                Text(app.name)
+                if let url {
+                    let apps = ExternalApplication.appsAbleToOpen(url: url)
+                    Menu {
+                        ForEach(apps, id: \.url) { app in
+                            Button {
+                                app.open(file: url, errorHandler: errorHandler)
+                            } label: {
+                                HStack {
+                                    Image(nsImage: app.icon)
+                                    Text(app.name)
+                                }
                             }
                         }
+                    } label: {
+                        Label {
+                            Text("Open in…")
+                        } icon: {
+                            Image(systemName: "arrowshape.turn.up.forward.fill")
+                        }
                     }
-                } label: {
-                    Label {
-                        Text("Open in…")
-                    } icon: {
-                        Image(systemName: "arrowshape.turn.up.forward.fill")
-                    }
+                    .disabled(apps.isEmpty)
                 }
-                .disabled(apps.isEmpty)
             }
         }
 
@@ -193,7 +195,9 @@ struct DocumentView: View {
             }
 
             ToolbarItem(id: "share", placement: .primaryAction, showsByDefault: false) {
-                ShareLink(item: url)
+                if let url {
+                    ShareLink(item: url)
+                }
             }
         }
     }

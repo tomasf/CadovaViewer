@@ -3,8 +3,7 @@ import Cocoa
 
 final class PreviewListener: NSObject, NSXPCListenerDelegate {
     private let listener: NSXPCListener
-    private var openDocumentsByName: [String: WeakRef<Document>] = [:]
-    private let lock = NSLock()
+    @MainActor private var openDocumentsByName: [String: WeakRef<Document>] = [:]
 
     override init() {
         listener = NSXPCListener(machServiceName: CadovaPreview.machServiceName)
@@ -25,25 +24,20 @@ final class PreviewListener: NSObject, NSXPCListenerDelegate {
 
     @MainActor
     fileprivate func openOrReplaceDocument(named name: String, threeMFData data: Data) async throws {
-        lock.lock()
-        let existing = openDocumentsByName[name]?.value
-        lock.unlock()
+        openDocumentsByName = openDocumentsByName.filter { $0.value.value != nil }
 
-        if let existing, existing.windowControllers.isEmpty == false {
+        if let existing = openDocumentsByName[name]?.value, existing.windowControllers.isEmpty == false {
             try await existing.loadFrom(data: data, name: name)
             existing.showWindows()
             return
         }
 
-        let doc = try NSDocumentController.shared.makeUntitledDocument(ofType: "org.3mf.threemfpackage") as! Document
+        let doc = Document()
         NSDocumentController.shared.addDocument(doc)
+        try await doc.loadFrom(data: data, name: name)
         doc.makeWindowControllers()
         doc.showWindows()
-        try await doc.loadFrom(data: data, name: name)
-
-        lock.lock()
         openDocumentsByName[name] = WeakRef(doc)
-        lock.unlock()
     }
 }
 

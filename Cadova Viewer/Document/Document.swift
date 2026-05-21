@@ -116,4 +116,10 @@ class Document: NSDocument, NSWindowDelegate {
     func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
         proposedOptions.union(.autoHideToolbar)
     }
+
+    func loadFrom(data: Data, name: String) async throws {
+        displayName = name
+        let model = try await ModelData(data: data)
+        modelSubject.send(model)
+    }
 }

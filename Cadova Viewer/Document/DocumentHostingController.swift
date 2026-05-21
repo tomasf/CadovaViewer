@@ -21,7 +21,7 @@ class DocumentHostingController: NSHostingController<DocumentView> {
         usedCategoryMasks |= (1 << viewportID)
         viewportControllers.append(viewportController)
 
-        super.init(rootView: DocumentView(url: document.fileURL!, errorHandler: { [weak document] error in
+        super.init(rootView: DocumentView(url: document.fileURL, errorHandler: { [weak document] error in
             document?.presentError(error)
         }, viewportController: viewportController))
     }

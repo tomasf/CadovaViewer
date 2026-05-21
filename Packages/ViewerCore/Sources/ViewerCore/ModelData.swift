@@ -73,19 +73,30 @@ extension ModelData {
     }
 }
 
+
+
 extension ModelData {
     public init(url: URL, includeEdges: Bool = true) async throws {
         let loader = ModelLoader(url: url)
         let loadedModel = try await loader.load()
+        await self.init(loadedModel: loadedModel, includeEdges: includeEdges)
+    }
 
-        struct ComponentProducts: Sendable {
-            let mainGeometry: SCNGeometry
-            let sharpEdgesGeometry: SCNGeometry
-            let smoothEdgesGeometry: SCNGeometry
-            let stats: ModelData.Statistics
-            let transform: SCNMatrix4
-        }
-
+    public init(data: Data, includeEdges: Bool = true) async throws {
+        let loader = ModelLoader(data: data)
+        let loadedModel = try await loader.load()
+        await self.init(loadedModel: loadedModel, includeEdges: includeEdges)
+    }
+	
+	private struct ComponentProducts: Sendable {
+		let mainGeometry: SCNGeometry
+		let sharpEdgesGeometry: SCNGeometry
+		let smoothEdgesGeometry: SCNGeometry
+		let stats: ModelData.Statistics
+		let transform: SCNMatrix4
+	}
+	
+    private init<Source: Sendable>(loadedModel: ModelLoader<Source>.LoadedModel, includeEdges: Bool) async {
         let indexedEdgeGeometries: [(sharp: SCNGeometry, smooth: SCNGeometry)]
         if includeEdges {
             indexedEdgeGeometries = await loadedModel.meshes.asyncMap { $0.mesh.edgeGeometries() }
@@ -343,118 +354,5 @@ extension Mesh {
             smooth: SCNGeometryElement(indices: smoothEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line)
         )
     }
-}
-
-extension ModelData {
-	public init(data: Data, includeEdges: Bool = true) async throws {
-		let loader = ModelLoader(data: data)
-		let loadedModel = try await loader.load()
-
-		struct ComponentProducts: Sendable {
-			let mainGeometry: SCNGeometry
-			let sharpEdgesGeometry: SCNGeometry
-			let smoothEdgesGeometry: SCNGeometry
-			let stats: ModelData.Statistics
-			let transform: SCNMatrix4
-		}
-
-		let indexedEdgeGeometries: [(sharp: SCNGeometry, smooth: SCNGeometry)]
-		if includeEdges {
-			indexedEdgeGeometries = await loadedModel.meshes.asyncMap { $0.mesh.edgeGeometries() }
-		} else {
-			indexedEdgeGeometries = []
-		}
-
-		let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
-			let products = await loadedItem.components.asyncMap { loadedComponent in
-				let property = PartialPropertyReference(groupID: loadedComponent.propertyGroupID, index: loadedComponent.propertyIndex)
-				let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
-				let model = loadedModel.models[loadedMesh.modelIndex]
-
-				let geometry = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
-
-				if includeEdges && loadedComponent.meshIndex < indexedEdgeGeometries.count {
-					let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
-					return ComponentProducts(
-						mainGeometry: geometry,
-						sharpEdgesGeometry: sharp,
-						smoothEdgesGeometry: smooth,
-						stats: loadedMesh.mesh.statistics,
-						transform: loadedComponent.scnMatrix
-					)
-				} else {
-					let emptyGeometry = SCNGeometry()
-					return ComponentProducts(
-						mainGeometry: geometry,
-						sharpEdgesGeometry: emptyGeometry,
-						smoothEdgesGeometry: emptyGeometry,
-						stats: loadedMesh.mesh.statistics,
-						transform: loadedComponent.scnMatrix
-					)
-				}
-			}
-
-			var nodes = Part.Nodes()
-			nodes.container.name = "Item \(itemIndex)"
-
-			if includeEdges && loadedItem.item.semantic == .solid {
-				let sharpEdgesGroupNode = SCNNode()
-				let smoothEdgesGroupNode = SCNNode()
-				nodes.sharpEdges = sharpEdgesGroupNode
-				nodes.smoothEdges = smoothEdgesGroupNode
-				sharpEdgesGroupNode.name = "Sharp edges"
-				smoothEdgesGroupNode.name = "Smooth edges"
-				nodes.container.addChildNode(sharpEdgesGroupNode)
-				nodes.container.addChildNode(smoothEdgesGroupNode)
-
-				for product in products {
-					let sharpNodeContainer = SCNNode()
-					sharpNodeContainer.name = "Sharp edges transformer"
-					sharpNodeContainer.transform = product.transform
-					sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
-
-					let sharpNode = SCNNode(geometry: product.sharpEdgesGeometry)
-					sharpNode.name = "Sharp edges geometry"
-					sharpNodeContainer.addChildNode(sharpNode)
-
-					let smoothNodeContainer = SCNNode()
-					smoothNodeContainer.name = "Smooth edges transformer"
-					smoothNodeContainer.transform = product.transform
-					smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
-
-					let smoothNode = SCNNode(geometry: product.smoothEdgesGeometry)
-					smoothNode.name = "Smooth edges geometry"
-					smoothNodeContainer.addChildNode(smoothNode)
-				}
-			}
-
-			for product in products {
-				let modelNode = SCNNode(geometry: product.mainGeometry)
-				modelNode.name = "Main geometry"
-				modelNode.transform = product.transform
-				nodes.model.addChildNode(modelNode)
-			}
-
-			return Part(
-				nodes: nodes,
-				name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
-				id: loadedItem.item.partNumber,
-				semantic: loadedItem.item.semantic,
-				stats: Statistics(products.map(\.stats))
-			)
-		}
-
-		let container = SCNNode()
-		container.name = "Model root"
-		if let multiplier = loadedModel.rootModel.unit?.millimetersPerUnit {
-			container.transform = SCNMatrix4MakeScale(multiplier, multiplier, multiplier)
-		}
-
-		for part in parts {
-			container.addChildNode(part.nodes.container)
-		}
-
-		self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata)
-	}
 }
 
