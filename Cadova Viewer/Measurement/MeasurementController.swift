@@ -29,12 +29,23 @@ final class MeasurementController: ObservableObject {
     private let parentNode: SCNNode
     private let categoryID: Int
 
-    /// Desired on-screen radii (in view points) kept constant regardless of zoom.
+    /// Desired on-screen radii (in view points), kept constant regardless of zoom.
     private let dotScreenRadius = 4.5
-    private let lineScreenRadius = 1.0
+    private let lineScreenRadius = 1.6
 
-    /// Container nodes keyed by measurement id (and a fixed key for the hover preview).
-    private var nodes: [UUID: SCNNode] = [:]
+    private struct MeasurementNodes {
+        let container: SCNNode
+        /// Dots and line that need per-frame on-screen-size scaling. Captured once when
+        /// the geometry is (re)built, so the render thread never walks the live scene
+        /// graph (`childNodes`) while the main thread mutates it.
+        let scalables: [SCNNode]
+    }
+
+    /// Keyed by measurement id (and a fixed key for the hover preview). Mutated on the
+    /// main thread but read from the render thread (updateScreenSizes), so all access
+    /// goes through `nodesLock`.
+    private var nodes: [UUID: MeasurementNodes] = [:]
+    private let nodesLock = NSLock()
     private let hoverPreviewKey = UUID()
 
     init(parentNode: SCNNode, categoryID: Int) {
@@ -118,40 +129,58 @@ final class MeasurementController: ObservableObject {
     }
 
     private func updateGeometry(id: UUID, color: NSColor, start: SCNVector3, end: SCNVector3?) {
-        let container = nodes[id] ?? {
+        nodesLock.lock()
+        let container = nodes[id]?.container ?? {
             let node = SCNNode()
-            nodes[id] = node
             parentNode.addChildNode(node)
             return node
         }()
+        nodesLock.unlock()
+
         container.childNodes.forEach { $0.removeFromParentNode() }
 
-        container.addChildNode(dotNode(at: start, color: color))
+        var scalables: [SCNNode] = []
+        let startDot = dotNode(at: start, color: color)
+        container.addChildNode(startDot)
+        scalables.append(startDot)
         if let end {
-            container.addChildNode(dotNode(at: end, color: color))
-            container.addChildNode(lineNode(from: start, to: end, color: color))
+            let endDot = dotNode(at: end, color: color)
+            container.addChildNode(endDot)
+            scalables.append(endDot)
+            let line = lineNode(from: start, to: end, color: color)
+            container.addChildNode(line)
+            scalables.append(line)
         }
 
         container.setVisible(true, forViewportID: categoryID)
+
+        nodesLock.lock()
+        nodes[id] = MeasurementNodes(container: container, scalables: scalables)
+        nodesLock.unlock()
     }
 
     private func dotNode(at position: SCNVector3, color: NSColor) -> SCNNode {
         let sphere = SCNSphere(radius: 1)
-        sphere.firstMaterial?.lightingModel = .constant
-        sphere.firstMaterial?.diffuse.contents = color
+        configureMaterial(sphere.firstMaterial, color: color)
         let node = SCNNode(geometry: sphere)
         node.position = position
         return node
     }
 
+    private func configureMaterial(_ material: SCNMaterial?, color: NSColor) {
+        material?.lightingModel = .constant
+        material?.diffuse.contents = color
+    }
+
     private func lineNode(from start: SCNVector3, to end: SCNVector3, color: NSColor) -> SCNNode {
         let length = end.distance(from: start)
-        let cylinder = SCNCylinder(radius: 1, height: CGFloat(length))
-        cylinder.radialSegmentCount = 8
-        cylinder.firstMaterial?.lightingModel = .constant
-        cylinder.firstMaterial?.diffuse.contents = color
+        // A truncated cone (frustum) so each end can be sized independently, keeping a
+        // constant on-screen thickness along the whole length even in perspective.
+        let cone = SCNCone(topRadius: 1, bottomRadius: 1, height: CGFloat(length))
+        cone.radialSegmentCount = 8
+        configureMaterial(cone.firstMaterial, color: color)
 
-        let node = SCNNode(geometry: cylinder)
+        let node = SCNNode(geometry: cone)
         node.simdPosition = simd_float3(
             Float((start.x + end.x) / 2),
             Float((start.y + end.y) / 2),
@@ -161,7 +190,7 @@ final class MeasurementController: ObservableObject {
         return node
     }
 
-    /// Rotation that maps the cylinder's default +Y axis onto the start→end direction.
+    /// Rotation that maps the cone's default +Y axis onto the start→end direction.
     private func orientation(from start: SCNVector3, to end: SCNVector3) -> simd_quatf {
         let vector = simd_float3(Float(end.x - start.x), Float(end.y - start.y), Float(end.z - start.z))
         let length = simd_length(vector)
@@ -169,14 +198,23 @@ final class MeasurementController: ObservableObject {
         guard length > 1e-6 else { return simd_quatf(angle: 0, axis: up) }
 
         let direction = vector / length
-        let dot = simd_dot(up, direction)
-        if dot > 0.9999 { return simd_quatf(angle: 0, axis: up) }
-        if dot < -0.9999 { return simd_quatf(angle: .pi, axis: simd_float3(1, 0, 0)) }
-        return simd_quatf(angle: acos(dot), axis: simd_normalize(simd_cross(up, direction)))
+        let axis = simd_cross(up, direction)
+        let axisLength = simd_length(axis)
+        // Only treat as a singularity when the rotation axis is genuinely undefined
+        // (direction essentially parallel to ±Y); otherwise rotate by the real angle so
+        // near-vertical lines keep their slight tilt instead of snapping to straight.
+        guard axisLength > 1e-6 else {
+            return simd_dot(up, direction) > 0 ? simd_quatf(angle: 0, axis: up) : simd_quatf(angle: .pi, axis: simd_float3(1, 0, 0))
+        }
+        let angle = acos(max(-1, min(1, simd_dot(up, direction))))
+        return simd_quatf(angle: angle, axis: axis / axisLength)
     }
 
     private func removeNode(for id: UUID) {
-        nodes.removeValue(forKey: id)?.removeFromParentNode()
+        nodesLock.lock()
+        let entry = nodes.removeValue(forKey: id)
+        nodesLock.unlock()
+        entry?.container.removeFromParentNode()
     }
 
     // MARK: - Constant on-screen sizing
@@ -184,18 +222,30 @@ final class MeasurementController: ObservableObject {
     /// Rescales every dot and line so they keep a constant on-screen size regardless
     /// of zoom. Call once per rendered frame.
     func updateScreenSizes(renderer: SCNSceneRenderer) {
-        for container in Array(nodes.values) {
-            for child in container.childNodes {
-                // Scale via the node transform (not geometry radius) so changes apply
-                // in the same frame without a deferred mesh rebuild.
-                if child.geometry is SCNSphere {
-                    let scale = Float(worldRadius(forScreenRadius: dotScreenRadius, at: child.position, renderer: renderer))
-                    child.simdScale = simd_float3(scale, scale, scale)
-                } else if child.geometry is SCNCylinder {
-                    // Scale only the cross-section (local X/Z); keep the length (local Y).
-                    let scale = Float(worldRadius(forScreenRadius: lineScreenRadius, at: child.position, renderer: renderer))
-                    child.simdScale = simd_float3(scale, 1, scale)
-                }
+        nodesLock.lock()
+        let scalables = nodes.values.flatMap { $0.scalables }
+        nodesLock.unlock()
+
+        for child in scalables {
+            // Scale via the node transform (not geometry radius) so changes apply in
+            // the same frame without a deferred mesh rebuild.
+            if child.geometry is SCNSphere {
+                let scale = Float(worldRadius(forScreenRadius: dotScreenRadius, at: child.position, renderer: renderer))
+                child.simdScale = simd_float3(scale, scale, scale)
+            } else if let cone = child.geometry as? SCNCone {
+                // The line's two ends are at ±height/2 along the node's local Y axis.
+                let direction = child.simdOrientation.act(simd_float3(0, 1, 0))
+                let half = Float(cone.height) / 2
+                let endRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition + direction * half), renderer: renderer)
+                let startRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition - direction * half), renderer: renderer)
+                let midRadius = worldRadius(forScreenRadius: lineScreenRadius, at: child.position, renderer: renderer)
+                guard midRadius > 0 else { continue }
+
+                // Overall thickness comes from the node scale (a transform, applied this
+                // frame); the cone radii only carry the taper ratio between ends.
+                cone.topRadius = CGFloat(endRadius / midRadius)      // local +Y == end
+                cone.bottomRadius = CGFloat(startRadius / midRadius) // local -Y == start
+                child.simdScale = simd_float3(Float(midRadius), 1, Float(midRadius))
             }
         }
     }
