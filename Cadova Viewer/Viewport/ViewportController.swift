@@ -15,6 +15,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     let categoryID: Int
     let privateContainer: SCNNode
+    let measurementController: MeasurementController
 
     var sceneViewSize: CGSize = .zero
 
@@ -63,9 +64,20 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         self.privateContainer = privateContainer
         grid = ViewportGrid(categoryID: categoryID)
         privateContainer.addChildNode(grid.node)
+        measurementController = MeasurementController(
+            parentNode: sceneController.viewportPrivateNode(for: categoryID),
+            categoryID: categoryID
+        )
 
         self.document = document
         super.init()
+
+        sceneView.onClick = { [weak self] point in
+            self?.handleMeasurementClick(at: point)
+        }
+        sceneView.onCancel = { [weak self] in
+            self?.measurementController.cancelInProgress()
+        }
         
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
@@ -149,6 +161,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
+        measurementController.updateScreenSizes(renderer: sceneView)
 
         if let currentCameraNode = sceneView.pointOfView, currentCameraNode != cameraNode {
             cameraNodeChanged(currentCameraNode)
@@ -248,8 +261,38 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     }
 
     private func hoverPointDidChange() {
+        // Update measurement geometry before rendering so the per-frame screen-size
+        // scaling in updateAtTime applies to the freshly placed/moved dots.
+        if measurementController.interactionMode == .measure {
+            let worldPoint = hoverPoint.flatMap { surfaceWorldPoint(atViewPoint: $0, flipY: true) }
+            measurementController.hover(at: worldPoint)
+            measurementController.updateScreenSizes(renderer: sceneView)
+        }
+
         sceneView.render()
         updateNavLibPointerPosition()
+    }
+
+    private func handleMeasurementClick(at point: CGPoint) {
+        guard measurementController.interactionMode == .measure else { return }
+        if let worldPoint = surfaceWorldPoint(atViewPoint: point, flipY: false) {
+            measurementController.commitPoint(at: worldPoint)
+            measurementController.updateScreenSizes(renderer: sceneView)
+            sceneView.render()
+        }
+    }
+
+    /// Casts a ray at the given view point and returns the world coordinates of the
+    /// nearest model surface hit, or nil if the ray misses the model. `flipY` should
+    /// be true for SwiftUI (top-left origin) points such as `hoverPoint`, and false
+    /// for AppKit view-space points such as gesture recognizer locations.
+    private func surfaceWorldPoint(atViewPoint point: CGPoint, flipY: Bool) -> SCNVector3? {
+        let viewPoint = flipY ? CGPoint(x: point.x, y: sceneViewSize.height - point.y) : point
+        let edgeNodes = sceneController.edgeNodes
+        return sceneView.hitTest(viewPoint, options: [
+            .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
+            .rootNode: sceneController.modelContainer
+        ]).first(where: { !edgeNodes.contains($0.node) })?.worldCoordinates
     }
 
     func setViewOptions(_ viewOptions: ViewOptions) {
