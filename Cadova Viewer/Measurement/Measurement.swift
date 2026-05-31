@@ -52,10 +52,3 @@ struct Measurement: Identifiable {
         palette[index % palette.count]
     }
 }
-
-extension Double {
-    /// Formats a coordinate or length value for display in measurements, e.g. "12.340 mm".
-    var measurementFormatted: String {
-        String(format: "%.3f mm", self)
-    }
-}

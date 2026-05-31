@@ -53,30 +53,16 @@ private struct MeasurementRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top) {
-                Text(measurement.end == nil && measurement.phase == .coordinate ? "Point" : "Length")
-                    .font(.headline)
-                Spacer()
-                Button(action: onDelete) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-            }
-
             if measurement.phase == .coordinate {
                 coordinate("", measurement.start)
             } else {
                 coordinate("Start", measurement.start)
                 if let end = measurement.end {
+                    Divider()
                     coordinate("End", end)
-                } else {
-                    Text("End  —")
-                        .foregroundStyle(.secondary)
                 }
                 Divider()
-                valueRow("Length", measurement.length)
+                keyValuePair("Length", measurement.length ?? 0)
                 if let delta = measurement.delta {
                     deltaRow(delta)
                 } else {
@@ -85,7 +71,8 @@ private struct MeasurementRow: View {
                 }
             }
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.system(.callout))
+        .monospacedDigit()
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.ultraThinMaterial)
@@ -94,31 +81,49 @@ private struct MeasurementRow: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(color, lineWidth: 2)
         }
-    }
-
-    @ViewBuilder
-    private func coordinate(_ label: String, _ point: SCNVector3) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            if !label.isEmpty {
-                Text(label).foregroundStyle(.secondary)
+        .overlay(alignment: .topTrailing) {
+            if measurement.phase != .coordinate {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark")
+                        .font(.callout.weight(.bold))
+                        .padding()
+                }
+                .contentShape(.interaction, Rectangle())
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
             }
-            Text("X  \(Double(point.x).measurementFormatted)")
-            Text("Y  \(Double(point.y).measurementFormatted)")
-            Text("Z  \(Double(point.z).measurementFormatted)")
         }
     }
 
     @ViewBuilder
-    private func valueRow(_ label: String, _ value: Double?) -> some View {
-        Text("\(label)  \(value?.measurementFormatted ?? "—")")
+    private func keyValuePair(_ label: String, _ value: Double) -> some View {
+        let string = value.formatted(.number.precision(.integerAndFractionLength(integerLimits: 1..., fractionLimits: 3...3)))
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Text(string + " mm")
+                .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private func coordinate(_ label: String, _ point: SCNVector3) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if !label.isEmpty {
+                Text(label).foregroundStyle(.secondary)
+            }
+            keyValuePair("X", point.x)
+            keyValuePair("Y", point.y)
+            keyValuePair("Z", point.z)
+        }
     }
 
     @ViewBuilder
     private func deltaRow(_ delta: SCNVector3) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("ΔX \(Double(delta.x).measurementFormatted)")
-            Text("ΔY \(Double(delta.y).measurementFormatted)")
-            Text("ΔZ \(Double(delta.z).measurementFormatted)")
+        VStack(alignment: .leading, spacing: 3) {
+            keyValuePair("ΔX", delta.x)
+            keyValuePair("ΔY", delta.y)
+            keyValuePair("ΔZ", delta.z)
         }
     }
 }

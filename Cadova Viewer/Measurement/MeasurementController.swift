@@ -39,6 +39,13 @@ final class MeasurementController: ObservableObject {
         /// the geometry is (re)built, so the render thread never walks the live scene
         /// graph (`childNodes`) while the main thread mutates it.
         let scalables: [SCNNode]
+        /// Subtle dashed line drawn on top of the model (no depth testing) so the part of
+        /// the measurement occluded by the model stays faintly visible. Its dash geometry
+        /// is rebuilt per frame for a constant on-screen dash size.
+        let overlayLine: SCNNode?
+        let start: SCNVector3
+        let end: SCNVector3?
+        let color: NSColor
     }
 
     /// Keyed by measurement id (and a fixed key for the hover preview). Mutated on the
@@ -143,6 +150,8 @@ final class MeasurementController: ObservableObject {
         let startDot = dotNode(at: start, color: color)
         container.addChildNode(startDot)
         scalables.append(startDot)
+
+        var overlayLine: SCNNode?
         if let end {
             let endDot = dotNode(at: end, color: color)
             container.addChildNode(endDot)
@@ -150,12 +159,18 @@ final class MeasurementController: ObservableObject {
             let line = lineNode(from: start, to: end, color: color)
             container.addChildNode(line)
             scalables.append(line)
+
+            // Empty node; its dashed geometry is filled in per frame by updateScreenSizes.
+            let overlay = SCNNode()
+            overlay.renderingOrder = 1 // after the model, so it draws on top where occluded
+            container.addChildNode(overlay)
+            overlayLine = overlay
         }
 
         container.setVisible(true, forViewportID: categoryID)
 
         nodesLock.lock()
-        nodes[id] = MeasurementNodes(container: container, scalables: scalables)
+        nodes[id] = MeasurementNodes(container: container, scalables: scalables, overlayLine: overlayLine, start: start, end: end, color: color)
         nodesLock.unlock()
     }
 
@@ -223,31 +238,71 @@ final class MeasurementController: ObservableObject {
     /// of zoom. Call once per rendered frame.
     func updateScreenSizes(renderer: SCNSceneRenderer) {
         nodesLock.lock()
-        let scalables = nodes.values.flatMap { $0.scalables }
+        let entries = Array(nodes.values)
         nodesLock.unlock()
 
-        for child in scalables {
-            // Scale via the node transform (not geometry radius) so changes apply in
-            // the same frame without a deferred mesh rebuild.
-            if child.geometry is SCNSphere {
-                let scale = Float(worldRadius(forScreenRadius: dotScreenRadius, at: child.position, renderer: renderer))
-                child.simdScale = simd_float3(scale, scale, scale)
-            } else if let cone = child.geometry as? SCNCone {
-                // The line's two ends are at ±height/2 along the node's local Y axis.
-                let direction = child.simdOrientation.act(simd_float3(0, 1, 0))
-                let half = Float(cone.height) / 2
-                let endRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition + direction * half), renderer: renderer)
-                let startRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition - direction * half), renderer: renderer)
-                let midRadius = worldRadius(forScreenRadius: lineScreenRadius, at: child.position, renderer: renderer)
-                guard midRadius > 0 else { continue }
+        for entry in entries {
+            for child in entry.scalables {
+                // Scale via the node transform (not geometry radius) so changes apply in
+                // the same frame without a deferred mesh rebuild.
+                if child.geometry is SCNSphere {
+                    let scale = Float(worldRadius(forScreenRadius: dotScreenRadius, at: child.position, renderer: renderer))
+                    child.simdScale = simd_float3(scale, scale, scale)
+                } else if let cone = child.geometry as? SCNCone {
+                    // The line's two ends are at ±height/2 along the node's local Y axis.
+                    let direction = child.simdOrientation.act(simd_float3(0, 1, 0))
+                    let half = Float(cone.height) / 2
+                    let endRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition + direction * half), renderer: renderer)
+                    let startRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition - direction * half), renderer: renderer)
+                    let midRadius = worldRadius(forScreenRadius: lineScreenRadius, at: child.position, renderer: renderer)
+                    guard midRadius > 0 else { continue }
 
-                // Overall thickness comes from the node scale (a transform, applied this
-                // frame); the cone radii only carry the taper ratio between ends.
-                cone.topRadius = CGFloat(endRadius / midRadius)      // local +Y == end
-                cone.bottomRadius = CGFloat(startRadius / midRadius) // local -Y == start
-                child.simdScale = simd_float3(Float(midRadius), 1, Float(midRadius))
+                    // Overall thickness comes from the node scale (a transform, applied this
+                    // frame); the cone radii only carry the taper ratio between ends.
+                    cone.topRadius = CGFloat(endRadius / midRadius)      // local +Y == end
+                    cone.bottomRadius = CGFloat(startRadius / midRadius) // local -Y == start
+                    child.simdScale = simd_float3(Float(midRadius), 1, Float(midRadius))
+                }
+            }
+
+            if let overlayLine = entry.overlayLine, let end = entry.end {
+                overlayLine.geometry = dashedOverlayGeometry(from: entry.start, to: end, color: entry.color, renderer: renderer)
             }
         }
+    }
+
+    /// Builds the subtle dashed line drawn on top of the model, with a constant on-screen
+    /// dash size for the current camera.
+    private func dashedOverlayGeometry(from start: SCNVector3, to end: SCNVector3, color: NSColor, renderer: SCNSceneRenderer) -> SCNGeometry {
+        let projectedStart = renderer.projectPoint(start)
+        let projectedEnd = renderer.projectPoint(end)
+        let screenLength = hypot(projectedEnd.x - projectedStart.x, projectedEnd.y - projectedStart.y)
+
+        let dashLength = 5.0   // view points
+        let gapLength = 4.0
+        let period = dashLength + gapLength
+
+        var segments: [(SCNVector3, SCNVector3)] = []
+        if screenLength > period {
+            var distance = 0.0
+            while distance < screenLength {
+                let a = distance / screenLength
+                let b = min((distance + dashLength) / screenLength, 1)
+                segments.append((interpolate(start, end, a), interpolate(start, end, b)))
+                distance += period
+            }
+        } else {
+            segments = [(start, end)]
+        }
+
+        let geometry = SCNGeometry.lines(segments, color: color.withAlphaComponent(0.5))
+        geometry.firstMaterial?.readsFromDepthBuffer = false
+        geometry.firstMaterial?.writesToDepthBuffer = false
+        return geometry
+    }
+
+    private func interpolate(_ a: SCNVector3, _ b: SCNVector3, _ t: Double) -> SCNVector3 {
+        SCNVector3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t)
     }
 
     /// World-space radius at `worldPosition` that projects to `screenRadius` view points.
