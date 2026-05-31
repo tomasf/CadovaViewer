@@ -102,7 +102,7 @@ struct DocumentView: View {
         Group {
             ToolbarItem(id: "interaction-mode", placement: .primaryAction) {
                 Picker("Mode", selection: $measurementController.interactionMode) {
-                    Image(systemName: "hand.draw")
+                    Image(systemName: "rotate.3d")
                         .help("View")
                         .tag(InteractionMode.view)
 

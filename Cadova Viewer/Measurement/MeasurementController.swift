@@ -132,6 +132,15 @@ final class MeasurementController: ObservableObject {
         removeNode(for: id)
     }
 
+    func deleteAll() {
+        clearHoverPreview()
+        let ids = measurements.map(\.id)
+        measurements.removeAll()
+        ids.forEach { removeNode(for: $0) }
+        highlightedID = nil
+        nextColorIndex = 0
+    }
+
     private var inProgressIndex: Int? {
         guard let last = measurements.indices.last, measurements[last].phase == .lengthInProgress else { return nil }
         return last
@@ -189,8 +198,10 @@ final class MeasurementController: ObservableObject {
             scalables.append(line)
 
             // Empty node; its dashed geometry is filled in per frame by updateScreenSizes.
+            // Rendered before the solid line (lower order) so the opaque line paints over
+            // it where the line is visible, leaving the dashes only where it's occluded.
             let overlay = SCNNode()
-            overlay.renderingOrder = 1 // after the model, so it draws on top where occluded
+            overlay.renderingOrder = 1
             container.addChildNode(overlay)
             overlayLine = overlay
         }
@@ -206,13 +217,20 @@ final class MeasurementController: ObservableObject {
         let sphere = SCNSphere(radius: 1)
         configureMaterial(sphere.firstMaterial, color: color)
         let node = SCNNode(geometry: sphere)
+        node.renderingOrder = 3 // on top of the line and dashed overlay
         node.position = position
         return node
     }
 
     private func configureMaterial(_ material: SCNMaterial?, color: NSColor) {
         material?.lightingModel = .constant
-        material?.diffuse.contents = color
+        // Just-barely transparent so the dots and line render in the transparent pass; that
+        // lets renderingOrder place them after the dashed overlay, so the (opaque-looking)
+        // line paints over the dashes where it's visible and they only show where occluded.
+        // The 1% transparency is visually imperceptible.
+        material?.diffuse.contents = color.withAlphaComponent(0.99)
+        material?.writesToDepthBuffer = true
+        material?.readsFromDepthBuffer = true
     }
 
     private func lineNode(from start: SCNVector3, to end: SCNVector3, color: NSColor) -> SCNNode {
@@ -224,6 +242,7 @@ final class MeasurementController: ObservableObject {
         configureMaterial(cone.firstMaterial, color: color)
 
         let node = SCNNode(geometry: cone)
+        node.renderingOrder = 2 // over the dashed overlay so it hides the dashes where visible
         node.simdPosition = simd_float3(
             Float((start.x + end.x) / 2),
             Float((start.y + end.y) / 2),
@@ -328,6 +347,10 @@ final class MeasurementController: ObservableObject {
             segments = [(start, end)]
         }
 
+        // Translucent and the same color as the line: drawn before the line (lower
+        // renderingOrder) so the line paints over it where visible; only where the line is
+        // occluded do the 0.5-opacity dashes show, blending with whatever's behind them so
+        // they stay subtle over both light and dark geometry.
         let geometry = SCNGeometry.lines(segments, color: color.withAlphaComponent(0.5))
         geometry.firstMaterial?.readsFromDepthBuffer = false
         geometry.firstMaterial?.writesToDepthBuffer = false

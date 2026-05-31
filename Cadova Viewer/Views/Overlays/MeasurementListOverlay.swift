@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import AppKit
 
 struct MeasurementListOverlay: View {
     @ObservedObject var controller: MeasurementController
@@ -19,9 +20,16 @@ struct MeasurementListOverlay: View {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(rows) { measurement in
                                 MeasurementRow(measurement: measurement) {
-                                    controller.delete(measurement.id)
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        if NSEvent.modifierFlags.contains(.option) {
+                                            controller.deleteAll()
+                                        } else {
+                                            controller.delete(measurement.id)
+                                        }
+                                    }
                                 }
                                 .id(measurement.id)
+                                .transition(.opacity)
                                 .onHover { hovering in
                                     if hovering {
                                         controller.highlightedID = measurement.id
@@ -60,28 +68,24 @@ private struct MeasurementRow: View {
     private var color: Color { Color(measurement.color) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if measurement.phase == .coordinate {
-                coordinate("", measurement.start)
-            } else {
-                coordinate("Start", measurement.start)
-                if let end = measurement.end {
-                    Divider()
-                    coordinate("End", end)
-                }
+        VStack(alignment: .center, spacing: 8) {
+            coordinate("A", measurement.start)
+            if let end = measurement.end {
+                coordinate("B", end)
+            }
+            if let delta = measurement.delta {
                 Divider()
-                keyValuePair("Length", measurement.length ?? 0)
-                if let delta = measurement.delta {
-                    deltaRow(delta)
-                } else {
-                    Text("Δ  —")
-                        .foregroundStyle(.secondary)
-                }
+                    .padding(.vertical, 5)
+                coordinate("Δ", delta)
+            }
+            if let length = measurement.length {
+                keyValuePair("Length", length)
             }
         }
         .font(.system(.callout))
         .monospacedDigit()
-        .padding(10)
+        .padding(14)
+        .padding(.trailing, 4)
         .frame(width: 240, alignment: .leading)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -92,46 +96,63 @@ private struct MeasurementRow: View {
         .overlay(alignment: .topTrailing) {
             if measurement.phase != .coordinate {
                 Button(action: onDelete) {
-                    Image(systemName: "xmark")
-                        .font(.callout.weight(.bold))
-                        .padding()
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .padding(6)
                 }
                 .contentShape(.interaction, Rectangle())
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
             }
         }
     }
 
     @ViewBuilder
     private func keyValuePair(_ label: String, _ value: Double) -> some View {
-        let string = value.formatted(.number.precision(.integerAndFractionLength(integerLimits: 1..., fractionLimits: 3...3)))
         HStack {
             Text(label)
                 .foregroundStyle(.secondary)
-            Text(string + " mm")
+            Text(value.formattedDistance)
                 .textSelection(.enabled)
         }
     }
 
     @ViewBuilder
+    private func keyValuePairBox(_ label: String, _ value: Double) -> some View {
+        VStack(alignment: .center, spacing: 0) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .font(.caption)
+            Text(value.formattedDistance)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
     private func coordinate(_ label: String, _ point: SCNVector3) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if !label.isEmpty {
-                Text(label).foregroundStyle(.secondary)
-            }
-            keyValuePair("X", point.x)
-            keyValuePair("Y", point.y)
-            keyValuePair("Z", point.z)
+        HStack(alignment: .center, spacing: 0) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .font(.headline)
+
+            keyValuePairBox("X", point.x)
+            keyValuePairBox("Y", point.y)
+            keyValuePairBox("Z", point.z)
         }
     }
 
     @ViewBuilder
     private func deltaRow(_ delta: SCNVector3) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            keyValuePair("ΔX", delta.x)
-            keyValuePair("ΔY", delta.y)
-            keyValuePair("ΔZ", delta.z)
+        HStack(alignment: .center, spacing: 0) {
+            keyValuePairBox("ΔX", delta.x)
+            keyValuePairBox("ΔY", delta.y)
+            keyValuePairBox("ΔZ", delta.z)
         }
+    }
+}
+
+fileprivate extension Double {
+    var formattedDistance: String {
+        formatted(.number.precision(.integerAndFractionLength(integerLimits: 1..., fractionLimits: 3...3)))
     }
 }
