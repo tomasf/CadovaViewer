@@ -24,6 +24,28 @@ final class MeasurementController: ObservableObject {
     /// Transient measurement following the cursor before the first click. Not yet committed.
     @Published private(set) var hoverPreview: Measurement?
 
+    /// Measurement currently highlighted from the sidebar; its dots/line are emphasized.
+    @Published var highlightedID: Measurement.ID? {
+        didSet {
+            guard highlightedID != oldValue else { return }
+            onVisualChange?()
+        }
+    }
+
+    /// Called when something changes that needs a re-render but no scene-graph rebuild
+    /// (e.g. the sidebar highlight). Set by the viewport.
+    var onVisualChange: (() -> Void)?
+
+    /// Whether the pointer is over the sidebar list. While true the model hover is ignored
+    /// so moving over the list doesn't drive the measurement preview.
+    var isPointerOverList = false {
+        didSet {
+            guard isPointerOverList, isPointerOverList != oldValue else { return }
+            hover(at: nil)
+            onVisualChange?()
+        }
+    }
+
     private var nextColorIndex = 0
 
     private let parentNode: SCNNode
@@ -244,23 +266,28 @@ final class MeasurementController: ObservableObject {
     /// of zoom. Call once per rendered frame.
     func updateScreenSizes(renderer: SCNSceneRenderer) {
         nodesLock.lock()
-        let entries = Array(nodes.values)
+        let entries = Array(nodes)
         nodesLock.unlock()
+        let highlighted = highlightedID
 
-        for entry in entries {
+        for (id, entry) in entries {
+            let emphasis = (id == highlighted) ? 1.7 : 1.0
+            let dotRadius = dotScreenRadius * emphasis
+            let lineRadius = lineScreenRadius * emphasis
+
             for child in entry.scalables {
                 // Scale via the node transform (not geometry radius) so changes apply in
                 // the same frame without a deferred mesh rebuild.
                 if child.geometry is SCNSphere {
-                    let scale = Float(worldRadius(forScreenRadius: dotScreenRadius, at: child.position, renderer: renderer))
+                    let scale = Float(worldRadius(forScreenRadius: dotRadius, at: child.position, renderer: renderer))
                     child.simdScale = simd_float3(scale, scale, scale)
                 } else if let cone = child.geometry as? SCNCone {
                     // The line's two ends are at ±height/2 along the node's local Y axis.
                     let direction = child.simdOrientation.act(simd_float3(0, 1, 0))
                     let half = Float(cone.height) / 2
-                    let endRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition + direction * half), renderer: renderer)
-                    let startRadius = worldRadius(forScreenRadius: lineScreenRadius, at: SCNVector3(child.simdPosition - direction * half), renderer: renderer)
-                    let midRadius = worldRadius(forScreenRadius: lineScreenRadius, at: child.position, renderer: renderer)
+                    let endRadius = worldRadius(forScreenRadius: lineRadius, at: SCNVector3(child.simdPosition + direction * half), renderer: renderer)
+                    let startRadius = worldRadius(forScreenRadius: lineRadius, at: SCNVector3(child.simdPosition - direction * half), renderer: renderer)
+                    let midRadius = worldRadius(forScreenRadius: lineRadius, at: child.position, renderer: renderer)
                     guard midRadius > 0 else { continue }
 
                     // Overall thickness comes from the node scale (a transform, applied this

@@ -90,6 +90,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.onCancel = { [weak self] in
             self?.measurementController.cancelInProgress()
         }
+        measurementController.onVisualChange = { [weak self] in
+            guard let self else { return }
+            measurementController.updateScreenSizes(renderer: sceneView)
+            sceneView.render()
+        }
         
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
@@ -277,7 +282,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         // Update measurement geometry before rendering so the per-frame screen-size
         // scaling in updateAtTime applies to the freshly placed/moved dots.
         if measurementController.interactionMode == .measure {
-            let worldPoint = hoverPoint.flatMap { measurementPoint(atViewPoint: $0, flipY: true) }
+            let worldPoint = measurementController.isPointerOverList ? nil : hoverPoint.flatMap { measurementPoint(atViewPoint: $0, flipY: true) }
             measurementController.hover(at: worldPoint)
             measurementController.updateScreenSizes(renderer: sceneView)
         }

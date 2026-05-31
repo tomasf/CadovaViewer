@@ -22,6 +22,13 @@ struct MeasurementListOverlay: View {
                                     controller.delete(measurement.id)
                                 }
                                 .id(measurement.id)
+                                .onHover { hovering in
+                                    if hovering {
+                                        controller.highlightedID = measurement.id
+                                    } else if controller.highlightedID == measurement.id {
+                                        controller.highlightedID = nil
+                                    }
+                                }
                             }
                         }
                         // The inset lives inside the scroll content so the boxes keep a
@@ -30,9 +37,10 @@ struct MeasurementListOverlay: View {
                     }
                     // Content-sized (so empty space below doesn't capture clicks meant
                     // for the model) but allowed to grow to the full available height.
-                    .frame(maxWidth: 272, alignment: .leading)
+                    .frame(width: 272, alignment: .leading)
                     .frame(maxHeight: max(geometry.size.height - bottomClearance, 0), alignment: .top)
                     .fixedSize(horizontal: false, vertical: true)
+                    .onHover { controller.isPointerOverList = $0 }
                     .onChange(of: rows.last?.id) { _, lastID in
                         if let lastID {
                             withAnimation { proxy.scrollTo(lastID, anchor: .bottom) }
@@ -74,7 +82,7 @@ private struct MeasurementRow: View {
         .font(.system(.callout))
         .monospacedDigit()
         .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: 240, alignment: .leading)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay {
