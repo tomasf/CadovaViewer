@@ -115,6 +115,12 @@ final class MeasurementController: ObservableObject {
         return last
     }
 
+    /// The fixed start point of the in-progress length measurement, if any. Used by the
+    /// viewport to constrain the moving end point to an axis.
+    var inProgressStart: SCNVector3? {
+        inProgressIndex.map { measurements[$0].start }
+    }
+
     private func clearHoverPreview() {
         guard hoverPreview != nil else { return }
         hoverPreview = nil

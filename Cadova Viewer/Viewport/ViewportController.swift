@@ -264,7 +264,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         // Update measurement geometry before rendering so the per-frame screen-size
         // scaling in updateAtTime applies to the freshly placed/moved dots.
         if measurementController.interactionMode == .measure {
-            let worldPoint = hoverPoint.flatMap { surfaceWorldPoint(atViewPoint: $0, flipY: true) }
+            let worldPoint = hoverPoint.flatMap { measurementPoint(atViewPoint: $0, flipY: true) }
             measurementController.hover(at: worldPoint)
             measurementController.updateScreenSizes(renderer: sceneView)
         }
@@ -275,11 +275,64 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     private func handleMeasurementClick(at point: CGPoint) {
         guard measurementController.interactionMode == .measure else { return }
-        if let worldPoint = surfaceWorldPoint(atViewPoint: point, flipY: false) {
+        if let worldPoint = measurementPoint(atViewPoint: point, flipY: false) {
             measurementController.commitPoint(at: worldPoint)
             measurementController.updateScreenSizes(renderer: sceneView)
             sceneView.render()
         }
+    }
+
+    /// The world point for the measurement under the cursor. With Shift held while a
+    /// length measurement is in progress, the point is constrained to an axis through the
+    /// start point (projected from the cursor ray, so it needn't lie on the model);
+    /// otherwise it's the model surface hit (nil if the cursor misses the model).
+    private func measurementPoint(atViewPoint point: CGPoint, flipY: Bool) -> SCNVector3? {
+        if NSEvent.modifierFlags.contains(.shift), let start = measurementController.inProgressStart {
+            return axisConstrainedPoint(atViewPoint: point, flipY: flipY, from: start)
+        }
+        return surfaceWorldPoint(atViewPoint: point, flipY: flipY)
+    }
+
+    /// Projects the cursor ray onto an axis line through `start`, choosing the axis whose
+    /// screen-space direction best matches the cursor's movement from the start point.
+    private func axisConstrainedPoint(atViewPoint point: CGPoint, flipY: Bool, from start: SCNVector3) -> SCNVector3? {
+        let viewPoint = flipY ? CGPoint(x: point.x, y: sceneViewSize.height - point.y) : point
+
+        let startScreen = sceneView.projectPoint(start)
+        let screenDelta = simd_double2(Double(viewPoint.x) - Double(startScreen.x), Double(viewPoint.y) - Double(startScreen.y))
+        guard simd_length(screenDelta) > 1e-3 else { return start }
+        let screenDirection = simd_normalize(screenDelta)
+
+        let startVector = simd_double3(Double(start.x), Double(start.y), Double(start.z))
+        let axes: [simd_double3] = [simd_double3(1, 0, 0), simd_double3(0, 1, 0), simd_double3(0, 0, 1)]
+
+        var bestAxis = axes[0]
+        var bestScore = -1.0
+        for axis in axes {
+            let tip = sceneView.projectPoint(SCNVector3(startVector.x + axis.x, startVector.y + axis.y, startVector.z + axis.z))
+            let direction = simd_double2(Double(tip.x) - Double(startScreen.x), Double(tip.y) - Double(startScreen.y))
+            let length = simd_length(direction)
+            guard length > 1e-6 else { continue } // axis points (almost) straight at the camera
+            let score = abs(simd_dot(screenDirection, direction / length))
+            if score > bestScore {
+                bestScore = score
+                bestAxis = axis
+            }
+        }
+
+        // Closest point on the axis line (startVector, bestAxis) to the cursor ray.
+        let nearPoint = sceneView.unprojectPoint(SCNVector3(viewPoint.x, viewPoint.y, 0))
+        let farPoint = sceneView.unprojectPoint(SCNVector3(viewPoint.x, viewPoint.y, 1))
+        let near = simd_double3(Double(nearPoint.x), Double(nearPoint.y), Double(nearPoint.z))
+        let rayDirection = simd_double3(Double(farPoint.x), Double(farPoint.y), Double(farPoint.z)) - near
+        let offset = startVector - near
+        let b = simd_dot(bestAxis, rayDirection)
+        let c = simd_dot(rayDirection, rayDirection)
+        let denominator = c - b * b // bestAxis·bestAxis == 1
+        guard abs(denominator) > 1e-9 else { return nil } // ray parallel to the axis
+        let t = (b * simd_dot(rayDirection, offset) - c * simd_dot(bestAxis, offset)) / denominator
+        let end = startVector + t * bestAxis
+        return SCNVector3(end.x, end.y, end.z)
     }
 
     /// Casts a ray at the given view point and returns the world coordinates of the
