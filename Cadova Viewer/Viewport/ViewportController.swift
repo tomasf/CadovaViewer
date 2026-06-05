@@ -95,6 +95,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             measurementController.updateScreenSizes(renderer: sceneView)
             sceneView.render()
         }
+        measurementController.undoManager = document.measurementUndoManager
         
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene

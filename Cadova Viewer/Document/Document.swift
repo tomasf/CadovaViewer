@@ -13,8 +13,18 @@ class Document: NSDocument, NSWindowDelegate {
     private let modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData())
     private let loadingSubject: CurrentValueSubject<Bool, Never> = .init(false)
 
-    var modelStream: AnyPublisher<ModelData, Never> { modelSubject.eraseToAnyPublisher() }
-    var loadingStream: AnyPublisher<Bool, Never> { loadingSubject.eraseToAnyPublisher() }
+    var modelStream: AnyPublisher<ModelData, Never> {
+        modelSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+
+    var loadingStream: AnyPublisher<Bool, Never> {
+        loadingSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+
+    /// Dedicated undo manager for measurement operations. Kept separate from the document's
+    /// own `undoManager` so registering measurement undos doesn't mark the (read-only)
+    /// document as edited. Vended to the window below so Edit ▸ Undo/Redo (⌘Z/⌘⇧Z) use it.
+    let measurementUndoManager = UndoManager()
 
     override class func canConcurrentlyReadDocuments(ofType typeName: String) -> Bool {
         true
@@ -29,33 +39,53 @@ class Document: NSDocument, NSWindowDelegate {
     }
 
     override func read(from url: URL, ofType typeName: String) throws {
-        loadingSubject.send(true)
+        sendLoadingStatus(true)
         let start = CFAbsoluteTimeGetCurrent()
-        let modelSubject = self.modelSubject
 
-        var isFinished = false
-        var loadingError: Swift.Error?
+        let semaphore = DispatchSemaphore(value: 0)
+        let loadingResult = LoadResult()
+
         Task {
+            let result: Result<ModelData, Swift.Error>
             do {
-                modelSubject.value = try await ModelData(url: url)
+                result = .success(try await ModelData(url: url))
             } catch {
-                loadingError = error
+                result = .failure(error)
             }
-            isFinished = true
+
+            loadingResult.store(result)
+            semaphore.signal()
         }
 
-        while !isFinished {
+        while semaphore.wait(timeout: .now() + 0.01) == .timedOut {
             RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
         }
-        loadingSubject.send(false)
 
-        if let loadingError {
-            Swift.print("Error: \(loadingError)")
-            throw loadingError
+        guard let result = loadingResult.value else {
+            sendLoadingStatus(false)
+            throw Error.invalidDocument
         }
+
+        do {
+            sendModelData(try result.get())
+        } catch {
+            sendLoadingStatus(false)
+            Swift.print("Error: \(error)")
+            throw error
+        }
+
+        sendLoadingStatus(false)
 
         let end = CFAbsoluteTimeGetCurrent()
         Swift.print("Loading time: \(end - start)")
+    }
+
+    private func sendModelData(_ modelData: ModelData) {
+        modelSubject.send(modelData)
+    }
+
+    private func sendLoadingStatus(_ isLoading: Bool) {
+        loadingSubject.send(isLoading)
     }
 
     var documentHostingController: DocumentHostingController? {
@@ -115,5 +145,24 @@ class Document: NSDocument, NSWindowDelegate {
 
     func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
         proposedOptions.union(.autoHideToolbar)
+    }
+
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        measurementUndoManager
+    }
+}
+
+private final class LoadResult {
+    private let queue = DispatchQueue(label: "se.tomasf.CadovaViewer.Document.LoadResult")
+    private var result: Result<ModelData, Swift.Error>?
+
+    var value: Result<ModelData, Swift.Error>? {
+        queue.sync { result }
+    }
+
+    func store(_ result: Result<ModelData, Swift.Error>) {
+        queue.sync {
+            self.result = result
+        }
     }
 }

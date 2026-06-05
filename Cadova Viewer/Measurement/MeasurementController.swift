@@ -48,6 +48,10 @@ final class MeasurementController: ObservableObject {
 
     private var nextColorIndex = 0
 
+    /// Undo manager for measurement operations (the document's dedicated one). Held weakly
+    /// because it strong-references this controller as the undo target.
+    weak var undoManager: UndoManager?
+
     private let parentNode: SCNNode
     private let categoryID: Int
 
@@ -68,6 +72,12 @@ final class MeasurementController: ObservableObject {
         let start: SCNVector3
         let end: SCNVector3?
         let color: NSColor
+    }
+
+    /// Undoable snapshot of the committed measurement state.
+    private struct Snapshot {
+        var measurements: [Measurement]
+        var nextColorIndex: Int
     }
 
     /// Keyed by measurement id (and a fixed key for the hover preview). Mutated on the
@@ -109,12 +119,21 @@ final class MeasurementController: ObservableObject {
             measurements[index].end = worldPoint
             measurements[index].phase = .complete
             updateGeometry(for: measurements[index])
+
+            // Undo of completing a measurement returns to the state after the first
+            // click: start point fixed, endpoint not yet set.
+            var before = measurements
+            before[index].end = nil
+            before[index].phase = .lengthInProgress
+            registerUndo(toRestore: Snapshot(measurements: before, nextColorIndex: nextColorIndex), actionName: "Set Measurement Endpoint")
         } else {
             clearHoverPreview()
+            let before = Snapshot(measurements: measurements, nextColorIndex: nextColorIndex)
             let measurement = Measurement(colorIndex: nextColorIndex, start: worldPoint, end: nil, phase: .lengthInProgress)
             nextColorIndex += 1
             measurements.append(measurement)
             updateGeometry(for: measurement)
+            registerUndo(toRestore: before, actionName: "Set Measurement Start Point")
         }
     }
 
@@ -128,17 +147,11 @@ final class MeasurementController: ObservableObject {
     }
 
     func delete(_ id: Measurement.ID) {
-        measurements.removeAll { $0.id == id }
-        removeNode(for: id)
+        restore(Snapshot(measurements: measurements.filter { $0.id != id }, nextColorIndex: nextColorIndex), actionName: "Delete Measurement")
     }
 
     func deleteAll() {
-        clearHoverPreview()
-        let ids = measurements.map(\.id)
-        measurements.removeAll()
-        ids.forEach { removeNode(for: $0) }
-        highlightedID = nil
-        nextColorIndex = 0
+        restore(Snapshot(measurements: [], nextColorIndex: 0), actionName: "Delete All Measurements")
     }
 
     private var inProgressIndex: Int? {
@@ -156,6 +169,44 @@ final class MeasurementController: ObservableObject {
         guard hoverPreview != nil else { return }
         hoverPreview = nil
         removeNode(for: hoverPreviewKey)
+    }
+
+    // MARK: - Undo
+
+    private func registerUndo(toRestore snapshot: Snapshot, actionName: String) {
+        undoManager?.registerUndo(withTarget: self) { controller in
+            controller.restore(snapshot, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
+    }
+
+    /// Replaces the committed measurements with `snapshot`, registering the inverse so
+    /// NSUndoManager can ping-pong between undo and redo.
+    private func restore(_ snapshot: Snapshot, actionName: String) {
+        registerUndo(toRestore: Snapshot(measurements: measurements, nextColorIndex: nextColorIndex), actionName: actionName)
+
+        measurements = snapshot.measurements
+        nextColorIndex = snapshot.nextColorIndex
+        if let id = highlightedID, !measurements.contains(where: { $0.id == id }) {
+            highlightedID = nil
+        }
+        rebuildAllGeometry()
+        onVisualChange?()
+    }
+
+    /// Tears down all measurement geometry (and the hover preview) and rebuilds it from
+    /// the current `measurements`. Used when undo/redo swaps the whole set.
+    private func rebuildAllGeometry() {
+        nodesLock.lock()
+        let containers = nodes.values.map(\.container)
+        nodes.removeAll()
+        nodesLock.unlock()
+        containers.forEach { $0.removeFromParentNode() }
+        hoverPreview = nil
+
+        for measurement in measurements {
+            updateGeometry(for: measurement)
+        }
     }
 
     // MARK: - 3D geometry
