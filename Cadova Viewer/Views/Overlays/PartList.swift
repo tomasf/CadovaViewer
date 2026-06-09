@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import SceneKit
+import AppKit
 import ViewerCore
 
 struct PartListOverlay: View {
@@ -19,10 +20,18 @@ struct PartListOverlay: View {
             .controlSize(.large)
             .buttonStyle(BlurButtonStyle())
             .popover(isPresented: $showList, arrowEdge: .top) {
+                // The document view forces a dark color scheme for the overlays on the dark
+                // 3D viewport, but the popover is a floating panel drawn with the system
+                // background, so its content must follow the real system appearance.
                 PartList(viewportController: viewportController)
+                    .colorScheme(systemColorScheme)
             }
             .padding()
         }
+    }
+
+    private var systemColorScheme: ColorScheme {
+        NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
     }
 
     private var title: String {
