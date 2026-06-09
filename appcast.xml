@@ -3,6 +3,23 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>0.4.0</title>
+            <pubDate>Tue, 09 Jun 2026 15:55:55 +0200</pubDate>
+            <sparkle:version>8</sparkle:version>
+            <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/0.4.0/CadovaViewer0.4.0.zip" length="18296387" type="application/octet-stream" sparkle:edSignature="pWPRpoCux3RLC3lsg6HgT3A34mklWYwobRCUARs97fvPFxfOpdU+wDm91EetsBQspXlezAynLBkG5O17S58ZCg=="/>
+            <description><![CDATA[
+                <ul>
+                    <li>New measurement tool for measuring distances and coordinates directly on a model, with corner snapping, axis constraints, and undo</li>
+                    <li>Smoother navigation when using a 3D mouse (SpaceMouse)</li>
+                    <li>Models now open without freezing the interface while loading</li>
+                    <li>Fixed the parts list appearance in light mode</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>0.3.0</title>
             <pubDate>Wed, 13 May 2026 17:42:43 +0200</pubDate>
             <sparkle:version>7</sparkle:version>
