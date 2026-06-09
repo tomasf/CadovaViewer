@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Combine
 import SceneKit
 import NavLib
@@ -160,6 +161,9 @@ extension ViewportController: NavLibStateProvider {
         guard !navLibIsSuspended else { return }
         if active {
             sceneView.defaultCameraController.stopInertia()
+            // Hide the cursor while navigating, the same way the system hides it
+            // while typing: it reappears automatically as soon as the mouse moves.
+            NSCursor.setHiddenUntilMouseMoves(true)
         } else {
             viewDidChange()
         }
