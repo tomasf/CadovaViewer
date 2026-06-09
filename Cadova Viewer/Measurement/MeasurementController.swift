@@ -28,6 +28,12 @@ final class MeasurementController: ObservableObject {
     @Published var highlightedID: Measurement.ID? {
         didSet {
             guard highlightedID != oldValue else { return }
+            // The emphasis size depends on the highlight, so the affected measurements need
+            // re-sizing even if the camera and geometry are otherwise unchanged.
+            nodesLock.lock()
+            if let oldValue { pendingResizeIDs.insert(oldValue) }
+            if let highlightedID { pendingResizeIDs.insert(highlightedID) }
+            nodesLock.unlock()
             onVisualChange?()
         }
     }
@@ -51,6 +57,13 @@ final class MeasurementController: ObservableObject {
     /// Undo manager for measurement operations (the document's dedicated one). Held weakly
     /// because it strong-references this controller as the undo target.
     weak var undoManager: UndoManager?
+
+    /// Ids whose geometry changed since they were last sized. Lets the per-frame screen-size
+    /// pass skip untouched measurements while the camera is still — otherwise it regenerates
+    /// every line's cone mesh and dashed overlay on every frame.
+    private var pendingResizeIDs: Set<UUID> = []
+    private var lastSizedCameraTransform = SCNMatrix4Identity
+    private var lastSizedCameraProjection = SCNMatrix4Identity
 
     private let parentNode: SCNNode
     private let categoryID: Int
@@ -260,6 +273,7 @@ final class MeasurementController: ObservableObject {
         container.setVisible(true, forViewportID: categoryID)
 
         nodesLock.lock()
+        pendingResizeIDs.insert(id)
         nodes[id] = MeasurementNodes(container: container, scalables: scalables, overlayLine: overlayLine, start: start, end: end, color: color)
         nodesLock.unlock()
     }
@@ -326,6 +340,7 @@ final class MeasurementController: ObservableObject {
     private func removeNode(for id: UUID) {
         nodesLock.lock()
         let entry = nodes.removeValue(forKey: id)
+        pendingResizeIDs.remove(id)
         nodesLock.unlock()
         entry?.container.removeFromParentNode()
     }
@@ -335,9 +350,24 @@ final class MeasurementController: ObservableObject {
     /// Rescales every dot and line so they keep a constant on-screen size regardless
     /// of zoom. Call once per rendered frame.
     func updateScreenSizes(renderer: SCNSceneRenderer) {
+        guard let pointOfView = renderer.pointOfView else { return }
+        let worldTransform = pointOfView.worldTransform
+        let projection = pointOfView.camera?.projectionTransform ?? SCNMatrix4Identity
+
         nodesLock.lock()
-        let entries = Array(nodes)
+        // Sizing depends on the camera (constant on-screen size) and on each measurement's
+        // own geometry. If the camera moved, everything must be resized; otherwise only the
+        // measurements that changed since last time.
+        let cameraChanged = !SCNMatrix4EqualToMatrix4(worldTransform, lastSizedCameraTransform)
+            || !SCNMatrix4EqualToMatrix4(projection, lastSizedCameraProjection)
+        let ids = cameraChanged ? Array(nodes.keys) : Array(pendingResizeIDs)
+        let entries = ids.compactMap { id in nodes[id].map { (id, $0) } }
+        pendingResizeIDs.removeAll()
+        lastSizedCameraTransform = worldTransform
+        lastSizedCameraProjection = projection
         nodesLock.unlock()
+
+        if entries.isEmpty { return }
         let highlighted = highlightedID
 
         for (id, entry) in entries {

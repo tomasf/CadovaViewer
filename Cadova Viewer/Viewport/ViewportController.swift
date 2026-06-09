@@ -91,9 +91,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             self?.measurementController.cancelInProgress()
         }
         measurementController.onVisualChange = { [weak self] in
-            guard let self else { return }
-            measurementController.updateScreenSizes(renderer: sceneView)
-            sceneView.render()
+            // render() drives updateAtTime → updateScreenSizes, which does the sizing.
+            self?.sceneView.render()
         }
         measurementController.undoManager = document.measurementUndoManager
         
@@ -285,7 +284,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         if measurementController.interactionMode == .measure {
             let worldPoint = measurementController.isPointerOverList ? nil : hoverPoint.flatMap { measurementPoint(atViewPoint: $0, flipY: true) }
             measurementController.hover(at: worldPoint)
-            measurementController.updateScreenSizes(renderer: sceneView)
         }
 
         sceneView.render()
@@ -296,7 +294,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         guard measurementController.interactionMode == .measure else { return }
         if let worldPoint = measurementPoint(atViewPoint: point, flipY: false) {
             measurementController.commitPoint(at: worldPoint)
-            measurementController.updateScreenSizes(renderer: sceneView)
             sceneView.render()
         }
     }
@@ -378,12 +375,13 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         let cameraPosition = cameraNode.presentation.worldPosition
         let vertexDistance = vertex.distance(from: cameraPosition)
 
-        // Only the closest hit is needed (SceneKit's default search mode), which is far
-        // cheaper than searching all intersections. Edge nodes sit on the surface (nudged
-        // toward the camera by ~0.1%), so they stay within the tolerance below.
+        // Closest hit only — far cheaper than the default `.all`, which searches every
+        // intersection. Edge nodes sit on the surface (nudged toward the camera by ~0.1%),
+        // so they stay within the tolerance below.
         let screenPoint = sceneView.projectPoint(vertex)
         let nearestHit = sceneView.hitTest(CGPoint(x: screenPoint.x, y: screenPoint.y), options: [
-            .rootNode: sceneController.modelContainer
+            .rootNode: sceneController.modelContainer,
+            .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
         ]).first
 
         // No surface in front of the point (e.g. a silhouette corner) → treat as visible.
@@ -513,11 +511,26 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// for AppKit view-space points such as gesture recognizer locations.
     private func surfaceWorldPoint(atViewPoint point: CGPoint, flipY: Bool) -> SCNVector3? {
         let viewPoint = flipY ? CGPoint(x: point.x, y: sceneViewSize.height - point.y) : point
-        let edgeNodes = sceneController.edgeNodes
-        return sceneView.hitTest(viewPoint, options: [
-            .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
-            .rootNode: sceneController.modelContainer
-        ]).first(where: { !edgeNodes.contains($0.node) })?.worldCoordinates
+        guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return nil }
+
+        // Hit test each visible part's model node. Using the model node as the root (the
+        // edge lines are siblings, not children) excludes the edges — which float slightly
+        // in front of the surface — while keeping the cheap closest-hit search per part.
+        let hidden = hiddenPartIDs
+        var best: SCNVector3?
+        var bestDistance = Double.greatestFiniteMagnitude
+        for part in sceneController.parts where !hidden.contains(part.id) {
+            guard let hit = sceneView.hitTest(viewPoint, options: [
+                .rootNode: part.nodes.model,
+                .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
+            ]).first else { continue }
+            let distance = hit.worldCoordinates.distance(from: cameraPosition)
+            if distance < bestDistance {
+                bestDistance = distance
+                best = hit.worldCoordinates
+            }
+        }
+        return best
     }
 
     func setViewOptions(_ viewOptions: ViewOptions) {
