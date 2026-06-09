@@ -259,6 +259,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             return
         }
 
+        // Interpret fieldOfView as the vertical half-angle. calculateOrthographicScale()
+        // and the preset fit math both equate distance * tan(fov/2) to the orthographic
+        // half-height, which only holds when the field of view is measured vertically.
+        camera.projectionDirection = .vertical
+
         if projection == .orthographic {
             camera.orthographicScale = calculateOrthographicScale()
             camera.usesOrthographicProjection = true

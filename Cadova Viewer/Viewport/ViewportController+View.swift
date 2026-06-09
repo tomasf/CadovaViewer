@@ -119,91 +119,66 @@ extension ViewportController {
               let camera = cameraNode.camera else { return (CATransform3DIdentity, 1) }
 
         let (min, max) = sceneController.modelBoundingBox
-        let center = sceneController.modelBoundingSphere.center
-        let modelSize = SCNVector3(
-            x: max.x - min.x,
-            y: max.y - min.y,
-            z: max.z - min.z
-        )
+        let center = SIMD3<Double>(sceneController.modelBoundingSphere.center)
 
-        let objectSizeX = Swift.max(modelSize.y, modelSize.z)
-        let objectSizeY = Swift.max(modelSize.x, modelSize.z)
-        let objectSizeZ = Swift.max(modelSize.x, modelSize.y)
-
-        let fovRadians = camera.fieldOfView * (.pi / 180.0)
-        let distanceX = (objectSizeX / 2) / tan(fovRadians / 2)
-        let distanceY = (objectSizeY / 2) / tan(fovRadians / 2)
-        let distanceZ = (objectSizeZ / 2) / tan(fovRadians / 2)
-
-        var position: SCNVector3 = center
-        var width = modelSize.x
-        var height = modelSize.z
-
+        // Unit vector pointing from the model center toward the camera (the outward view axis).
+        let axis: SIMD3<Double>
         switch preset {
         case .isometric:
             let isoAngle = 35.264 * (.pi / 180)
-            let isoDist  = Swift.max(distanceX, distanceY, distanceZ)
-
-            position = SCNVector3(
-                x: center.x - isoDist * cos(isoAngle),
-                y: center.y - isoDist * cos(isoAngle),
-                z: center.z + isoDist * sin(isoAngle)
-            )
-
-            // 2. Build the transform once so we know right / up vectors
-            let isoTransform = float4x4(lookingFrom: .init(position), at: .init(center))
-            let right = isoTransform.columns.0.xyz   // camera-space +X in world
-            let up = isoTransform.columns.1.xyz   // camera-space +Y in world
-
-            // 3. Project the 8 bbox corners onto (right, up)
-            let corners: [SIMD3<Double>] = [
-                SIMD3(min.x, min.y, min.z), SIMD3(min.x, min.y, max.z),
-                SIMD3(min.x, max.y, min.z), SIMD3(min.x, max.y, max.z),
-                SIMD3(max.x, min.y, min.z), SIMD3(max.x, min.y, max.z),
-                SIMD3(max.x, max.y, min.z), SIMD3(max.x, max.y, max.z)
-            ]
-
-            var minU: Double = .greatestFiniteMagnitude, maxU: Double = -.greatestFiniteMagnitude
-            var minV: Double = .greatestFiniteMagnitude, maxV: Double = -.greatestFiniteMagnitude
-
-            let camPos = SIMD3<Double>(position)
-            for c in corners {
-                let diff = c - camPos
-                let u = simd_dot(diff, SIMD3<Double>(right))   // horizontal
-                let v = simd_dot(diff, SIMD3<Double>(up))      // vertical
-                minU = Swift.min(minU, u)
-                maxU = Swift.max(maxU, u)
-                minV = Swift.min(minV, v)
-                maxV = Swift.max(maxV, v)
-            }
-
-            width  = maxU - minU
-            height = maxV - minV
-
-        case .front:
-            position.y = min.y - distanceY
-        case .back:
-            position.y = max.y + distanceY
-        case .left:
-            position.x = min.x - distanceX
-            width = modelSize.y
-        case .right:
-            position.x = max.x + distanceX
-            width = modelSize.y
-        case .top:
-            position.z = max.z + distanceZ
-            height = modelSize.y
-        case .bottom:
-            position.z = min.z - distanceZ
-            position.x += 0.001 // uh ok. why
-            height = modelSize.y
+            axis = simd_normalize(SIMD3(-cos(isoAngle), -cos(isoAngle), sin(isoAngle)))
+        case .front:  axis = SIMD3(0, -1, 0)
+        case .back:   axis = SIMD3(0,  1, 0)
+        case .left:   axis = SIMD3(-1, 0, 0)
+        case .right:  axis = SIMD3( 1, 0, 0)
+        case .top:    axis = SIMD3(0, 0,  1)
+        case .bottom: axis = SIMD3(0, 0, -1)
         }
 
-        let fitWidthScale = width / 2 / (sceneViewSize.width / sceneViewSize.height)
+        // Build a provisional orientation (distance-independent) so we know the camera's
+        // right/up vectors, then project the 8 bbox corners onto them to get the true
+        // on-screen extents. This handles every preset uniformly and works even when the
+        // model isn't centered on its bounding sphere. The lookingFrom helper supplies a
+        // sane right/up fallback for the top/bottom cases where the view axis is parallel
+        // to world up.
+        let orientation = float4x4(lookingFrom: SIMD3<Float>(center + axis), at: SIMD3<Float>(center))
+        let right = SIMD3<Double>(orientation.columns.0.xyz)
+        let up = SIMD3<Double>(orientation.columns.1.xyz)
+
+        let corners: [SIMD3<Double>] = [
+            SIMD3(min.x, min.y, min.z), SIMD3(min.x, min.y, max.z),
+            SIMD3(min.x, max.y, min.z), SIMD3(min.x, max.y, max.z),
+            SIMD3(max.x, min.y, min.z), SIMD3(max.x, min.y, max.z),
+            SIMD3(max.x, max.y, min.z), SIMD3(max.x, max.y, max.z)
+        ]
+
+        var minU = Double.greatestFiniteMagnitude, maxU = -Double.greatestFiniteMagnitude
+        var minV = Double.greatestFiniteMagnitude, maxV = -Double.greatestFiniteMagnitude
+        for corner in corners {
+            let diff = corner - center
+            let u = simd_dot(diff, right)
+            let v = simd_dot(diff, up)
+            minU = Swift.min(minU, u); maxU = Swift.max(maxU, u)
+            minV = Swift.min(minV, v); maxV = Swift.max(maxV, v)
+        }
+
+        let width = maxU - minU
+        let height = maxV - minV
+
+        let aspect = sceneViewSize.height > 0 ? sceneViewSize.width / sceneViewSize.height : 1
+        let fitWidthScale = width / 2 / aspect
         let fitHeightScale = height / 2
         let orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
 
-        return (SCNMatrix4(float4x4(lookingFrom: .init(position), at: .init(center))), orthoScale)
+        // Place the camera at the distance that makes calculateOrthographicScale()
+        // (distance * tan(fov/2), the value SceneKit actually uses for the ortho
+        // projection) reproduce exactly orthoScale, so the framing isn't overridden.
+        // The same distance frames the model with matching margin in perspective mode.
+        let fovRadians = camera.fieldOfView * (.pi / 180.0)
+        let distance = orthoScale / tan(fovRadians / 2)
+        let position = center + axis * distance
+
+        return (SCNMatrix4(float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(center))), orthoScale)
     }
 }
 
