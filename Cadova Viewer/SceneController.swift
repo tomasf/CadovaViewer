@@ -11,6 +11,13 @@ final class SceneController: ObservableObject {
 
     @Published var parts: [ModelData.Part] = []
 
+    /// The model's bounding box and sphere, cached when the model loads. Computing these from
+    /// `modelContainer` walks the whole node hierarchy and takes SceneKit's scene lock, which
+    /// contends with the render thread — costly when read on every NavLib (SpaceMouse) motion
+    /// frame on the main thread. The model is static after load, so cache them once.
+    private(set) var modelBoundingBox: (min: SCNVector3, max: SCNVector3) = (SCNVector3Zero, SCNVector3Zero)
+    private(set) var modelBoundingSphere: (center: SCNVector3, radius: Float) = (SCNVector3Zero, 0)
+
     private let modelLoadedSignal = PassthroughSubject<Void, Never>()
     var modelWasLoaded: AnyPublisher<Void, Never> { modelLoadedSignal.eraseToAnyPublisher() }
 
@@ -58,6 +65,9 @@ final class SceneController: ObservableObject {
                 part.nodes.container.treeCategoryBitMask = ~1
             }
         }
+
+        modelBoundingBox = modelContainer.boundingBox
+        modelBoundingSphere = modelContainer.boundingSphere
 
         modelLoadedSignal.send()
     }

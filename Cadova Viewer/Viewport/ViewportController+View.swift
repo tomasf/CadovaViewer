@@ -118,8 +118,8 @@ extension ViewportController {
         guard let cameraNode = sceneView.pointOfView,
               let camera = cameraNode.camera else { return (CATransform3DIdentity, 1) }
 
-        let (min, max) = sceneController.modelContainer.boundingBox
-        let center = sceneController.modelContainer.boundingSphere.center
+        let (min, max) = sceneController.modelBoundingBox
+        let center = sceneController.modelBoundingSphere.center
         let modelSize = SCNVector3(
             x: max.x - min.x,
             y: max.y - min.y,

@@ -67,12 +67,16 @@ extension ViewportController {
 
 extension ViewportController: NavLibStateProvider {
     var modelBoundingBox: SCNVector3.BoundingBox {
-        sceneController.modelContainer.boundingBox
+        sceneController.modelBoundingBox
     }
-    
+
     var cameraTransform: NavLib.Transform {
         get {
-            (sceneView.pointOfView?.presentation.transform ?? SCNMatrix4Identity).navLibTransform
+            // Read the model transform, not `presentation.transform`: NavLib drives motion
+            // with actions disabled (so the two are identical), and reading the presentation
+            // tree synchronizes with the render thread on the scene lock, stalling the main
+            // thread every motion frame. Preset fly-tos animate, but suspend NavLib first.
+            (sceneView.pointOfView?.transform ?? SCNMatrix4Identity).navLibTransform
         }
         set {
             guard let pov = sceneView.pointOfView, !navLibIsSuspended else { return }
@@ -123,21 +127,27 @@ extension ViewportController: NavLibStateProvider {
             y: origin.y + direction.y * length,
             z: origin.z + direction.z * length
         )
-        
-        let edgeNodes = sceneController.edgeNodes
-        guard let result = sceneController.modelContainer
-            .hitTestWithSegment(from: origin, to: end)
-            .first(where: { !edgeNodes.contains($0.node) })
-        else {
-            return nil
+
+        // Hit test each visible part's model node with the closest-hit search mode rather
+        // than running the default all-intersections search over the whole container. NavLib
+        // calls this on the main thread (single-threaded session) every navigation frame, so
+        // the costlier search stalls rendering whenever the ray crosses dense geometry.
+        // Rooting at each part's model node also excludes the edge lines (which are siblings),
+        // mirroring `surfaceWorldPoint`.
+        let hidden = hiddenPartIDs
+        var best: SCNVector3?
+        var bestDistance = Double.greatestFiniteMagnitude
+        for part in sceneController.parts where !hidden.contains(part.id) {
+            guard let hit = part.nodes.model.hitTestWithSegment(from: origin, to: end, options: [
+                SCNHitTestOption.searchMode.rawValue: SCNHitTestSearchMode.closest.rawValue as NSNumber
+            ]).first else { continue }
+            let distance = hit.worldCoordinates.distance(from: origin)
+            if distance < bestDistance {
+                bestDistance = distance
+                best = hit.worldCoordinates
+            }
         }
-
-        //print("Hit: \(result.worldCoordinates) \(result.node)")
-        //sceneView.scene?.rootNode.addChildNode(debugSphere)
-        //debugSphere.geometry?.firstMaterial?.diffuse.contents = NSColor.green
-        //debugSphere.position = result.worldCoordinates
-
-        return result.worldCoordinates
+        return best
     }
 
     var mousePosition: SCNVector3? {

@@ -245,7 +245,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         guard let cameraNode = sceneView.pointOfView,
               let camera = sceneView.pointOfView?.camera else { return 100.0 }
 
-        let center = sceneController.modelContainer.boundingSphere.center
+        let center = sceneController.modelBoundingSphere.center
         let distance = cameraNode.position.distance(from: center)
         let fovRadians = camera.fieldOfView * (.pi / 180.0)
         let scale = distance * tan(fovRadians / 2.0)
