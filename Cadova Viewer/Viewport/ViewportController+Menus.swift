@@ -51,6 +51,14 @@ extension ViewportController {
 
 
     func buildViewMenu(with builder: MenuBuilder) {
+        builder.addItem(label: "View", checked: measurementController.interactionMode == .view, keyEquivalent: "1", modifiers: [.command, .shift]) {
+            self.measurementController.interactionMode = .view
+        }
+        builder.addItem(label: "Measure", checked: measurementController.interactionMode == .measure, keyEquivalent: "2", modifiers: [.command, .shift]) {
+            self.measurementController.interactionMode = .measure
+        }
+        builder.addSeparator()
+
         let currentView = currentCameraView
 
         func preset(_ preset: ViewPreset, label: String, shortcut: String) {

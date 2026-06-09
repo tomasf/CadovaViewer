@@ -23,6 +23,7 @@ struct ViewerSceneView: NSViewRepresentable {
 
 class CustomSceneView: SCNView {
     var onClick: ((CGPoint) -> Void)? = nil
+    var onCancel: (() -> Void)? = nil
     var mouseInteractionActive: AnyPublisher<Bool, Never> { mouseInteractionActiveSubject.eraseToAnyPublisher() }
     var mouseRotationPivot: AnyPublisher<SCNVector3?, Never> { mouseRotationPivotSubject.eraseToAnyPublisher() }
     var showContextMenu: AnyPublisher<NSEvent, Never> { contextMenuSubject.eraseToAnyPublisher() }
@@ -34,16 +35,8 @@ class CustomSceneView: SCNView {
 
     override init(frame: NSRect, options: [String : Any]? = nil) {
         super.init(frame: frame, options: options)
-        let recognizer = NSClickGestureRecognizer(target: self, action: #selector(didClick))
-        recognizer.delaysPrimaryMouseButtonEvents = false
-        addGestureRecognizer(recognizer)
     }
 
-    @objc
-    func didClick(_ recognizer: NSClickGestureRecognizer) {
-        onClick?(recognizer.location(in: self))
-    }
-    
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
@@ -90,14 +83,18 @@ class CustomSceneView: SCNView {
         }
 
         mouseInteractionActiveSubject.send(true)
-        if NSEvent.modifierFlags.intersection([.shift, .option]) == [] {
-            mouseRotationPivotSubject.send(defaultCameraController.target)
-        }
 
-        NSCursor.hide()
         var didMove = false
         let endEvent = MouseTracker.track(with: event) { location in
-            didMove = true
+            if !didMove {
+                didMove = true
+                // Defer the rotation pivot indicator and cursor hiding until an actual
+                // drag begins, so a plain click doesn't flash the pivot dot.
+                NSCursor.hide()
+                if NSEvent.modifierFlags.intersection([.shift, .option]) == [] {
+                    mouseRotationPivotSubject.send(defaultCameraController.target)
+                }
+            }
 
             if let dragEvent = NSEvent.mouseEvent(
                 with: .leftMouseDragged,
@@ -114,14 +111,28 @@ class CustomSceneView: SCNView {
             }
         }
 
-        NSCursor.unhide()
+        if didMove {
+            NSCursor.unhide()
+        }
         super.mouseUp(with: endEvent)
 
         mouseRotationPivotSubject.send(nil)
         mouseInteractionActiveSubject.send(false)
 
-        if endEvent.type == .rightMouseUp && !didMove {
-            contextMenuSubject.send(endEvent)
+        if !didMove {
+            switch endEvent.type {
+            case .rightMouseUp: contextMenuSubject.send(endEvent)
+            case .leftMouseUp: onClick?(localPoint)
+            default: break
+            }
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { // Escape
+            onCancel?()
+        } else {
+            super.keyDown(with: event)
         }
     }
 

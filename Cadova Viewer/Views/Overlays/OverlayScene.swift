@@ -31,7 +31,6 @@ final class OverlayScene: SKScene {
     var delayedPivotPointHide: Task<Void, Error>?
 
     private var cancellables: Set<AnyCancellable> = []
-    private var measurements: [Measurement] = []
 
     init(viewportController: ViewportController, renderer: SCNSceneRenderer) {
         self.viewportController = viewportController

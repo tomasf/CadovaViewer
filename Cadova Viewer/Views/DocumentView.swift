@@ -9,6 +9,7 @@ struct DocumentView: View {
     let url: URL
     let errorHandler: (Error) -> ()
     @ObservedObject var viewportController: ViewportController
+    @ObservedObject var measurementController: MeasurementController
     @State var isLoading = false
     @State var infoData: InformationView.Model?
     @State var modelData: ModelData?
@@ -33,6 +34,7 @@ struct DocumentView: View {
         self.url = url
         self.errorHandler = errorHandler
         self.viewportController = viewportController
+        self.measurementController = viewportController.measurementController
     }
 
     var body: some View {
@@ -42,6 +44,9 @@ struct DocumentView: View {
                 viewportController.sceneView.overlaySKScene?.size = $0
             }
             .frame(minWidth: 500, minHeight: 300)
+            .overlay(alignment: .topLeading) {
+                MeasurementListOverlay(controller: measurementController)
+            }
             .overlay(alignment: .bottomLeading) {
                 PartListOverlay(viewportController: viewportController)
             }
@@ -95,6 +100,21 @@ struct DocumentView: View {
     @ToolbarContentBuilder
     var toolbar: some CustomizableToolbarContent {
         Group {
+            ToolbarItem(id: "interaction-mode", placement: .primaryAction) {
+                Picker("Mode", selection: $measurementController.interactionMode) {
+                    Image(systemName: "rotate.3d")
+                        .help("View")
+                        .tag(InteractionMode.view)
+
+                    Image(systemName: "ruler")
+                        .help("Measure")
+                        .tag(InteractionMode.measure)
+                }
+                .pickerStyle(.segmented)
+            }
+
+            spacer
+
             ToolbarItem(id: "projection", placement: .primaryAction) {
                 Picker("Projection", selection: $viewportController.projection) {
                     Image(systemName: "perspective")

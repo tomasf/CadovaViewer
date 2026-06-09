@@ -10,14 +10,30 @@ import Zip
 import ViewerCore
 
 class Document: NSDocument, NSWindowDelegate {
-    private let modelSubject: CurrentValueSubject<ModelData, Never> = .init(ModelData())
+    private let modelSubject: CurrentValueSubject<ModelData?, Never> = .init(nil)
     private let loadingSubject: CurrentValueSubject<Bool, Never> = .init(false)
+    private var loadTask: Task<Void, Never>?
+    private var loadGeneration = 0
 
-    var modelStream: AnyPublisher<ModelData, Never> { modelSubject.eraseToAnyPublisher() }
-    var loadingStream: AnyPublisher<Bool, Never> { loadingSubject.eraseToAnyPublisher() }
+    var modelStream: AnyPublisher<ModelData, Never> {
+        modelSubject.compactMap { $0 }.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+
+    var loadingStream: AnyPublisher<Bool, Never> {
+        loadingSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+
+    /// Dedicated undo manager for measurement operations. Kept separate from the document's
+    /// own `undoManager` so registering measurement undos doesn't mark the (read-only)
+    /// document as edited. Vended to the window below so Edit ▸ Undo/Redo (⌘Z/⌘⇧Z) use it.
+    let measurementUndoManager = UndoManager()
 
     override class func canConcurrentlyReadDocuments(ofType typeName: String) -> Bool {
         true
+    }
+
+    deinit {
+        loadTask?.cancel()
     }
 
     override func makeWindowControllers() {
@@ -29,33 +45,82 @@ class Document: NSDocument, NSWindowDelegate {
     }
 
     override func read(from url: URL, ofType typeName: String) throws {
-        loadingSubject.send(true)
+        Task { @MainActor [weak self] in
+            self?.startLoadingModel(from: url, fileModificationDate: nil, presentsZipErrors: true)
+        }
+    }
+
+    private func sendModelData(_ modelData: ModelData) {
+        modelSubject.send(modelData)
+    }
+
+    private func sendLoadingStatus(_ isLoading: Bool) {
+        loadingSubject.send(isLoading)
+    }
+
+    @MainActor
+    private func startLoadingModel(from url: URL, fileModificationDate: Date?, presentsZipErrors: Bool) {
+        loadGeneration += 1
+        let generation = loadGeneration
+        loadTask?.cancel()
+        sendLoadingStatus(true)
+
         let start = CFAbsoluteTimeGetCurrent()
-        let modelSubject = self.modelSubject
+        let worker = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let modelData = try await ModelData(url: url)
+            try Task.checkCancellation()
+            return modelData
+        }
 
-        var isFinished = false
-        var loadingError: Swift.Error?
-        Task {
+        loadTask = Task { [weak self] in
+            let result: Result<ModelData, Swift.Error>
+
             do {
-                modelSubject.value = try await ModelData(url: url)
+                let modelData = try await worker.value
+                try Task.checkCancellation()
+                result = .success(modelData)
+            } catch is CancellationError {
+                worker.cancel()
+                return
             } catch {
-                loadingError = error
+                result = .failure(error)
             }
-            isFinished = true
+
+            await MainActor.run {
+                self?.finishLoadingModel(
+                    result,
+                    generation: generation,
+                    startTime: start,
+                    fileModificationDate: fileModificationDate,
+                    presentsZipErrors: presentsZipErrors
+                )
+            }
+        }
+    }
+
+    @MainActor
+    private func finishLoadingModel(_ result: Result<ModelData, Swift.Error>, generation: Int, startTime: CFAbsoluteTime, fileModificationDate: Date?, presentsZipErrors: Bool) {
+        guard generation == loadGeneration else { return }
+
+        defer {
+            sendLoadingStatus(false)
+            let end = CFAbsoluteTimeGetCurrent()
+            Swift.print("Loading time: \(end - startTime)")
         }
 
-        while !isFinished {
-            RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+        do {
+            let modelData = try result.get()
+            if let fileModificationDate {
+                self.fileModificationDate = fileModificationDate
+            }
+            sendModelData(modelData)
+        } catch(let error as ZipError) where !presentsZipErrors {
+            Swift.print("Failed to auto-read archive: \(error)")
+        } catch {
+            Swift.print("Error: \(error)")
+            presentError(error)
         }
-        loadingSubject.send(false)
-
-        if let loadingError {
-            Swift.print("Error: \(loadingError)")
-            throw loadingError
-        }
-
-        let end = CFAbsoluteTimeGetCurrent()
-        Swift.print("Loading time: \(end - start)")
     }
 
     var documentHostingController: DocumentHostingController? {
@@ -89,7 +154,7 @@ class Document: NSDocument, NSWindowDelegate {
     override func presentedItemDidChange() {
         super.presentedItemDidChange()
 
-        guard let fileURL, let fileType else { return }
+        guard let fileURL else { return }
         let diskModificationDate = try? FileManager().attributesOfItem(atPath: fileURL.path(percentEncoded: false))[.modificationDate] as? Date
         let lastKnownModificationDate = fileModificationDate
 
@@ -97,15 +162,8 @@ class Document: NSDocument, NSWindowDelegate {
             return // Item on disk was unchanged
         }
 
-        DispatchQueue.main.async {
-            do {
-                try self.revert(toContentsOf: fileURL, ofType: fileType)
-            } catch(let error as ZipError) {
-                // Ignore Zip errors while auto-reading. This can be due to half-written Zip archives
-                Swift.print("Failed to auto-read archive: \(error)")
-            } catch {
-                self.presentError(error)
-            }
+        Task { @MainActor [weak self] in
+            self?.startLoadingModel(from: fileURL, fileModificationDate: diskModificationDate, presentsZipErrors: false)
         }
     }
 
@@ -115,5 +173,9 @@ class Document: NSDocument, NSWindowDelegate {
 
     func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
         proposedOptions.union(.autoHideToolbar)
+    }
+
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        measurementUndoManager
     }
 }
