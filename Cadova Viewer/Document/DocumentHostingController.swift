@@ -6,7 +6,7 @@ enum GlobalCategoryMasks: Int {
     case universal = 1
 }
 
-class DocumentHostingController: NSHostingController<DocumentView> {
+class DocumentHostingController: NSHostingController<DocumentView>, NSMenuItemValidation {
     var viewportControllers: [ViewportController] = []
     let sceneController: SceneController
 
@@ -36,6 +36,17 @@ class DocumentHostingController: NSHostingController<DocumentView> {
 
     var viewportController: ViewportController {
         viewportControllers[0] // Remove this hack once we have support for multiple viewports
+    }
+
+    @objc func removeAllMeasurements(_ sender: Any?) {
+        viewportController.measurementController.deleteAll()
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(removeAllMeasurements(_:)) {
+            return !viewportController.measurementController.measurements.isEmpty
+        }
+        return true
     }
 
     func buildMenu(_ type: MenuType, with menuBuilder: MenuBuilder) {
