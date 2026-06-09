@@ -6,6 +6,7 @@ struct ViewOptions: Codable {
     var showGrid = true
     var showOrigin = true
     var showCoordinateSystemIndicator = true
+    var smoothShading = false
     var edgeVisibility: EdgeVisibility = .sharp
     var cameraTransform: SCNMatrix4 = SCNMatrix4Identity
     var hiddenPartIDs: Set<ModelData.Part.ID> = []
@@ -14,6 +15,7 @@ struct ViewOptions: Codable {
         case showGrid
         case showOrigin
         case showCoordinateSystemIndicator
+        case smoothShading
         case cameraTransform
         case edgeVisibility
         case hiddenPartIDs
@@ -26,6 +28,7 @@ struct ViewOptions: Codable {
         showGrid = try container.decode(Bool.self, forKey: .showGrid)
         showOrigin = try container.decode(Bool.self, forKey: .showOrigin)
         showCoordinateSystemIndicator = try container.decode(Bool.self, forKey: .showCoordinateSystemIndicator)
+        smoothShading = (try? container.decode(Bool.self, forKey: .smoothShading)) ?? false
         cameraTransform = try container.decode(SCNMatrix4.CodingWrapper.self, forKey: .cameraTransform).scnMatrix4
         edgeVisibility = (try? container.decode(EdgeVisibility.self, forKey: .edgeVisibility)) ?? .sharp
         hiddenPartIDs = try container.decode(Set<ModelData.Part.ID>.self, forKey: .hiddenPartIDs)
@@ -36,6 +39,7 @@ struct ViewOptions: Codable {
         try container.encode(showGrid, forKey: .showGrid)
         try container.encode(showOrigin, forKey: .showOrigin)
         try container.encode(showCoordinateSystemIndicator, forKey: .showCoordinateSystemIndicator)
+        try container.encode(smoothShading, forKey: .smoothShading)
         try container.encode(SCNMatrix4.CodingWrapper(cameraTransform), forKey: .cameraTransform)
         try container.encode(edgeVisibility, forKey: .edgeVisibility)
         try container.encode(hiddenPartIDs, forKey: .hiddenPartIDs)

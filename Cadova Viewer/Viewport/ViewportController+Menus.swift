@@ -140,6 +140,10 @@ extension ViewportController {
         builder.addItem(label: "Show Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
             self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
         }
+
+        builder.addItem(label: "Smooth Shading", checked: viewOptions.smoothShading) {
+            self.viewOptions.smoothShading = !self.viewOptions.smoothShading
+        }
     }
 
     func buildEdgeVisibilityMenu(_ menuBuilder: MenuBuilder) {

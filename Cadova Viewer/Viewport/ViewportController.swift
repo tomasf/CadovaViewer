@@ -166,6 +166,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             grid.updateBounds(geometry: sceneController.modelContainer)
             snapVertices = gatherSnapVertices()
             setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+            setSmoothShadingInParts(viewOptions.smoothShading)
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
             objectWillChange.send()
         }.store(in: &observers)
@@ -173,9 +174,15 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         $viewOptions.sink { [weak self] viewOptions in
             guard let self else { return }
             setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+            setSmoothShadingInParts(viewOptions.smoothShading)
             grid.showGrid = viewOptions.showGrid
             grid.showOrigin = viewOptions.showOrigin
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
+            // Persist as the default for newly opened documents. Menu toggles only mutate
+            // viewOptions (+ restorable state), which isn't reapplied on a manual reopen; this
+            // keeps display options like smooth shading remembered. (setViewOptions does the
+            // same on the restore path.)
+            Preferences().viewOptions = viewOptions
         }.store(in: &observers)
 
         cameraNodeChanged(cameraNode)
@@ -573,6 +580,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         grid.showOrigin = viewOptions.showOrigin
         cameraNode.transform = viewOptions.cameraTransform
         setEdgeVisibilityInParts(viewOptions.edgeVisibility)
+        setSmoothShadingInParts(viewOptions.smoothShading)
         updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         hasSetInitialView = true
         Preferences().viewOptions = viewOptions
