@@ -26,6 +26,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     @Published var viewOptions = Preferences().viewOptions {
         didSet {
             document?.invalidateRestorableState()
+            // If the hovered part is toggled (e.g. clicked in the list), re-apply the highlight so
+            // it follows the part across the visible↔hidden change — a hidden part keeps its
+            // outline as a ghost. Done in didSet (not the $viewOptions sink) because @Published
+            // emits in willSet, where self.hiddenPartIDs would still be the old value.
+            if highlightedPartID != nil, viewOptions.hiddenPartIDs != oldValue.hiddenPartIDs {
+                applyHighlight()
+                sceneView.render()
+            }
         }
     }
     var hasSetInitialView = false

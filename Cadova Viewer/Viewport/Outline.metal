@@ -98,20 +98,45 @@ fragment half4 outline_dilate_v(outline_vertex_out vert [[stage_in]],
 }
 
 // Composite: the outline is the dilated silhouette minus the original — a solid band hugging the
-// outside of the part. The surface inside the silhouette is left as rendered.
+// outside of the part. To keep the band's edges crisp but not pixelated, each binary mask is first
+// blurred (turning the diagonal pixel staircase into a smooth gradient that follows the true
+// edge), then re-sharpened to a ~1px anti-aliased step via `aaStep` — so the edge stays sharp
+// without the stair-stepping. `outer - inner` keeps the outline off the part's interior.
+constexpr sampler kSmoothSampler(coord::normalized, filter::linear, address::clamp_to_edge);
+
+// Average a mask's green channel over a 3×3 box of single-texel offsets around `uv`. With linear
+// filtering each tap already averages four texels, so the effective footprint is ~5×5.
+static float blurredMask(texture2d<float, access::sample> tex, float2 uv)
+{
+    float2 texel = 1.0 / float2(tex.get_width(), tex.get_height());
+    float sum = 0.0;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            sum += tex.sample(kSmoothSampler, uv + float2(float(dx), float(dy)) * texel).g;
+        }
+    }
+    return sum / 9.0;
+}
+
+// Coverage of a smoothly-varying value past 0.5, anti-aliased over ~1px using its screen-space
+// rate of change. Turns the blurred gradient back into a sharp, smooth-edged step.
+static float aaStep(float v)
+{
+    float w = max(fwidth(v), 1e-5);
+    return clamp((v - 0.5) / w + 0.5, 0.0, 1.0);
+}
+
 fragment half4 outline_combine_fragment(outline_vertex_out vert [[stage_in]],
                                         texture2d<float, access::sample> colorSampler [[texture(0)]],
                                         texture2d<float, access::sample> maskSampler [[texture(1)]],
                                         texture2d<float, access::sample> dilatedSampler [[texture(2)]],
                                         constant OutlineInputs& inputs [[buffer(0)]])
 {
-    float4 sceneColor = colorSampler.sample(kOutlineSampler, vert.uv);
+    float4 sceneColor = colorSampler.sample(kSmoothSampler, vert.uv);
+    float inner = aaStep(blurredMask(maskSampler, vert.uv));
+    float outer = aaStep(blurredMask(dilatedSampler, vert.uv));
 
-    if (maskSampler.sample(kOutlineSampler, vert.uv).g > 0.5) {
-        return half4(sceneColor); // inside the silhouette
-    }
-
-    float edge = clamp(dilatedSampler.sample(kOutlineSampler, vert.uv).g, 0.0, 1.0);
+    float edge = clamp(outer - inner, 0.0, 1.0);
     float3 rgb = mix(sceneColor.rgb, inputs.outlineColor, edge);
     return half4(float4(rgb, 1.0));
 }

@@ -100,6 +100,9 @@ extension ViewportController {
             "outputs": ["color": "COLOR"],
             "colorStates": ["clear": false]
         ]
+        // The mask targets track the drawable (scaleFactor 1). They can't be supersampled by
+        // bumping the scaleFactor: a DRAW_NODE pass renders at the main viewport size, so the
+        // silhouette would land in a corner of a larger target rather than filling it.
         let colorTarget: [String: Any] = ["type": "color", "format": "rgba8", "scaleFactor": 1]
         let dictionary: [String: Any] = [
             "passes": [
@@ -156,7 +159,7 @@ extension ViewportController {
         if viewOptions.edgeVisibility != .none, let edgeSource {
             let edgeMaterial = SCNMaterial()
             edgeMaterial.lightingModel = .constant
-            edgeMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.5)
+            edgeMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.3)
             edgeMaterial.writesToDepthBuffer = false
 
             let edgeClone = edgeSource.clone()
