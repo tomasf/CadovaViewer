@@ -11,7 +11,7 @@ extension ViewportController {
         let partsUnderCursor = viewPoint.map(partsUnderCursor(viewPoint:)) ?? []
         if sceneController.parts.count > 1 {
             if !partsUnderCursor.isEmpty {
-                builder.addHeader("Parts")
+                builder.addHeader("Part Visibility")
                 buildPartsMenuItems(for: partsUnderCursor, with: builder)
                 builder.addSeparator()
             }
@@ -58,49 +58,34 @@ extension ViewportController {
     func partsUnderCursor(viewPoint: CGPoint) -> [ModelData.Part] {
         guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return [] }
 
-        let partByContainer = Dictionary(
-            sceneController.parts.map { (ObjectIdentifier($0.nodes.container), $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
-
-        var nearest: [ModelData.Part.ID: (part: ModelData.Part, distance: Double)] = [:]
-        for samplePoint in hitTestSamplePoints(around: viewPoint) {
-            let results = sceneView.hitTest(samplePoint, options: [
-                .rootNode: sceneController.modelContainer,
-                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
-                .ignoreHiddenNodes: false
-            ])
-            for result in results {
-                guard let part = part(containing: result.node, in: partByContainer) else { continue }
-                let distance = result.worldCoordinates.distance(from: cameraPosition)
-                if distance < (nearest[part.id]?.distance ?? .greatestFiniteMagnitude) {
-                    nearest[part.id] = (part, distance)
-                }
+        let samplePoints = hitTestSamplePoints(around: viewPoint)
+        var hits: [(part: ModelData.Part, distance: Double)] = []
+        for part in sceneController.parts {
+            var best = Double.greatestFiniteMagnitude
+            for samplePoint in samplePoints {
+                guard let hit = sceneView.hitTest(samplePoint, options: [
+                    .rootNode: part.nodes.model,
+                    .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber,
+                    .ignoreHiddenNodes: false
+                ]).first else { continue }
+                best = min(best, hit.worldCoordinates.distance(from: cameraPosition))
+            }
+            if best < .greatestFiniteMagnitude {
+                hits.append((part, best))
             }
         }
-        return nearest.values.sorted { $0.distance < $1.distance }.map(\.part)
+        return hits.sorted { $0.distance < $1.distance }.map(\.part)
     }
 
-    /// Walks up from a hit node to the part container that owns it.
-    private func part(containing node: SCNNode, in partByContainer: [ObjectIdentifier: ModelData.Part]) -> ModelData.Part? {
-        var current: SCNNode? = node
-        while let node = current {
-            if let part = partByContainer[ObjectIdentifier(node)] { return part }
-            current = node.parent
-        }
-        return nil
-    }
-
-    /// The cursor point plus two rings of samples around it, giving the pick a screen-space radius
-    /// so small parts near (not exactly under) the cursor are still caught.
+    /// The cursor point plus a ring of samples around it, giving the pick a small screen-space
+    /// radius so small parts near (not exactly under) the cursor are still caught — but kept tight
+    /// so it doesn't sweep in neighbouring parts, especially when zoomed out.
     private func hitTestSamplePoints(around point: CGPoint) -> [CGPoint] {
-        let radius: CGFloat = 10 // forgiveness radius, in points
+        let radius: CGFloat = 5 // forgiveness radius, in points
         var points = [point]
-        for ringRadius in [radius * 0.5, radius] {
-            for step in 0 ..< 8 {
-                let angle = CGFloat(step) / 8 * 2 * .pi
-                points.append(CGPoint(x: point.x + cos(angle) * ringRadius, y: point.y + sin(angle) * ringRadius))
-            }
+        for step in 0 ..< 8 {
+            let angle = CGFloat(step) / 8 * 2 * .pi
+            points.append(CGPoint(x: point.x + cos(angle) * radius, y: point.y + sin(angle) * radius))
         }
         return points
     }
