@@ -32,7 +32,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             // emits in willSet, where self.hiddenPartIDs would still be the old value.
             if highlightedPartID != nil, viewOptions.hiddenPartIDs != oldValue.hiddenPartIDs {
                 applyHighlight()
-                sceneView.render()
+                sceneView.setNeedsRedraw()
             }
         }
     }
@@ -111,8 +111,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             self?.measurementController.cancelInProgress()
         }
         measurementController.onVisualChange = { [weak self] in
-            // render() drives updateAtTime → updateScreenSizes, which does the sizing.
-            self?.sceneView.render()
+            // The redraw drives updateAtTime → updateScreenSizes, which does the sizing.
+            self?.sceneView.setNeedsRedraw()
         }
         measurementController.undoManager = document.measurementUndoManager
         
@@ -341,7 +341,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             measurementController.hover(at: worldPoint)
         }
 
-        sceneView.render()
+        sceneView.setNeedsRedraw()
         updateNavLibPointerPosition()
     }
 
@@ -349,7 +349,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         guard measurementController.interactionMode == .measure else { return }
         if let worldPoint = measurementPoint(atViewPoint: point, flipY: false) {
             measurementController.commitPoint(at: worldPoint)
-            sceneView.render()
+            sceneView.setNeedsRedraw()
         }
     }
 

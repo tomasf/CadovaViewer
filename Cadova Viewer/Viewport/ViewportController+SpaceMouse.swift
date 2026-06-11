@@ -23,8 +23,6 @@ extension ViewportController {
             guard let self else { return }
             guard let runningApp, navLibIsActive else { return }
 
-            //print("Frontmost: \(runningApp.bundleIdentifier ?? "nil bundle id")")
-
             if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
                 navLibSession.applicationHasFocus = true
                 return
@@ -36,7 +34,6 @@ extension ViewportController {
             case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
             }
 
-            //print("navlib active \(active), for \(Preferences().navLibActivationBehavior)")
             navLibSession.applicationHasFocus = active
         }.store(in: &observers)
     }

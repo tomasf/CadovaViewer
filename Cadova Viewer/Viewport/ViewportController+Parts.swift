@@ -49,7 +49,7 @@ extension ViewportController {
         // hovered part. `applyHighlight` retargets it; a visible part keeps its normal look and a
         // hidden part is revealed as a faint ghost. See `ViewportController+Highlight`.
         applyHighlight()
-        sceneView.render()
+        sceneView.setNeedsRedraw()
     }
 
     func updatePartNodeVisibility(_ hiddenPartIDs: Set<ModelData.Part.ID>) {
