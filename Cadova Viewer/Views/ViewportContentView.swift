@@ -9,6 +9,10 @@ struct ViewportContentView: View {
     @ObservedObject var viewportController: ViewportController
     let viewportID: UUID
 
+    /// The pane's size, mirrored into SwiftUI state so the split controls' enabled state stays in
+    /// sync (the controller's `sceneViewSize` is a plain property and doesn't trigger a re-render).
+    @State private var paneSize: CGSize = .zero
+
     private var isFocused: Bool { viewModel.focusedViewportID == viewportID }
 
     var body: some View {
@@ -16,6 +20,7 @@ struct ViewportContentView: View {
             .onGeometryChange(for: CGSize.self, of: { $0.size }) {
                 viewportController.sceneViewSize = $0
                 viewportController.sceneView.overlaySKScene?.size = $0
+                paneSize = $0
             }
             .onContinuousHover(coordinateSpace: .local) { phase in
                 switch phase {
@@ -38,8 +43,7 @@ struct ViewportContentView: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                ViewportControlsOverlay(viewModel: viewModel, viewportID: viewportID,
-                                        size: viewportController.sceneViewSize)
+                ViewportControlsOverlay(viewModel: viewModel, viewportID: viewportID, size: paneSize)
             }
             .overlay {
                 if viewModel.hasMultipleViewports {
