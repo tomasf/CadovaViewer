@@ -67,6 +67,8 @@ class CustomSceneView: SCNView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        // Any click (including the start of a camera drag) focuses this viewport.
+        viewportController?.requestFocus()
         guard let viewportController, allowsCameraControl else { return }
 
         super.mouseDown(with: event)

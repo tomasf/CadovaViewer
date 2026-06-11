@@ -39,7 +39,9 @@ extension ViewportController {
     }
 
     func updateNavLibFocus() {
-        if let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) == document {
+        // Only the focused viewport drives the SpaceMouse — a single NavLib session is active at a
+        // time, so every viewport in the (main) document window would otherwise fight over it.
+        if isFocusedViewport, let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) == document {
             navLibSession.setAsActiveSession()
             navLibIsActive = true
         } else {

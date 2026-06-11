@@ -28,8 +28,6 @@ struct ViewportContentView: View {
                 case .ended: viewportController.hoverPoint = nil
                 }
             }
-            // A click (not a drag) focuses this viewport without stealing the camera drag.
-            .simultaneousGesture(TapGesture().onEnded { viewModel.focus(viewportID) })
             .overlay(alignment: .topLeading) {
                 MeasurementListOverlay(controller: viewportController.measurementController)
             }

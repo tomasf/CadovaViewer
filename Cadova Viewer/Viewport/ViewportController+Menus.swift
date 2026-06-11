@@ -145,6 +145,37 @@ extension ViewportController {
         builder.addSeparator()
         buildViewOptionToggles(with: builder)
         builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
+
+        buildViewportLayoutMenu(with: builder)
+    }
+
+    /// Split / close / focus-cycling commands for the focused viewport. Focus-cycling carries
+    /// keyboard shortcuts so a SpaceMouse button can be bound to move focus between viewports.
+    private func buildViewportLayoutMenu(with builder: MenuBuilder) {
+        guard let viewModel = documentViewModel else { return }
+        builder.addSeparator()
+
+        let canSplitWide = sceneViewSize.width >= ViewportLayoutMetrics.minPaneWidth * 2 + ViewportLayoutMetrics.dividerThickness
+        let canSplitTall = sceneViewSize.height >= ViewportLayoutMetrics.minPaneHeight * 2 + ViewportLayoutMetrics.dividerThickness
+
+        builder.addItem(label: "Split Side by Side", enabled: canSplitWide) {
+            viewModel.split(self.viewportID, axis: .horizontal)
+        }
+        builder.addItem(label: "Split Top and Bottom", enabled: canSplitTall) {
+            viewModel.split(self.viewportID, axis: .vertical)
+        }
+        builder.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports) {
+            viewModel.close(self.viewportID)
+        }
+
+        if viewModel.hasMultipleViewports {
+            builder.addItem(label: "Focus Next Viewport", keyEquivalent: "]") {
+                viewModel.focusAdjacentViewport(forward: true)
+            }
+            builder.addItem(label: "Focus Previous Viewport", keyEquivalent: "[") {
+                viewModel.focusAdjacentViewport(forward: false)
+            }
+        }
     }
 
     func buildFileMenu(with builder: MenuBuilder) {

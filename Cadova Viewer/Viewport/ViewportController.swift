@@ -16,6 +16,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     weak var document: Document?
 
+    /// This viewport's stable identity in the document's layout (its key in `DocumentViewModel`).
+    let viewportID: UUID
+    /// The owning view model, used by focus/split/close menu actions. Weak — the view model owns us.
+    weak var documentViewModel: DocumentViewModel?
+    /// Whether this is the document's focused viewport. Drives which NavLib (SpaceMouse) session is
+    /// the active one, and the focus border.
+    var isFocusedViewport = false
+
     let measurementController: MeasurementController
 
     /// This viewport's private clone of the shared model (clone nodes living in `scene`). Rebuilt
@@ -106,7 +114,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let showInfoCallbackSignals = PassthroughSubject<Void, Never>()
     var showInfoSignal: AnyPublisher<Void, Never> { showInfoCallbackSignals.eraseToAnyPublisher() }
 
-    init(document: Document, sceneController: SceneController) {
+    init(viewportID: UUID, document: Document, sceneController: SceneController) {
+        self.viewportID = viewportID
         self.sceneController = sceneController
         grid = ViewportGrid()
         let measurementParent = SCNNode()
@@ -337,6 +346,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         hasSetInitialView = true
         Preferences().viewOptions = viewOptions
+    }
+
+    /// Makes this the document's focused viewport (menu/toolbar/NavLib commands act on it). Called
+    /// when the scene view is clicked.
+    func requestFocus() {
+        documentViewModel?.focus(viewportID)
     }
 
     /// Releases the viewport before it's discarded (on close): stop NavLib motion and drop the

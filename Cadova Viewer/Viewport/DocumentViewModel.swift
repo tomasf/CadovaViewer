@@ -4,8 +4,8 @@ import ViewerCore
 
 /// Per-document coordinator for the (possibly split) set of viewports. Owns the shared
 /// `SceneController`, the live `ViewportController`s keyed by leaf id, the split layout tree and
-/// its divider ratios, and which viewport is focused. Also allocates/frees the per-viewport
-/// category bit. `DocumentView` observes this; the toolbar and menus act on `focusedViewport`.
+/// its divider ratios, and which viewport is focused. `DocumentView` observes this; the toolbar
+/// and menus act on `focusedViewport`.
 final class DocumentViewModel: ObservableObject {
     let sceneController: SceneController
     weak var document: Document?
@@ -14,7 +14,7 @@ final class DocumentViewModel: ObservableObject {
     @Published private(set) var viewports: [UUID: ViewportController] = [:]
     @Published var ratios: [UUID: Double] = [:]
     @Published var focusedViewportID: UUID {
-        didSet { observeFocusedViewport() }
+        didSet { focusDidChange() }
     }
 
     /// Re-publishes this model whenever the focused viewport (or its measurement controller)
@@ -34,8 +34,26 @@ final class DocumentViewModel: ObservableObject {
         let id = UUID()
         layout = .leaf(id)
         focusedViewportID = id
-        viewports[id] = ViewportController(document: document, sceneController: sceneController)
+        viewports[id] = makeViewport(id: id, document: document)
+        focusDidChange()
+    }
+
+    /// Creates a viewport wired back to this view model (so its scene view can request focus and
+    /// its menu can split/close/cycle focus).
+    private func makeViewport(id: UUID, document: Document) -> ViewportController {
+        let viewport = ViewportController(viewportID: id, document: document, sceneController: sceneController)
+        viewport.documentViewModel = self
+        return viewport
+    }
+
+    /// Reacts to a focus change: refresh the toolbar forwarding, update each viewport's focus flag,
+    /// and hand the active NavLib (SpaceMouse) session to the newly focused viewport.
+    private func focusDidChange() {
         observeFocusedViewport()
+        for (id, viewport) in viewports {
+            viewport.isFocusedViewport = (id == focusedViewportID)
+            viewport.updateNavLibFocus()
+        }
     }
 
     private func observeFocusedViewport() {
@@ -56,7 +74,8 @@ final class DocumentViewModel: ObservableObject {
     func split(_ id: UUID, axis: SplitLayout.Axis) {
         guard let document, let source = viewports[id] else { return }
 
-        let viewport = ViewportController(document: document, sceneController: sceneController)
+        let newID = UUID()
+        let viewport = makeViewport(id: newID, document: document)
         // A new viewport starts with a clean clone of the model; mirror the source viewport's
         // options (camera, grid, hidden parts) so the split starts out identical to it.
         viewport.setViewOptions(source.viewOptions)
@@ -66,7 +85,6 @@ final class DocumentViewModel: ObservableObject {
             viewport.applyLoadedModel()
         }
 
-        let newID = UUID()
         let splitID = UUID()
         viewports[newID] = viewport
         ratios[splitID] = 0.5
