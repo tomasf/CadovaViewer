@@ -143,7 +143,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         sceneView.showContextMenu.receive(on: DispatchQueue.main).sink { [weak self] event in
             guard let self else { return }
-            NSMenu.popUpContextMenu(contextMenu(), with: event, for: self.sceneView)
+            let viewPoint = sceneView.convert(event.locationInWindow, from: nil)
+            NSMenu.popUpContextMenu(contextMenu(at: viewPoint), with: event, for: sceneView)
         }.store(in: &observers)
 
         let initialCamera = SCNCamera()

@@ -3,16 +3,16 @@ import SceneKit
 import ViewerCore
 
 extension ViewportController {
-    func contextMenu() -> NSMenu {
+    /// Builds the right-click menu. `viewPoint` (in scene-view coordinates) is where the click
+    /// happened; the parts list shows only the parts whose geometry the pick ray passes through
+    /// there — every part along the ray, nearest first — rather than the whole model.
+    func contextMenu(at viewPoint: CGPoint? = nil) -> NSMenu {
         let builder = MenuBuilder()
+        let partsUnderCursor = viewPoint.map(partsUnderCursor(viewPoint:)) ?? []
         if sceneController.parts.count > 1 {
-            if sceneController.parts.count >= 10 {
-                builder.addItem(label: "Parts", submenu: { builder in
-                    self.buildPartsMenuItems(with: builder)
-                })
-            } else {
+            if !partsUnderCursor.isEmpty {
                 builder.addHeader("Parts")
-                buildPartsMenuItems(with: builder)
+                buildPartsMenuItems(for: partsUnderCursor, with: builder)
                 builder.addSeparator()
             }
 
@@ -33,8 +33,8 @@ extension ViewportController {
         return builder.makeMenu()
     }
 
-    func buildPartsMenuItems(with builder: MenuBuilder) {
-        for part in self.sceneController.parts {
+    func buildPartsMenuItems(for parts: [ModelData.Part], with builder: MenuBuilder) {
+        for part in parts {
             builder.addItem(label: part.name, checked: hiddenPartIDs.contains(part.id) == false) {
                 self.hiddenPartIDs.formSymmetricDifference([part.id])
             } onHighlight: { h, _ in
@@ -47,6 +47,62 @@ extension ViewportController {
                 self.highlightedPartID = h ? part.id : nil
             }
         }
+    }
+
+    /// The parts whose geometry lies under the cursor at `viewPoint` (scene-view coordinates),
+    /// ordered nearest-first — every part along the way, not just the closest. Small parts are hard
+    /// to hit with a single ray, so this casts a bundle of rays over a small disk around the cursor
+    /// (a screen-space "cylinder") and unions what they pass through; forgiveness measured in screen
+    /// points stays constant regardless of the part's depth. Hidden parts are included (their
+    /// geometry still lies under the cursor), which is why hidden nodes aren't ignored.
+    func partsUnderCursor(viewPoint: CGPoint) -> [ModelData.Part] {
+        guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return [] }
+
+        let partByContainer = Dictionary(
+            sceneController.parts.map { (ObjectIdentifier($0.nodes.container), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        var nearest: [ModelData.Part.ID: (part: ModelData.Part, distance: Double)] = [:]
+        for samplePoint in hitTestSamplePoints(around: viewPoint) {
+            let results = sceneView.hitTest(samplePoint, options: [
+                .rootNode: sceneController.modelContainer,
+                .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
+                .ignoreHiddenNodes: false
+            ])
+            for result in results {
+                guard let part = part(containing: result.node, in: partByContainer) else { continue }
+                let distance = result.worldCoordinates.distance(from: cameraPosition)
+                if distance < (nearest[part.id]?.distance ?? .greatestFiniteMagnitude) {
+                    nearest[part.id] = (part, distance)
+                }
+            }
+        }
+        return nearest.values.sorted { $0.distance < $1.distance }.map(\.part)
+    }
+
+    /// Walks up from a hit node to the part container that owns it.
+    private func part(containing node: SCNNode, in partByContainer: [ObjectIdentifier: ModelData.Part]) -> ModelData.Part? {
+        var current: SCNNode? = node
+        while let node = current {
+            if let part = partByContainer[ObjectIdentifier(node)] { return part }
+            current = node.parent
+        }
+        return nil
+    }
+
+    /// The cursor point plus two rings of samples around it, giving the pick a screen-space radius
+    /// so small parts near (not exactly under) the cursor are still caught.
+    private func hitTestSamplePoints(around point: CGPoint) -> [CGPoint] {
+        let radius: CGFloat = 10 // forgiveness radius, in points
+        var points = [point]
+        for ringRadius in [radius * 0.5, radius] {
+            for step in 0 ..< 8 {
+                let angle = CGFloat(step) / 8 * 2 * .pi
+                points.append(CGPoint(x: point.x + cos(angle) * ringRadius, y: point.y + sin(angle) * ringRadius))
+            }
+        }
+        return points
     }
 
 
