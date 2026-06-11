@@ -182,20 +182,22 @@ extension ViewportController {
             self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
         }
 
-        builder.addItem(label: "Smooth Shading", checked: viewOptions.smoothShading) {
-            self.viewOptions.smoothShading = !self.viewOptions.smoothShading
+        builder.addItem(label: "Smooth Shading", checked: sceneController.documentOptions.smoothShading) {
+            self.sceneController.documentOptions.smoothShading.toggle()
         }
     }
 
     func buildEdgeVisibilityMenu(_ menuBuilder: MenuBuilder) {
-        let initialEdgeVisibility = self.viewOptions.edgeVisibility
+        // Edge visibility is document-wide (it acts on the shared geometry), so it lives on the
+        // SceneController rather than this viewport's options.
+        let initialEdgeVisibility = sceneController.documentOptions.edgeVisibility
 
-        func visibility(_ visibility: ViewOptions.EdgeVisibility, label: String) {
-            menuBuilder.addItem(label: label, checked: self.viewOptions.edgeVisibility == visibility) {
-                self.viewOptions.edgeVisibility = visibility
+        func visibility(_ visibility: DocumentViewOptions.EdgeVisibility, label: String) {
+            menuBuilder.addItem(label: label, checked: sceneController.documentOptions.edgeVisibility == visibility) {
+                self.sceneController.documentOptions.edgeVisibility = visibility
             } onHighlight: { highlighted, isClosing in
                 if !isClosing {
-                    self.setEdgeVisibilityInParts(highlighted ? visibility : initialEdgeVisibility)
+                    self.sceneController.setEdgeVisibility(highlighted ? visibility : initialEdgeVisibility)
                 }
             }
         }

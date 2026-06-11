@@ -184,16 +184,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
             grid.updateBounds(geometry: sceneController.modelContainer)
             snapVertices = gatherSnapVertices()
-            setEdgeVisibilityInParts(viewOptions.edgeVisibility)
-            setSmoothShadingInParts(viewOptions.smoothShading)
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
             objectWillChange.send()
         }.store(in: &observers)
 
         $viewOptions.sink { [weak self] viewOptions in
             guard let self else { return }
-            setEdgeVisibilityInParts(viewOptions.edgeVisibility)
-            setSmoothShadingInParts(viewOptions.smoothShading)
             grid.showGrid = viewOptions.showGrid
             grid.showOrigin = viewOptions.showOrigin
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
@@ -279,8 +275,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         grid.showGrid = viewOptions.showGrid
         grid.showOrigin = viewOptions.showOrigin
         cameraNode.transform = viewOptions.cameraTransform
-        setEdgeVisibilityInParts(viewOptions.edgeVisibility)
-        setSmoothShadingInParts(viewOptions.smoothShading)
         updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         hasSetInitialView = true
         Preferences().viewOptions = viewOptions

@@ -58,37 +58,6 @@ extension ViewportController {
         }
     }
 
-    func setEdgeVisibilityInParts(_ visibility: ViewOptions.EdgeVisibility) {
-        for part in sceneController.parts {
-            part.nodes.sharpEdges?.isHidden = (visibility == .none)
-            part.nodes.smoothEdges?.isHidden = (visibility != .all)
-        }
-    }
-
-    /// Swaps every main-geometry node between its faceted (flat) geometry and a smooth-shaded
-    /// variant. Turning smooth shading off is an instant main-thread swap. Turning it on builds
-    /// the smooth geometry off the main thread on first use (cached thereafter), then applies the
-    /// swap on the main actor, so large models don't hitch the UI.
-    func setSmoothShadingInParts(_ smooth: Bool) {
-        let variants = sceneController.parts.flatMap(\.modelGeometryVariants)
-        guard smooth else {
-            for variant in variants {
-                variant.node.geometry = variant.flat
-            }
-            return
-        }
-
-        Task.detached {
-            await withTaskGroup(of: (ModelGeometryVariant, SCNGeometry).self) { group in
-                for variant in variants {
-                    group.addTask { (variant, variant.smoothGeometry()) }
-                }
-                for await (variant, geometry) in group {
-                    await MainActor.run { variant.node.geometry = geometry }
-                }
-            }
-        }
-    }
 }
 
 extension SCNNode {

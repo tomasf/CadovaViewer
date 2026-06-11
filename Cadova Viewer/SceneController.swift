@@ -11,6 +11,15 @@ final class SceneController: ObservableObject {
 
     @Published var parts: [ModelData.Part] = []
 
+    /// Document-wide view options that act on the shared geometry (smooth shading, edge
+    /// visibility). Owned here, not on any single viewport, because they mutate the shared parts.
+    @Published var documentOptions: DocumentViewOptions = Preferences().documentViewOptions {
+        didSet {
+            applyDocumentOptions()
+            Preferences().documentViewOptions = documentOptions
+        }
+    }
+
     /// The model's bounding box and sphere, cached when the model loads. Computing these from
     /// `modelContainer` walks the whole node hierarchy and takes SceneKit's scene lock, which
     /// contends with the render thread — costly when read on every NavLib (SpaceMouse) motion
@@ -69,7 +78,47 @@ final class SceneController: ObservableObject {
         modelBoundingBox = modelContainer.boundingBox
         modelBoundingSphere = modelContainer.boundingSphere
 
+        applyDocumentOptions()
         modelLoadedSignal.send()
+    }
+
+    // MARK: - Document-wide geometry options
+
+    func applyDocumentOptions() {
+        setEdgeVisibility(documentOptions.edgeVisibility)
+        setSmoothShading(documentOptions.smoothShading)
+    }
+
+    func setEdgeVisibility(_ visibility: DocumentViewOptions.EdgeVisibility) {
+        for part in parts {
+            part.nodes.sharpEdges?.isHidden = (visibility == .none)
+            part.nodes.smoothEdges?.isHidden = (visibility != .all)
+        }
+    }
+
+    /// Swaps every main-geometry node between its faceted (flat) geometry and a smooth-shaded
+    /// variant. Turning smooth shading off is an instant main-thread swap. Turning it on builds
+    /// the smooth geometry off the main thread on first use (cached thereafter), then applies the
+    /// swap on the main actor, so large models don't hitch the UI.
+    func setSmoothShading(_ smooth: Bool) {
+        let variants = parts.flatMap(\.modelGeometryVariants)
+        guard smooth else {
+            for variant in variants {
+                variant.node.geometry = variant.flat
+            }
+            return
+        }
+
+        Task.detached {
+            await withTaskGroup(of: (ModelGeometryVariant, SCNGeometry).self) { group in
+                for variant in variants {
+                    group.addTask { (variant, variant.smoothGeometry()) }
+                }
+                for await (variant, geometry) in group {
+                    await MainActor.run { variant.node.geometry = geometry }
+                }
+            }
+        }
     }
 
     private func setupAmbientLight() {

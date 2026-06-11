@@ -6,6 +6,7 @@ class Preferences: ObservableObject {
     static let navLibActivationBehaviorKey = "navLibActivationBehavior"
     static let navLibWhitelistedAppsDataKey = "navLibWhitelistedApps"
     static let viewOptionsDataKey = "viewOptions"
+    static let documentViewOptionsDataKey = "documentViewOptions"
 
     enum NavLibAppActivationBehavior: String, RawRepresentable {
         case foregroundOnly
@@ -42,6 +43,12 @@ class Preferences: ObservableObject {
     var viewOptions: ViewOptions {
         get { self[Self.viewOptionsDataKey] ?? .init() }
         set { self[Self.viewOptionsDataKey] = newValue }
+    }
+
+    /// Document-wide defaults (smooth shading, edge visibility) for newly opened documents.
+    var documentViewOptions: DocumentViewOptions {
+        get { self[Self.documentViewOptionsDataKey] ?? .init() }
+        set { self[Self.documentViewOptionsDataKey] = newValue }
     }
 
     var navLibActivationBehavior: NavLibAppActivationBehavior {
