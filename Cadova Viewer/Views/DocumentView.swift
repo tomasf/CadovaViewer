@@ -8,8 +8,7 @@ import ViewerCore
 struct DocumentView: View {
     let url: URL
     let errorHandler: (Error) -> ()
-    @ObservedObject var viewportController: ViewportController
-    @ObservedObject var measurementController: MeasurementController
+    @ObservedObject var viewModel: DocumentViewModel
     @State var isLoading = false
     @State var infoData: InformationView.Model?
     @State var modelData: ModelData?
@@ -30,32 +29,22 @@ struct DocumentView: View {
 
     let spacer = ToolbarItem(id: NSToolbarItem.Identifier.space.rawValue, placement: .primaryAction, showsByDefault: true) { Color.clear }
 
-    init(url: URL, errorHandler: @escaping (Error) -> Void, viewportController: ViewportController) {
-        self.url = url
-        self.errorHandler = errorHandler
-        self.viewportController = viewportController
-        self.measurementController = viewportController.measurementController
+    /// The viewport the toolbar and menus act on.
+    private var focused: ViewportController { viewModel.focusedViewport }
+
+    private var interactionMode: Binding<InteractionMode> {
+        Binding(get: { viewModel.focusedViewport.measurementController.interactionMode },
+                set: { viewModel.focusedViewport.measurementController.interactionMode = $0 })
+    }
+
+    private var projection: Binding<ViewportController.CameraProjection> {
+        Binding(get: { viewModel.focusedViewport.projection },
+                set: { viewModel.focusedViewport.projection = $0 })
     }
 
     var body: some View {
-        ViewerSceneView(viewportController: viewportController)
-            .onGeometryChange(for: CGSize.self, of: { $0.size }) {
-                viewportController.sceneViewSize = $0
-                viewportController.sceneView.overlaySKScene?.size = $0
-            }
+        ViewportSplitView(viewModel: viewModel)
             .frame(minWidth: 500, minHeight: 300)
-            .overlay(alignment: .topLeading) {
-                MeasurementListOverlay(controller: measurementController)
-            }
-            .overlay(alignment: .bottomLeading) {
-                PartListOverlay(viewportController: viewportController)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if viewportController.viewOptions.showCoordinateSystemIndicator {
-                    CoordinateSystemIndicator(stream: viewportController.coordinateIndicatorValues)
-                        .padding()
-                }
-            }
             .overlay(alignment: .bottom) {
                 Text("Loading")
                     .font(.title2)
@@ -73,22 +62,16 @@ struct DocumentView: View {
             }
             .colorScheme(.dark)
             .toolbar(id: "document") { toolbar }
-            .onContinuousHover(coordinateSpace: .local) { phase in
-                switch phase {
-                case .active(let point): viewportController.hoverPoint = point
-                case .ended: viewportController.hoverPoint = nil
-                }
-            }
-            .onReceive(viewportController.document!.loadingStream) { status in
+            .onReceive(viewModel.document!.loadingStream) { status in
                 withAnimation(.easeInOut) {
                     isLoading = status
                 }
             }
-            .onReceive(viewportController.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
+            .onReceive(viewModel.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
                 self.modelData = modelData
             }
-            .onReceive(viewportController.showInfoSignal) { _ in
-                if let modelData, let document = viewportController.document {
+            .onReceive(focused.showInfoSignal) { _ in
+                if let modelData, let document = viewModel.document {
                     self.infoData = .init(document: document, modelData: modelData)
                 }
             }
@@ -101,7 +84,7 @@ struct DocumentView: View {
     var toolbar: some CustomizableToolbarContent {
         Group {
             ToolbarItem(id: "interaction-mode", placement: .primaryAction) {
-                Picker("Mode", selection: $measurementController.interactionMode) {
+                Picker("Mode", selection: interactionMode) {
                     Image(systemName: "rotate.3d")
                         .help("View")
                         .tag(InteractionMode.view)
@@ -116,7 +99,7 @@ struct DocumentView: View {
             spacer
 
             ToolbarItem(id: "projection", placement: .primaryAction) {
-                Picker("Projection", selection: $viewportController.projection) {
+                Picker("Projection", selection: projection) {
                     Image(systemName: "perspective")
                         .help("Perspective")
                         .tag(ViewportController.CameraProjection.perspective)
@@ -133,13 +116,13 @@ struct DocumentView: View {
             ToolbarItem(id: "zoom", placement: .primaryAction) {
                 ControlGroup {
                     Button {
-                        viewportController.zoomOut()
+                        focused.zoomOut()
                     } label: {
                         Label { Text("Zoom Out") } icon: { Image(systemName: "minus.magnifyingglass") }
                     }
 
                     Button {
-                        viewportController.zoomIn()
+                        focused.zoomIn()
                     } label: {
                         Label { Text("Zoom In") } icon: { Image(systemName: "plus.magnifyingglass") }
                     }
@@ -152,12 +135,12 @@ struct DocumentView: View {
         let itemForStandardView = { (view: StandardView, isDefault: Bool) in
             ToolbarItem(id: "standard-view-\(view.name.lowercased())", placement: .primaryAction, showsByDefault: isDefault) {
                 Button {
-                    viewportController.showViewPreset(view.viewPreset, animated: true)
+                    focused.showViewPreset(view.viewPreset, animated: true)
                 } label: {
                     Label { Text(view.name) } icon: { view.icon }
                 }
                 .help(view.name)
-                .disabled(viewportController.canShowPresets[view.viewPreset] == false)
+                .disabled(focused.canShowPresets[view.viewPreset] == false)
             }
         }
 
@@ -201,7 +184,7 @@ struct DocumentView: View {
         Group {
             ToolbarItem(id: "clear-roll", placement: .primaryAction, showsByDefault: false) {
                 Button {
-                    viewportController.clearRoll()
+                    focused.clearRoll()
                 } label: {
                     Label {
                         Text("Straighten Camera")
@@ -209,7 +192,7 @@ struct DocumentView: View {
                         Image(systemName: "level")
                     }
                 }
-                .disabled(viewportController.canResetCameraRoll == false)
+                .disabled(focused.canResetCameraRoll == false)
             }
 
             ToolbarItem(id: "share", placement: .primaryAction, showsByDefault: false) {

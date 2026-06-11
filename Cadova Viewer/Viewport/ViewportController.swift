@@ -175,17 +175,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         updateCameraProjection()
 
         sceneController.modelWasLoaded.sink { [weak self] in
-            guard let self else { return }
-
-            if !hasSetInitialView {
-                showViewPreset(.isometric, animated: false)
-                hasSetInitialView = true
-            }
-
-            grid.updateBounds(geometry: sceneController.modelContainer)
-            snapVertices = gatherSnapVertices()
-            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-            objectWillChange.send()
+            self?.applyLoadedModel()
         }.store(in: &observers)
 
         $viewOptions.sink { [weak self] viewOptions in
@@ -270,6 +260,21 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         setCameraView(clearRollView(), movement: .small)
     }
 
+    /// Per-viewport setup that depends on the loaded model: fit the camera (first time only),
+    /// size the grid to the model bounds, gather snap vertices, and apply part visibility. Called
+    /// when the model loads and when a viewport is created by a split after the model is loaded.
+    func applyLoadedModel() {
+        if !hasSetInitialView {
+            showViewPreset(.isometric, animated: false)
+            hasSetInitialView = true
+        }
+
+        grid.updateBounds(geometry: sceneController.modelContainer)
+        snapVertices = gatherSnapVertices()
+        updatePartNodeVisibility(viewOptions.hiddenPartIDs)
+        objectWillChange.send()
+    }
+
     func setViewOptions(_ viewOptions: ViewOptions) {
         self.viewOptions = viewOptions
         grid.showGrid = viewOptions.showGrid
@@ -278,6 +283,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         hasSetInitialView = true
         Preferences().viewOptions = viewOptions
+    }
+
+    /// Releases the viewport before it's discarded (on close): stop NavLib motion and drop the
+    /// notification/Combine subscriptions. The shared scene's private node is removed by the
+    /// document view model. The controller then deallocates with its scene view and NavLib session.
+    func tearDown() {
+        setNavLibSuspended(true)
+        observers.removeAll()
     }
 
     func showSceneKitRenderingOptions() {

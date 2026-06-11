@@ -144,6 +144,14 @@ final class SceneController: ObservableObject {
         return node
     }
 
+    /// Removes a viewport's private node (its grid, measurement geometry, etc.) when the viewport
+    /// is closed.
+    func removeViewportPrivateNode(for id: Int) {
+        viewportPrivateContainer.childNodes
+            .first { ($0.categoryBitMask & (1 << id)) > 0 }?
+            .removeFromParentNode()
+    }
+
     var edgeNodes: [SCNNode] {
         let edgeContainers = parts.compactMap(\.nodes.sharpEdges) + parts.compactMap(\.nodes.smoothEdges)
         return edgeContainers.flatMap { $0.childNodes { node, _ in node.geometry != nil }}
