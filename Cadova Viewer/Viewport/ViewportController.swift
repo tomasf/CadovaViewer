@@ -57,7 +57,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         didSet { hoverPointDidChange() }
     }
     
-    var highlightNode: SCNNode?
+    /// The geometry node currently named as the outline target, so its name can be cleared when
+    /// the highlight moves. See `ViewportController+Highlight`.
+    var outlineTargetNode: SCNNode?
+
+    /// The faint ghost shown for a highlighted hidden part (its real geometry is invisible), kept
+    /// so it can be torn down when the highlight moves.
+    var highlightGhostNode: SCNNode?
+
     var observers: Set<AnyCancellable> = []
 
     /// World-space corner vertices (endpoints of the model's sharp/feature edges) that

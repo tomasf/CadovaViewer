@@ -45,61 +45,16 @@ extension ViewportController {
     }
 
     func updateHighlightedPart(oldID oldValue: ModelData.Part.ID?, newID newValue: ModelData.Part.ID?) {
-        if oldValue != nil {
-            removeHighlight()
-            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-        }
-        if let highlightedPartID, let part = part(withID: highlightedPartID) {
-            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-            highlightPart(part)
-        }
-    }
-
-    private func highlightPart(_ part: ModelData.Part) {
-        let clone = part.nodes.model.clone()
-        clone.opacity = 1
-        clone.name = "Highlight node"
-        highlightNode = clone
-        sceneController.viewportPrivateNode(for: categoryID).addChildNode(clone)
-        highlightNode?.setVisible(true, forViewportID: categoryID)
-
-        let highlight = SCNMaterial()
-        highlight.lightingModel = .constant
-        highlight.transparencyMode = .singleLayer
-        let color1 = #colorLiteral(red: 0.3659334006, green: 0.6078522355, blue: 0.8041835711, alpha: 0.7)
-        highlight.diffuse.contents = color1
-
-        for child in clone.childNodes {
-            guard let oldGeometry = child.geometry else { continue }
-            let newGeometry = SCNGeometry(sources: oldGeometry.sources(for: .vertex), elements: oldGeometry.elements)
-            newGeometry.materials = [highlight]
-            child.geometry = newGeometry
-        }
-
-        let color2 = #colorLiteral(red: 0.3659334006, green: 0.6078522355, blue: 0.8041835711, alpha: 0.5)
-        let duration = 0.4
-        let action = SCNAction.customAction(duration: duration) { node, time in
-            highlight.diffuse.contents = color1.blended(withFraction: time / duration, of: color2)
-        }
-        action.timingMode = .easeInEaseOut
-
-        let action2 = SCNAction.customAction(duration: duration) { node, time in
-            highlight.diffuse.contents = color2.blended(withFraction: time / duration, of: color1)
-        }
-        action2.timingMode = .easeInEaseOut
-
-        clone.runAction(.sequence([.wait(duration: 0.3), .repeatForever(.sequence([action, action2]))]))
-    }
-
-    private func removeHighlight() {
-        highlightNode?.removeFromParentNode()
-        highlightNode = nil
+        // The highlight is an outline drawn by the post-process (`Outline.metal`) around the
+        // hovered part. `applyHighlight` retargets it; a visible part keeps its normal look and a
+        // hidden part is revealed as a faint ghost. See `ViewportController+Highlight`.
+        applyHighlight()
+        sceneView.render()
     }
 
     func updatePartNodeVisibility(_ hiddenPartIDs: Set<ModelData.Part.ID>) {
         for part in sceneController.parts {
-            let visibility = hiddenPartIDs.contains(part.id) == false && highlightedPartID != part.id
-            part.nodes.container.setVisible(visibility, forViewportID: categoryID)
+            part.nodes.container.setVisible(!hiddenPartIDs.contains(part.id), forViewportID: categoryID)
         }
     }
 
