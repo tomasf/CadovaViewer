@@ -21,6 +21,9 @@ final class DocumentViewModel: ObservableObject {
     /// changes, so the focus-following toolbar in `DocumentView` refreshes.
     private var focusObservers: Set<AnyCancellable> = []
 
+    /// Long-lived subscriptions (document-global options → restorable state).
+    private var cancellables: Set<AnyCancellable> = []
+
     var focusedViewport: ViewportController {
         viewports[focusedViewportID] ?? viewports[layout.leafIDs[0]]!
     }
@@ -36,6 +39,11 @@ final class DocumentViewModel: ObservableObject {
         focusedViewportID = id
         viewports[id] = makeViewport(id: id, document: document)
         focusDidChange()
+
+        // The document-global geometry options are part of the saved state.
+        sceneController.$documentOptions.dropFirst().sink { [weak self] _ in
+            self?.document?.invalidateRestorableState()
+        }.store(in: &cancellables)
     }
 
     /// Creates a viewport wired back to this view model (so its scene view can request focus and
@@ -54,6 +62,7 @@ final class DocumentViewModel: ObservableObject {
             viewport.isFocusedViewport = (id == focusedViewportID)
             viewport.updateNavLibFocus()
         }
+        document?.invalidateRestorableState()
     }
 
     private func observeFocusedViewport() {
@@ -66,7 +75,10 @@ final class DocumentViewModel: ObservableObject {
 
     func ratio(for splitID: UUID) -> Binding<Double> {
         Binding(get: { [weak self] in self?.ratios[splitID] ?? 0.5 },
-                set: { [weak self] in self?.ratios[splitID] = $0 })
+                set: { [weak self] in
+                    self?.ratios[splitID] = $0
+                    self?.document?.invalidateRestorableState()
+                })
     }
 
     // MARK: - Split / close
@@ -118,4 +130,57 @@ final class DocumentViewModel: ObservableObject {
         let next = (index + (forward ? 1 : ids.count - 1)) % ids.count
         focus(ids[next])
     }
+
+    // MARK: - State restoration
+
+    /// Captures the full layout (tree, divider ratios, focus, each viewport's options, and the
+    /// document-global geometry options) for `NSDocument` restorable state.
+    func snapshot() -> DocumentLayoutState {
+        DocumentLayoutState(
+            layout: layout,
+            ratios: ratios,
+            focusedViewportID: focusedViewportID,
+            viewOptions: viewports.mapValues(\.viewOptions),
+            documentOptions: sceneController.documentOptions
+        )
+    }
+
+    /// Rebuilds the viewports and layout from a saved snapshot, replacing the initial single
+    /// viewport. Applies each viewport's options now; if the model hasn't loaded yet, each
+    /// viewport's `modelWasLoaded` sink builds its clone later (the restored camera is preserved).
+    func restore(_ state: DocumentLayoutState) {
+        guard let document, !state.layout.leafIDs.isEmpty else { return }
+
+        for viewport in viewports.values { viewport.tearDown() }
+
+        sceneController.documentOptions = state.documentOptions
+
+        var rebuilt: [UUID: ViewportController] = [:]
+        for id in state.layout.leafIDs {
+            let viewport = makeViewport(id: id, document: document)
+            if let options = state.viewOptions[id] {
+                viewport.setViewOptions(options)
+            }
+            if !sceneController.parts.isEmpty {
+                viewport.applyLoadedModel()
+            }
+            rebuilt[id] = viewport
+        }
+
+        viewports = rebuilt
+        ratios = state.ratios
+        layout = state.layout
+        focusedViewportID = state.layout.leafIDs.contains(state.focusedViewportID)
+            ? state.focusedViewportID : state.layout.leafIDs[0]
+        focusDidChange()
+    }
+}
+
+/// The persisted shape of a document's viewport layout (see `DocumentViewModel.snapshot`).
+struct DocumentLayoutState: Codable {
+    var layout: SplitLayout
+    var ratios: [UUID: Double]
+    var focusedViewportID: UUID
+    var viewOptions: [UUID: ViewOptions]
+    var documentOptions: DocumentViewOptions
 }

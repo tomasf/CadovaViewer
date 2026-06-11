@@ -127,23 +127,23 @@ class Document: NSDocument, NSWindowDelegate {
         windowControllers.first?.contentViewController as? DocumentHostingController
     }
 
-    private static let viewOptionsKey = "viewOptions"
+    private static let layoutStateKey = "documentLayoutState"
 
     override func encodeRestorableState(with coder: NSCoder) {
         super.encodeRestorableState(with: coder)
-        guard let viewOptions = documentHostingController?.viewportController.viewOptions,
-              let data = try? JSONEncoder().encode(viewOptions)
+        guard let state = documentHostingController?.viewModel.snapshot(),
+              let data = try? JSONEncoder().encode(state)
         else { return }
 
-        coder.encode(data, forKey: Self.viewOptionsKey)
+        coder.encode(data, forKey: Self.layoutStateKey)
     }
 
     override func restoreState(with coder: NSCoder) {
         super.restoreState(with: coder)
-        if let data = coder.decodeObject(forKey: Self.viewOptionsKey) as? Data,
-           let viewOptions = try? JSONDecoder().decode(ViewOptions.self, from: data)
+        if let data = coder.decodeObject(forKey: Self.layoutStateKey) as? Data,
+           let state = try? JSONDecoder().decode(DocumentLayoutState.self, from: data)
         {
-            documentHostingController?.viewportController.setViewOptions(viewOptions)
+            documentHostingController?.viewModel.restore(state)
         }
     }
 
