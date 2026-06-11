@@ -2,10 +2,6 @@ import Foundation
 import AppKit
 import SwiftUI
 
-enum GlobalCategoryMasks: Int {
-    case universal = 1
-}
-
 class DocumentHostingController: NSHostingController<DocumentView>, NSMenuItemValidation {
     let viewModel: DocumentViewModel
     var sceneController: SceneController { viewModel.sceneController }

@@ -197,7 +197,9 @@ extension ViewportController {
                 self.sceneController.documentOptions.edgeVisibility = visibility
             } onHighlight: { highlighted, isClosing in
                 if !isClosing {
-                    self.sceneController.setEdgeVisibility(highlighted ? visibility : initialEdgeVisibility)
+                    // Preview by setting the document-wide option (every viewport reflects it);
+                    // restored to the initial value when the highlight leaves without a click.
+                    self.sceneController.documentOptions.edgeVisibility = highlighted ? visibility : initialEdgeVisibility
                 }
             }
         }

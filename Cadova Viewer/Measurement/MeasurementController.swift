@@ -66,7 +66,6 @@ final class MeasurementController: ObservableObject {
     private var lastSizedCameraProjection = SCNMatrix4Identity
 
     private let parentNode: SCNNode
-    private let categoryID: Int
 
     /// Desired on-screen radii (in view points), kept constant regardless of zoom.
     private let dotScreenRadius = 4.5
@@ -100,9 +99,8 @@ final class MeasurementController: ObservableObject {
     private let nodesLock = NSLock()
     private let hoverPreviewKey = UUID()
 
-    init(parentNode: SCNNode, categoryID: Int) {
+    init(parentNode: SCNNode) {
         self.parentNode = parentNode
-        self.categoryID = categoryID
     }
 
     // MARK: - Interaction
@@ -269,8 +267,6 @@ final class MeasurementController: ObservableObject {
             container.addChildNode(overlay)
             overlayLine = overlay
         }
-
-        container.setVisible(true, forViewportID: categoryID)
 
         nodesLock.lock()
         pendingResizeIDs.insert(id)

@@ -27,7 +27,7 @@ class CustomSceneView: SCNView {
     var mouseInteractionActive: AnyPublisher<Bool, Never> { mouseInteractionActiveSubject.eraseToAnyPublisher() }
     var mouseRotationPivot: AnyPublisher<SCNVector3?, Never> { mouseRotationPivotSubject.eraseToAnyPublisher() }
     var showContextMenu: AnyPublisher<NSEvent, Never> { contextMenuSubject.eraseToAnyPublisher() }
-    weak var sceneController: SceneController?
+    weak var viewportController: ViewportController?
 
     private let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     private let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
@@ -67,15 +67,15 @@ class CustomSceneView: SCNView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard let sceneController, allowsCameraControl else { return }
+        guard let viewportController, allowsCameraControl else { return }
 
         super.mouseDown(with: event)
         let localPoint = convert(event.locationInWindow, from: nil)
-        let edgeNodes = sceneController.edgeNodes
+        let edgeNodes = viewportController.edgeNodes
 
         if let result = hitTest(localPoint, options: [
             .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
-            .rootNode: sceneController.modelContainer
+            .rootNode: viewportController.modelInstance.root
         ]).first(where: { !edgeNodes.contains($0.node) }) {
             defaultCameraController.target = result.worldCoordinates
         } else {
@@ -148,7 +148,7 @@ class CustomSceneView: SCNView {
         renderer.debugOptions = debugOptions
 
         if withBackground == false {
-            sceneController?.viewportPrivateContainer.isHidden = true
+            viewportController?.privateRoot.isHidden = true
         }
 
         let image = renderer.snapshot(
@@ -156,7 +156,7 @@ class CustomSceneView: SCNView {
             with: CGSize(width: bounds.size.width * snapshotScale, height: bounds.size.height * snapshotScale),
             antialiasingMode: antialiasingMode
         )
-        sceneController?.viewportPrivateContainer.isHidden = false
+        viewportController?.privateRoot.isHidden = false
         let rect = NSRect(origin: .zero, size: image.size)
 
         guard let imageRep = NSBitmapImageRep(

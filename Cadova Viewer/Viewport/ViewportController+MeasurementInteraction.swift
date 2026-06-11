@@ -109,7 +109,7 @@ extension ViewportController {
         // so they stay within the tolerance below.
         let screenPoint = sceneView.projectPoint(vertex)
         let nearestHit = sceneView.hitTest(CGPoint(x: screenPoint.x, y: screenPoint.y), options: [
-            .rootNode: sceneController.modelContainer,
+            .rootNode: modelInstance.root,
             .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
         ]).first
 
@@ -203,8 +203,9 @@ extension ViewportController {
         var best: SCNVector3?
         var bestDistance = Double.greatestFiniteMagnitude
         for part in sceneController.parts where !hidden.contains(part.id) {
+            guard let modelNode = modelInstance.partModelNodes[part.id] else { continue }
             guard let hit = sceneView.hitTest(viewPoint, options: [
-                .rootNode: part.nodes.model,
+                .rootNode: modelNode,
                 .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
             ]).first else { continue }
             let distance = hit.worldCoordinates.distance(from: cameraPosition)

@@ -52,28 +52,12 @@ extension ViewportController {
         sceneView.setNeedsRedraw()
     }
 
+    /// Per-viewport part visibility. Each viewport owns its own clone of the model, so hiding a
+    /// part is a plain `isHidden` on that viewport's clone container — it doesn't touch any other
+    /// viewport.
     func updatePartNodeVisibility(_ hiddenPartIDs: Set<ModelData.Part.ID>) {
-        for part in sceneController.parts {
-            part.nodes.container.setVisible(!hiddenPartIDs.contains(part.id), forViewportID: categoryID)
+        for (id, container) in modelInstance.partContainers {
+            container.isHidden = hiddenPartIDs.contains(id)
         }
-    }
-
-}
-
-extension SCNNode {
-    /// Shows or hides this node (and its subtree) in one viewport by toggling that viewport's
-    /// category bit on every node, leaving the other viewports' bits untouched.
-    func setVisible(_ visibility: Bool, forViewportID categoryID: Int) {
-        let bit = 1 << categoryID
-        enumerateHierarchy { node, _ in
-            if visibility {
-                node.categoryBitMask |= bit
-            } else {
-                node.categoryBitMask &= ~bit
-            }
-        }
-
-        // This won't work with multiple viewports, but line geometries don't seem to respect categoryBitMask
-        isHidden = !visibility
     }
 }

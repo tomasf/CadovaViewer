@@ -38,12 +38,15 @@ extension ViewportController {
         if hiddenPartIDs.contains(id) {
             // Hidden: reveal a faint ghost and outline its fill (the real geometry is invisible).
             let ghost = makeHighlightGhost(for: part)
-            sceneController.viewportPrivateNode(for: categoryID).addChildNode(ghost.root)
-            ghost.root.setVisible(true, forViewportID: categoryID)
+            privateRoot.addChildNode(ghost.root)
             highlightGhostNode = ghost.root
             target = ghost.fill
+        } else if let modelNode = modelInstance.partModelNodes[id] {
+            // Visible: outline this viewport's clone of the part's model node.
+            target = modelNode
         } else {
-            target = part.nodes.model
+            sceneView.technique = nil
+            return
         }
 
         target.name = outlineTargetName

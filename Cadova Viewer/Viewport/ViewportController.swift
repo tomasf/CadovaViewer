@@ -9,13 +9,26 @@ import ViewerCore
 class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let sceneView = CustomSceneView(frame: .zero)
     let sceneController: SceneController
+    /// This viewport's own scene. Each viewport renders an independent scene (its own real
+    /// lighting, its own `isHidden` part visibility) built from the shared model data.
+    let scene = SCNScene()
     var overlayScene: OverlayScene!
 
     weak var document: Document?
 
-    let categoryID: Int
-    let privateContainer: SCNNode
     let measurementController: MeasurementController
+
+    /// This viewport's private clone of the shared model (clone nodes living in `scene`). Rebuilt
+    /// whenever the model loads; mediates per-viewport visibility, hit testing, and the document-
+    /// global geometry options. See `ViewportModelInstance`.
+    var modelInstance = ViewportModelInstance()
+
+    /// Holds this viewport's chrome — grid, origin, measurements, highlight ghosts — under one node
+    /// so it can be hidden when copying a no-background snapshot.
+    let privateRoot = SCNNode()
+
+    /// The model's edge-line geometry nodes in this viewport's scene (depth offset + hit exclusion).
+    var edgeNodes: [SCNNode] { modelInstance.edgeGeometryNodes }
 
     var sceneViewSize: CGSize = .zero
 
@@ -93,19 +106,32 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let showInfoCallbackSignals = PassthroughSubject<Void, Never>()
     var showInfoSignal: AnyPublisher<Void, Never> { showInfoCallbackSignals.eraseToAnyPublisher() }
 
-    init(document: Document, sceneController: SceneController, categoryID: Int, privateContainer: SCNNode) {
+    init(document: Document, sceneController: SceneController) {
         self.sceneController = sceneController
-        self.categoryID = categoryID
-        self.privateContainer = privateContainer
-        grid = ViewportGrid(categoryID: categoryID)
-        privateContainer.addChildNode(grid.node)
-        measurementController = MeasurementController(
-            parentNode: sceneController.viewportPrivateNode(for: categoryID),
-            categoryID: categoryID
-        )
+        grid = ViewportGrid()
+        let measurementParent = SCNNode()
+        measurementParent.name = "Measurements"
+        measurementController = MeasurementController(parentNode: measurementParent)
 
         self.document = document
         super.init()
+
+        // Assemble this viewport's own scene: shared image-based lighting, its chrome (grid +
+        // measurements) under one hideable node, and an ambient fill. The model and the camera
+        // headlight are added later (on load / below).
+        scene.lightingEnvironment.contents = sceneController.skyboxImages
+        privateRoot.name = "Viewport chrome"
+        scene.rootNode.addChildNode(privateRoot)
+        privateRoot.addChildNode(grid.node)
+        privateRoot.addChildNode(measurementParent)
+
+        let ambientLight = SCNLight()
+        ambientLight.type = .ambient
+        ambientLight.intensity = 30
+        let ambientLightNode = SCNNode()
+        ambientLightNode.name = "Ambient light"
+        ambientLightNode.light = ambientLight
+        scene.rootNode.addChildNode(ambientLightNode)
 
         sceneView.onClick = { [weak self] point in
             self?.handleMeasurementClick(at: point)
@@ -118,12 +144,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             self?.sceneView.setNeedsRedraw()
         }
         measurementController.undoManager = document.measurementUndoManager
-        
+
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
-        sceneView.sceneController = sceneController
+        sceneView.viewportController = self
 
-        sceneView.scene = sceneController.scene
+        sceneView.scene = scene
         sceneView.showsStatistics = false
 
         sceneView.mouseInteractionActive.sink { [weak self] active in
@@ -154,7 +180,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         let initialCameraNode = SCNNode()
         initialCameraNode.name = "Initial camera node"
         initialCameraNode.camera = initialCamera
-        sceneController.scene.rootNode.addChildNode(initialCameraNode)
+        scene.rootNode.addChildNode(initialCameraNode)
         sceneView.pointOfView = initialCameraNode
         self.cameraNode = initialCameraNode
 
@@ -164,10 +190,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.defaultCameraController.automaticTarget = true
         sceneView.defaultCameraController.interactionMode = .orbitTurntable
 
+        // A real directional headlight, parented to the camera node. Because this viewport renders
+        // its own scene, the light affects only this viewport — no category-mask isolation needed.
         sceneView.autoenablesDefaultLighting = false
         cameraLight.type = .directional
         cameraLight.intensity = 800
-        cameraLight.categoryBitMask = 1 << categoryID
         cameraNode.light = cameraLight
 
         sceneView.delegate = self
@@ -176,6 +203,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         sceneController.modelWasLoaded.sink { [weak self] in
             self?.applyLoadedModel()
+        }.store(in: &observers)
+
+        sceneController.documentGeometryChanged.sink { [weak self] in
+            self?.applyDocumentOptions()
         }.store(in: &observers)
 
         $viewOptions.sink { [weak self] viewOptions in
@@ -207,8 +238,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         cameraNode.light = nil
         cameraNode = newCameraNode
         newCameraNode.light = cameraLight
-
-        cameraNode.camera?.categoryBitMask = GlobalCategoryMasks.universal.rawValue | (1 << categoryID)
     }
 
     func viewDidChange() {
@@ -244,9 +273,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         coordinateIndicatorValueStream.send(indicatorValues)
 
         sceneView.applyEdgeDepthOffset(
-            edgeNodes: sceneController.edgeNodes,
+            edgeNodes: modelInstance.edgeGeometryNodes,
             cameraNode: cameraNode,
-            modelNode: sceneController.modelContainer,
+            modelNode: modelInstance.root,
             viewSize: sceneViewSize
         )
 
@@ -260,19 +289,44 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         setCameraView(clearRollView(), movement: .small)
     }
 
-    /// Per-viewport setup that depends on the loaded model: fit the camera (first time only),
-    /// size the grid to the model bounds, gather snap vertices, and apply part visibility. Called
-    /// when the model loads and when a viewport is created by a split after the model is loaded.
+    /// (Re)builds this viewport's clone of the now-loaded model and runs the per-viewport setup
+    /// that depends on it: swaps the clone into the scene, applies the document-global geometry
+    /// options and this viewport's part visibility, fits the camera (first time only), sizes the
+    /// grid, and gathers snap vertices. Called when the model loads and when a viewport is created
+    /// by a split after the model is already loaded.
     func applyLoadedModel() {
+        modelInstance.root.removeFromParentNode()
+        modelInstance = ViewportModelInstance(modelData: sceneController.modelData)
+        scene.rootNode.addChildNode(modelInstance.root)
+
+        applyDocumentOptions()
+        updatePartNodeVisibility(viewOptions.hiddenPartIDs)
+
         if !hasSetInitialView {
             showViewPreset(.isometric, animated: false)
             hasSetInitialView = true
         }
 
-        grid.updateBounds(geometry: sceneController.modelContainer)
+        grid.updateBounds(geometry: modelInstance.root)
         snapVertices = gatherSnapVertices()
-        updatePartNodeVisibility(viewOptions.hiddenPartIDs)
         objectWillChange.send()
+    }
+
+    /// Applies the document-global geometry options (edge visibility, smooth shading) to this
+    /// viewport's clone nodes. Smooth geometry is shared and built off the main thread by
+    /// `SceneController`; until it's ready this falls back to flat and re-applies on the
+    /// `documentGeometryChanged` signal.
+    func applyDocumentOptions() {
+        let options = sceneController.documentOptions
+        for container in modelInstance.sharpEdgeContainers {
+            container.isHidden = options.edgeVisibility == .none
+        }
+        for container in modelInstance.smoothEdgeContainers {
+            container.isHidden = options.edgeVisibility != .all
+        }
+        for (node, variant) in modelInstance.variantSwaps {
+            node.geometry = options.smoothShading ? (variant.smoothIfAvailable ?? variant.flat) : variant.flat
+        }
     }
 
     func setViewOptions(_ viewOptions: ViewOptions) {

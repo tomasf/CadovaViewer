@@ -22,6 +22,11 @@ public final class ModelGeometryVariant: @unchecked Sendable {
         self.emittedCorners = emittedCorners
     }
 
+    /// The smooth geometry if it has already been built, without building it. Lets a caller apply
+    /// smooth shading on the main thread without risking a synchronous build (fall back to `flat`
+    /// and swap in the smooth geometry once a background build completes).
+    public var smoothIfAvailable: SCNGeometry? { cachedSmooth }
+
     /// The smooth-shaded geometry, built once and cached. Shares the flat geometry's
     /// vertex/colour sources, elements and materials, adding only a normal source.
     public func smoothGeometry() -> SCNGeometry {

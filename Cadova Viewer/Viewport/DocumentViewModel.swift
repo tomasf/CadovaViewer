@@ -17,9 +17,6 @@ final class DocumentViewModel: ObservableObject {
         didSet { observeFocusedViewport() }
     }
 
-    /// Bit 0 is the universal mask (see `GlobalCategoryMasks`); viewports take bits 1+.
-    private var usedCategoryMasks = GlobalCategoryMasks.universal.rawValue
-
     /// Re-publishes this model whenever the focused viewport (or its measurement controller)
     /// changes, so the focus-following toolbar in `DocumentView` refreshes.
     private var focusObservers: Set<AnyCancellable> = []
@@ -37,13 +34,7 @@ final class DocumentViewModel: ObservableObject {
         let id = UUID()
         layout = .leaf(id)
         focusedViewportID = id
-        // First viewport takes the first free bit (1); subsequent ones are added by `split`.
-        let categoryID = (~usedCategoryMasks).trailingZeroBitCount
-        usedCategoryMasks |= (1 << categoryID)
-        viewports[id] = ViewportController(
-            document: document, sceneController: sceneController,
-            categoryID: categoryID, privateContainer: sceneController.viewportPrivateNode(for: categoryID)
-        )
+        viewports[id] = ViewportController(document: document, sceneController: sceneController)
         observeFocusedViewport()
     }
 
@@ -65,20 +56,12 @@ final class DocumentViewModel: ObservableObject {
     func split(_ id: UUID, axis: SplitLayout.Axis) {
         guard let document, let source = viewports[id] else { return }
 
-        let categoryID = (~usedCategoryMasks).trailingZeroBitCount
-        usedCategoryMasks |= (1 << categoryID)
-        let viewport = ViewportController(
-            document: document, sceneController: sceneController,
-            categoryID: categoryID, privateContainer: sceneController.viewportPrivateNode(for: categoryID)
-        )
-        // The reused bit may carry stale per-viewport hidden state; make every part visible in
-        // the new viewport, then mirror the source viewport's options so it starts identical.
-        for part in sceneController.parts {
-            part.nodes.container.setVisible(true, forViewportID: categoryID)
-        }
+        let viewport = ViewportController(document: document, sceneController: sceneController)
+        // A new viewport starts with a clean clone of the model; mirror the source viewport's
+        // options (camera, grid, hidden parts) so the split starts out identical to it.
         viewport.setViewOptions(source.viewOptions)
-        // The model is already loaded (the source viewport exists), so run the per-viewport
-        // model setup the modelWasLoaded sink would otherwise do (grid bounds, snap vertices).
+        // The model is already loaded (the source viewport exists), so build this viewport's clone
+        // and run the model-dependent setup the modelWasLoaded sink would otherwise do.
         if !sceneController.parts.isEmpty {
             viewport.applyLoadedModel()
         }
@@ -97,11 +80,7 @@ final class DocumentViewModel: ObservableObject {
         layout = newLayout
         let validSplits = Set(layout.splitIDs)
         ratios = ratios.filter { validSplits.contains($0.key) }
-        if let viewport {
-            usedCategoryMasks &= ~(1 << viewport.categoryID)
-            viewport.tearDown()
-            sceneController.removeViewportPrivateNode(for: viewport.categoryID)
-        }
+        viewport?.tearDown()
         if viewports[focusedViewportID] == nil {
             focusedViewportID = layout.leafIDs[0]
         }

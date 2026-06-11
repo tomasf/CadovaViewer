@@ -4,46 +4,54 @@ import Combine
 import ThreeMF
 import ViewerCore
 
+/// Owns the shared, document-wide model data. It does not own a rendered scene: each viewport
+/// renders its own `SCNScene` built from `modelData` (see `ViewportModelInstance`), sharing the
+/// heavy `SCNGeometry` while keeping its own lights and per-viewport visibility. This object holds
+/// what is genuinely shared — the loaded model, the parts list, the document-global geometry
+/// options (edge visibility, smooth shading), the cached bounds, and the skybox.
 final class SceneController: ObservableObject {
-    let scene = SCNScene()
-    let modelContainer = SCNNode()
-    let viewportPrivateContainer = SCNNode()
+    /// Image-based-lighting faces, shared as each viewport scene's `lightingEnvironment`.
+    let skyboxImages: [NSImage]
+
+    /// The master model hierarchy. Not added to any rendered scene — it's the source each viewport
+    /// clones from.
+    private(set) var modelData = ModelData()
 
     @Published var parts: [ModelData.Part] = []
 
     /// Document-wide view options that act on the shared geometry (smooth shading, edge
-    /// visibility). Owned here, not on any single viewport, because they mutate the shared parts.
+    /// visibility). Owned here, not on any single viewport, because they apply to every viewport
+    /// identically. Viewports observe `documentGeometryChanged` and apply them to their own clones.
     @Published var documentOptions: DocumentViewOptions = Preferences().documentViewOptions {
         didSet {
-            applyDocumentOptions()
+            if documentOptions.smoothShading, !oldValue.smoothShading {
+                buildSmoothGeometries()
+            }
+            geometryChanged.send()
             Preferences().documentViewOptions = documentOptions
         }
     }
 
-    /// The model's bounding box and sphere, cached when the model loads. Computing these from
-    /// `modelContainer` walks the whole node hierarchy and takes SceneKit's scene lock, which
-    /// contends with the render thread — costly when read on every NavLib (SpaceMouse) motion
-    /// frame on the main thread. The model is static after load, so cache them once.
+    /// The model's bounding box and sphere, cached when the model loads. Computing these walks the
+    /// whole node hierarchy and takes SceneKit's scene lock, which contends with the render thread
+    /// — costly when read on every NavLib (SpaceMouse) motion frame on the main thread. The model
+    /// is static after load, so cache them once.
     private(set) var modelBoundingBox: (min: SCNVector3, max: SCNVector3) = (SCNVector3Zero, SCNVector3Zero)
     private(set) var modelBoundingSphere: (center: SCNVector3, radius: Float) = (SCNVector3Zero, 0)
 
     private let modelLoadedSignal = PassthroughSubject<Void, Never>()
     var modelWasLoaded: AnyPublisher<Void, Never> { modelLoadedSignal.eraseToAnyPublisher() }
 
+    /// Fires when a document-global geometry option changes (or a background smooth-geometry build
+    /// finishes). Each viewport re-applies the options to its own clone nodes.
+    private let geometryChanged = PassthroughSubject<Void, Never>()
+    var documentGeometryChanged: AnyPublisher<Void, Never> { geometryChanged.eraseToAnyPublisher() }
+
     private var observers: Set<AnyCancellable> = []
 
     init(document: Document) {
         let names = ["right", "left", "front", "back", "bottom", "top"]
-        let images = names.map { NSImage(named: "skybox4/\($0)")! }
-        scene.lightingEnvironment.contents = images
-
-        modelContainer.name = "Model container"
-        scene.rootNode.addChildNode(modelContainer)
-
-        viewportPrivateContainer.name = "Viewport-private container"
-        scene.rootNode.addChildNode(viewportPrivateContainer)
-
-        setupAmbientLight()
+        skyboxImages = names.map { NSImage(named: "skybox4/\($0)")! }
 
         DispatchQueue.main.async { [weak self, modelStream = document.modelStream] in
             self?.subscribe(to: modelStream)
@@ -57,103 +65,33 @@ final class SceneController: ObservableObject {
     }
 
     private func load(_ modelData: ModelData) {
-        modelContainer.childNodes.forEach { $0.removeFromParentNode() }
-        modelContainer.addChildNode(modelData.rootNode)
-
-        let previousVisibility = Dictionary(parts.map {
-            ($0.id, $0.nodes.container.categoryBitMask)
-        }, uniquingKeysWith: { $1 })
-
+        self.modelData = modelData
         parts = modelData.parts
 
-        // Should the viewport controllers do this instead? They know their hidden IDs
-        for part in parts {
-            if let previousCategoryBitMask = previousVisibility[part.id] {
-                part.nodes.container.setSubtreeCategoryBitMask(previousCategoryBitMask)
-            } else {
-                part.nodes.container.setSubtreeCategoryBitMask(~1)
-            }
+        modelBoundingBox = modelData.rootNode.boundingBox
+        modelBoundingSphere = modelData.rootNode.boundingSphere
+
+        if documentOptions.smoothShading {
+            buildSmoothGeometries()
         }
-
-        modelBoundingBox = modelContainer.boundingBox
-        modelBoundingSphere = modelContainer.boundingSphere
-
-        applyDocumentOptions()
         modelLoadedSignal.send()
     }
 
     // MARK: - Document-wide geometry options
 
-    func applyDocumentOptions() {
-        setEdgeVisibility(documentOptions.edgeVisibility)
-        setSmoothShading(documentOptions.smoothShading)
-    }
-
-    func setEdgeVisibility(_ visibility: DocumentViewOptions.EdgeVisibility) {
-        for part in parts {
-            part.nodes.sharpEdges?.isHidden = (visibility == .none)
-            part.nodes.smoothEdges?.isHidden = (visibility != .all)
-        }
-    }
-
-    /// Swaps every main-geometry node between its faceted (flat) geometry and a smooth-shaded
-    /// variant. Turning smooth shading off is an instant main-thread swap. Turning it on builds
-    /// the smooth geometry off the main thread on first use (cached thereafter), then applies the
-    /// swap on the main actor, so large models don't hitch the UI.
-    func setSmoothShading(_ smooth: Bool) {
+    /// Builds the smooth-shaded geometry for every part off the main thread (the result is cached
+    /// on each shared `ModelGeometryVariant`), then notifies the viewports to swap it in. Keeps
+    /// large models from hitching the UI, and builds each variant once for all viewports.
+    private func buildSmoothGeometries() {
         let variants = parts.flatMap(\.modelGeometryVariants)
-        guard smooth else {
-            for variant in variants {
-                variant.node.geometry = variant.flat
-            }
-            return
-        }
-
-        Task.detached {
-            await withTaskGroup(of: (ModelGeometryVariant, SCNGeometry).self) { group in
+        guard !variants.isEmpty else { return }
+        Task.detached { [weak self] in
+            await withTaskGroup(of: Void.self) { group in
                 for variant in variants {
-                    group.addTask { (variant, variant.smoothGeometry()) }
-                }
-                for await (variant, geometry) in group {
-                    await MainActor.run { variant.node.geometry = geometry }
+                    group.addTask { _ = variant.smoothGeometry() }
                 }
             }
+            await MainActor.run { self?.geometryChanged.send() }
         }
-    }
-
-    private func setupAmbientLight() {
-        let ambientLight = SCNLight()
-        ambientLight.type = .ambient
-        ambientLight.intensity = 30
-        let ambientLightNode = SCNNode()
-        ambientLightNode.name = "Ambient light"
-        ambientLightNode.light = ambientLight
-        scene.rootNode.addChildNode(ambientLightNode)
-    }
-
-    func viewportPrivateNode(for id: Int) -> SCNNode {
-        if let node = viewportPrivateContainer.childNodes.first(where: { ($0.categoryBitMask & (1 << id)) > 0 }) {
-            return node
-        }
-
-        // The category bitmask is only used for keeping track of the IDs. It doesn't actually affect child nodes inside the container (sadly).
-        let node = SCNNode()
-        node.categoryBitMask = (1 << id)
-        node.name = "Viewport-private node \(id)"
-        viewportPrivateContainer.addChildNode(node)
-        return node
-    }
-
-    /// Removes a viewport's private node (its grid, measurement geometry, etc.) when the viewport
-    /// is closed.
-    func removeViewportPrivateNode(for id: Int) {
-        viewportPrivateContainer.childNodes
-            .first { ($0.categoryBitMask & (1 << id)) > 0 }?
-            .removeFromParentNode()
-    }
-
-    var edgeNodes: [SCNNode] {
-        let edgeContainers = parts.compactMap(\.nodes.sharpEdges) + parts.compactMap(\.nodes.smoothEdges)
-        return edgeContainers.flatMap { $0.childNodes { node, _ in node.geometry != nil }}
     }
 }
