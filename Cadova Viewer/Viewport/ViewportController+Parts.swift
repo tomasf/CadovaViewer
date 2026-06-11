@@ -92,12 +92,15 @@ extension ViewportController {
 }
 
 extension SCNNode {
+    /// Shows or hides this node (and its subtree) in one viewport by toggling that viewport's
+    /// category bit on every node, leaving the other viewports' bits untouched.
     func setVisible(_ visibility: Bool, forViewportID categoryID: Int) {
+        let bit = 1 << categoryID
         enumerateHierarchy { node, _ in
             if visibility {
-                node.treeCategoryBitMask |= 1 << categoryID
+                node.categoryBitMask |= bit
             } else {
-                node.treeCategoryBitMask &= ~(1 << categoryID)
+                node.categoryBitMask &= ~bit
             }
         }
 

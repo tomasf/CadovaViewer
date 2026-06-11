@@ -261,12 +261,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             viewSize: sceneViewSize
         )
 
-        let encoder = renderer.currentRenderCommandEncoder as! NSObject
-        if encoder.responds(to: NSSelectorFromString("setLineWidth:")) {
-            let lineWidthInPoints = 1.0
-            let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
-            encoder.setValue(lineWidthInPoints * scale, forKey: "lineWidth")
-        }
+        // Keep edge lines ~1pt wide regardless of the drawable's backing scale.
+        let lineWidthInPoints = 1.0
+        let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
+        renderer.currentRenderCommandEncoder?.setLineWidthPrivate(Float(lineWidthInPoints * scale))
     }
 
     /// Depth of the model's bounding-sphere center along the camera's view axis. This is the

@@ -46,12 +46,10 @@ extension SCNGeometry {
 // MARK: - SCNNode Extensions
 
 extension SCNNode {
-    public var treeCategoryBitMask: Int {
-        get { categoryBitMask }
-        set {
-            enumerateHierarchy { node, _ in
-                node.categoryBitMask = newValue
-            }
+    /// Sets `categoryBitMask` to `mask` on this node and every descendant.
+    public func setSubtreeCategoryBitMask(_ mask: Int) {
+        enumerateHierarchy { node, _ in
+            node.categoryBitMask = mask
         }
     }
 }
@@ -59,7 +57,9 @@ extension SCNNode {
 // MARK: - Sequence Extensions
 
 extension Sequence {
-    public func wrappedPairs() -> [(Element, Element)] {
+    /// Consecutive pairs that wrap around, so the last element is paired with the first:
+    /// `[a, b, c]` → `[(a, b), (b, c), (c, a)]`.
+    public func cyclicPairs() -> [(Element, Element)] {
         .init(zip(self, dropFirst() + Array(prefix(1))))
     }
 }

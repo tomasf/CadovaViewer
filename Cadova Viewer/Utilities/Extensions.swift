@@ -23,36 +23,6 @@ extension SCNGeometry {
     }
 }
 
-extension Sequence {
-    func unwrap<A, B>() -> ([A], [B]) where Element == (A, B) {
-        reduce(into: ([], [])) {
-            $0.0.append($1.0)
-            $0.1.append($1.1)
-        }
-    }
-
-    func unwrap<A, B, C>() -> ([A], [B], [C]) where Element == (A, B, C) {
-        reduce(into: ([], [], [])) {
-            $0.0.append($1.0)
-            $0.1.append($1.1)
-            $0.2.append($1.2)
-        }
-    }
-
-    func unwrap<A, B, C, D>() -> ([A], [B], [C], [D]) where Element == (A, B, C, D) {
-        reduce(into: ([], [], [], [])) {
-            $0.0.append($1.0)
-            $0.1.append($1.1)
-            $0.2.append($1.2)
-            $0.3.append($1.3)
-        }
-    }
-
-    func paired() -> [(Element, Element)] {
-        .init(zip(self, dropFirst()))
-    }
-}
-
 extension SIMD4<Float> {
     var xyz: SIMD3<Float> {
         SIMD3<Float>(x, y, z)

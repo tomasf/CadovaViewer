@@ -60,9 +60,9 @@ final class SceneController: ObservableObject {
         // Should the viewport controllers do this instead? They know their hidden IDs
         for part in parts {
             if let previousCategoryBitMask = previousVisibility[part.id] {
-                part.nodes.container.treeCategoryBitMask = previousCategoryBitMask
+                part.nodes.container.setSubtreeCategoryBitMask(previousCategoryBitMask)
             } else {
-                part.nodes.container.treeCategoryBitMask = ~1
+                part.nodes.container.setSubtreeCategoryBitMask(~1)
             }
         }
 

@@ -24,9 +24,9 @@ public final class ViewportGrid {
         node.name = "Grid"
 
         coarseGrid.name = "Coarse grid"
-        coarseGrid.treeCategoryBitMask = 1 << categoryID
+        coarseGrid.setSubtreeCategoryBitMask(1 << categoryID)
         fineGrid.name = "Fine grid"
-        fineGrid.treeCategoryBitMask = 1 << categoryID
+        fineGrid.setSubtreeCategoryBitMask(1 << categoryID)
 
         node.addChildNode(gridContainer)
         gridContainer.addChildNode(coarseGrid)
@@ -66,7 +66,7 @@ public final class ViewportGrid {
                 gridCenter.y + sin(angle) * gridRadius,
                 gridCenter.z
             )
-        }.wrappedPairs()
+        }.cyclicPairs()
 
         perimeter.geometry = .lines(perimeterLines, color: .init(white: 1, alpha: maxGridOpacity))
     }
