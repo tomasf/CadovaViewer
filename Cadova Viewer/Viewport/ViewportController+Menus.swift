@@ -124,6 +124,9 @@ extension ViewportController {
 
         builder.addSeparator()
         buildViewOptionToggles(with: builder)
+        builder.addItem(label: "Smooth Shading", checked: sceneController.documentOptions.smoothShading) {
+            self.sceneController.documentOptions.smoothShading.toggle()
+        }
         builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
 
         buildViewportLayoutMenu(with: builder)
@@ -224,10 +227,6 @@ extension ViewportController {
 
         builder.addItem(label: "Show Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
             self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
-        }
-
-        builder.addItem(label: "Smooth Shading", checked: sceneController.documentOptions.smoothShading) {
-            self.sceneController.documentOptions.smoothShading.toggle()
         }
     }
 
