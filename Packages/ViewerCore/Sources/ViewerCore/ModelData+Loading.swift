@@ -108,6 +108,7 @@ extension ModelData {
 
             return Part(
                 nodes: nodes,
+                itemIndex: itemIndex,
                 name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
                 id: loadedItem.item.partNumber,
                 semantic: loadedItem.item.semantic,

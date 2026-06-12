@@ -12,6 +12,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/tomasf/ThreeMF", .upToNextMinor(from: "0.2.0")),
         .package(url: "https://github.com/tomasf/Nodal", .upToNextMajor(from: "0.3.3")),
+        .package(url: "https://github.com/tomasf/Zip.git", from: "2.1.0"),
     ],
     targets: [
         .target(
@@ -19,6 +20,7 @@ let package = Package(
             dependencies: [
                 .product(name: "ThreeMF", package: "ThreeMF"),
                 .product(name: "Nodal", package: "Nodal"),
+                .product(name: "Zip", package: "Zip"),
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)

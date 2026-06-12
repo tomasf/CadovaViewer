@@ -10,6 +10,23 @@ struct PreferencesView: View {
 
     var body: some View {
         Form {
+            Picker("Slicer", selection: $preferences.slicerBundleIdentifier) {
+                Text("None").tag(String?.none)
+                ForEach(slicerApps, id: \.bundleIdentifier) { app in
+                    HStack {
+                        Image(nsImage: app.icon)
+                        Text(app.name)
+                    }
+                    .tag(String?.some(app.bundleIdentifier))
+                }
+            }
+
+            Toggle("Remove non-solid parts when slicing", isOn: $preferences.removeNonSolidPartsWhenSlicing)
+                .help("When slicing the whole model, only solid (printable) parts are sent to the slicer. Parts marked as context or visual — used for visual reference and not meant to be printed — are left out.")
+
+            Divider()
+                .padding(.vertical, 12)
+
             Picker("Activate SpaceMouse", selection: $preferences.navLibActivationBehavior) {
                 Text("In Foreground Only")
                     .tag(Preferences.NavLibAppActivationBehavior.foregroundOnly)
@@ -80,6 +97,11 @@ struct PreferencesView: View {
                 selectedAppBundleIDs = []
             }
         }
+    }
+
+    /// Apps registered to open 3MF files, used to populate the slicer picker.
+    private var slicerApps: [ExternalApplication] {
+        ExternalApplication.appsAbleToOpen(contentType: ExternalApplication.threeMFContentType)
     }
 
     private func deleteSelection() {

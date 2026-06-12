@@ -22,6 +22,13 @@ public struct ModelData: Sendable {
         public typealias ID = String
 
         public let nodes: Nodes
+
+        /// The position of this part's `<item>` in the root model's build, in document order. This is
+        /// how a part maps back to a specific build item when rewriting the archive (e.g. for slicing
+        /// a single part) — `Part.id` can't be used for that, since it's a random UUID when the source
+        /// item has no `partnumber`.
+        public let itemIndex: Int
+
         public let name: String
         public let id: ID
         public let semantic: PartSemantic
@@ -31,8 +38,9 @@ public struct ModelData: Sendable {
         /// lazily-built smooth-shaded variant. Empty when smooth shading isn't applicable.
         public let modelGeometryVariants: [ModelGeometryVariant]
 
-        public init(nodes: Nodes, name: String, id: ID?, semantic: PartSemantic, stats: Statistics, modelGeometryVariants: [ModelGeometryVariant] = []) {
+        public init(nodes: Nodes, itemIndex: Int, name: String, id: ID?, semantic: PartSemantic, stats: Statistics, modelGeometryVariants: [ModelGeometryVariant] = []) {
             self.nodes = nodes
+            self.itemIndex = itemIndex
             self.name = name
             self.id = id ?? UUID().uuidString
             self.semantic = semantic

@@ -12,6 +12,9 @@ import ViewerCore
 class Document: NSDocument, NSWindowDelegate {
     private let modelSubject: CurrentValueSubject<ModelData?, Never> = .init(nil)
     private let loadingSubject: CurrentValueSubject<Bool, Never> = .init(false)
+    /// Number of slice operations currently writing a filtered copy of the archive. A count (rather
+    /// than a flag) so overlapping slices keep the indicator up until the last one finishes.
+    private let slicingSubject: CurrentValueSubject<Int, Never> = .init(0)
     private var loadTask: Task<Void, Never>?
     private var loadGeneration = 0
 
@@ -21,6 +24,10 @@ class Document: NSDocument, NSWindowDelegate {
 
     var loadingStream: AnyPublisher<Bool, Never> {
         loadingSubject.receive(on: DispatchQueue.main).eraseToAnyPublisher()
+    }
+
+    var slicingStream: AnyPublisher<Bool, Never> {
+        slicingSubject.map { $0 > 0 }.removeDuplicates().receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
 
     /// Dedicated undo manager for measurement operations. Kept separate from the document's
@@ -122,6 +129,29 @@ class Document: NSDocument, NSWindowDelegate {
             presentError(error)
         }
     }
+
+    /// Slices the given candidate `parts` of the model in the preferred slicer, keeping the slicing
+    /// indicator up while the filtered copy is written. Pass all parts for a full slice, or the visible
+    /// subset for "Slice Visible Parts". Routed through the document so every trigger (toolbar, parts
+    /// list, context menu) shares the same in-progress state, and so the full item count — needed to
+    /// decide whether any surgery is required — comes from the authoritative loaded model.
+    func sliceModel(parts: [ModelData.Part]) {
+        guard let fileURL, let totalItemCount = modelSubject.value?.parts.count else { return }
+        SlicingService.sliceModel(at: fileURL, parts: parts, totalItemCount: totalItemCount, willStart: beginSlicing, didFinish: endSlicing) { [weak self] error in
+            self?.presentError(error)
+        }
+    }
+
+    /// Slices a single part in the preferred slicer.
+    func slicePart(_ part: ModelData.Part) {
+        guard let fileURL else { return }
+        SlicingService.slicePart(part, at: fileURL, willStart: beginSlicing, didFinish: endSlicing) { [weak self] error in
+            self?.presentError(error)
+        }
+    }
+
+    private func beginSlicing() { slicingSubject.value += 1 }
+    private func endSlicing() { slicingSubject.value = max(0, slicingSubject.value - 1) }
 
     var documentHostingController: DocumentHostingController? {
         windowControllers.first?.contentViewController as? DocumentHostingController
