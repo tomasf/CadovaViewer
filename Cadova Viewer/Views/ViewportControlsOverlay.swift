@@ -55,5 +55,5 @@ struct ViewportControlsOverlay: View {
 enum ViewportLayoutMetrics {
     static let minPaneWidth: CGFloat = 280
     static let minPaneHeight: CGFloat = 180
-    static let dividerThickness: CGFloat = 8
+    static let dividerThickness: CGFloat = 5
 }

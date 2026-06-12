@@ -43,12 +43,17 @@ extension ViewportController {
     }
 
     func updateNavLibFocus() {
-        // Only the focused viewport drives the SpaceMouse — a single NavLib session is active at a
-        // time, so every viewport in the (main) document window would otherwise fight over it.
+        // Only the focused viewport drives the SpaceMouse. setAsActiveSession marks the focused
+        // session active, but the previously focused session stays active too (there's no API to
+        // clear it), so the driver would keep routing to it. Also gate each session with
+        // applicationHasFocus — NavLib uses it to decide whether to process input — turning it off
+        // for non-focused viewports so the old one stops receiving motion and on for the new one.
         if isFocusedViewport, let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) == document {
             navLibSession.setAsActiveSession()
+            navLibSession.applicationHasFocus = true
             navLibIsActive = true
         } else {
+            navLibSession.applicationHasFocus = false
             navLibIsActive = false
         }
     }
