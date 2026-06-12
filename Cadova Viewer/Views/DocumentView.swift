@@ -10,6 +10,7 @@ struct DocumentView: View {
     let errorHandler: (Error) -> ()
     @ObservedObject var viewModel: DocumentViewModel
     @State var isLoading = false
+    @State var isSlicing = false
     @State var infoData: InformationView.Model?
     @State var modelData: ModelData?
 
@@ -64,11 +65,35 @@ struct DocumentView: View {
                     .padding()
                     .allowsHitTesting(false)
             }
+            .overlay(alignment: .bottom) {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Preparing…")
+                        .font(.title2)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .colorScheme(.light)
+                .background {
+                    Capsule()
+                        .fill(Color.yellow.opacity(0.8))
+                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                }
+                .opacity(isSlicing ? 1 : 0)
+                .padding()
+                .allowsHitTesting(false)
+            }
             .colorScheme(.dark)
             .toolbar(id: "document") { toolbar }
             .onReceive(viewModel.document!.loadingStream) { status in
                 withAnimation(.easeInOut) {
                     isLoading = status
+                }
+            }
+            .onReceive(viewModel.document!.slicingStream) { status in
+                withAnimation(.easeInOut) {
+                    isSlicing = status
                 }
             }
             .onReceive(viewModel.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
@@ -159,9 +184,28 @@ struct DocumentView: View {
         }
         spacer
 
+        Group {
+            ToolbarItem(id: "slice", placement: .primaryAction, showsByDefault: true) {
+                Button {
+                    let parts = modelData?.parts ?? []
+                    // Holding Option slices only the parts visible in the focused viewport.
+                    let included = NSEvent.modifierFlags.contains(.option) ? parts.filter { !focused.hiddenPartIDs.contains($0.id) } : parts
+                    viewModel.document?.sliceModel(parts: included)
+                } label: {
+                    Label {
+                        Text("Slice")
+                    } icon: {
+                        Image(systemName: "square.stack.3d.up.fill")
+                    }
+                }
+                .help("Slice in the preferred slicer (hold Option to slice only visible parts)")
+                .disabled(modelData == nil)
+            }
+        }
+
         let apps = ExternalApplication.appsAbleToOpen(url: url)
         Group {
-            ToolbarItem(id: "openIn", placement: .primaryAction, showsByDefault: true) {
+            ToolbarItem(id: "openIn", placement: .primaryAction, showsByDefault: false) {
                 Menu {
                     ForEach(apps, id: \.url) { app in
                         Button {

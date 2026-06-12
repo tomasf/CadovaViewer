@@ -65,6 +65,11 @@ struct PartList: View {
                         .onHover { hovered in
                             viewportController.highlightedPartID = hovered ? part.id : nil
                         }
+                        .contextMenu {
+                            Button("Slice \"\(part.name)\"") {
+                                viewportController.document?.slicePart(part)
+                            }
+                        }
                     }
                 }
                 .padding(.top)

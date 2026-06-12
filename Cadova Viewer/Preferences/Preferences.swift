@@ -7,6 +7,8 @@ class Preferences: ObservableObject {
     static let navLibWhitelistedAppsDataKey = "navLibWhitelistedApps"
     static let viewOptionsDataKey = "viewOptions"
     static let documentViewOptionsDataKey = "documentViewOptions"
+    static let slicerBundleIdentifierKey = "slicerBundleIdentifier"
+    static let removeNonSolidPartsWhenSlicingKey = "removeNonSolidPartsWhenSlicing"
 
     enum NavLibAppActivationBehavior: String, RawRepresentable {
         case foregroundOnly
@@ -49,6 +51,20 @@ class Preferences: ObservableObject {
     var documentViewOptions: DocumentViewOptions {
         get { self[Self.documentViewOptionsDataKey] ?? .init() }
         set { self[Self.documentViewOptionsDataKey] = newValue }
+    }
+
+    /// The bundle identifier of the app to use as the slicer for the "Slice" command. `nil` (the
+    /// default) means no slicer is chosen yet, in which case slicing opens Settings instead.
+    var slicerBundleIdentifier: String? {
+        get { defaults.string(forKey: Self.slicerBundleIdentifierKey) }
+        set { defaults.set(newValue, forKey: Self.slicerBundleIdentifierKey) }
+    }
+
+    /// Whether non-solid parts (`.context` / `.visual`) are dropped when slicing the whole model.
+    /// Defaults to `true`.
+    var removeNonSolidPartsWhenSlicing: Bool {
+        get { defaults.object(forKey: Self.removeNonSolidPartsWhenSlicingKey) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Self.removeNonSolidPartsWhenSlicingKey) }
     }
 
     var navLibActivationBehavior: NavLibAppActivationBehavior {

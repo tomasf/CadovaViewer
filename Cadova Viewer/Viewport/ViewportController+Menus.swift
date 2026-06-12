@@ -46,6 +46,12 @@ extension ViewportController {
             } onHighlight: { h, _ in
                 self.highlightedPartID = h ? part.id : nil
             }
+
+            builder.addItem(label: "Slice \"\(part.name)\"", modifiers: .shift, isAlternate: true) {
+                self.document?.slicePart(part)
+            } onHighlight: { h, _ in
+                self.highlightedPartID = h ? part.id : nil
+            }
         }
     }
 
@@ -198,6 +204,16 @@ extension ViewportController {
         builder.addSeparator()
         builder.addItem(label: "Show Info", keyEquivalent: "i", modifiers: .command) {
             self.showInfoCallbackSignals.send()
+        }
+
+        builder.addSeparator()
+        let allParts = sceneController.parts
+        let visibleParts = allParts.filter { !hiddenPartIDs.contains($0.id) }
+        builder.addItem(label: "Slice", enabled: !allParts.isEmpty, keyEquivalent: "p", modifiers: .command) {
+            self.document?.sliceModel(parts: allParts)
+        }
+        builder.addItem(label: "Slice Visible Parts", enabled: !visibleParts.isEmpty, keyEquivalent: "p", modifiers: [.command, .option], isAlternate: true) {
+            self.document?.sliceModel(parts: visibleParts)
         }
         builder.addItem(label: "Open in", submenu: { builder in
             guard let url = self.document?.fileURL else { return }
