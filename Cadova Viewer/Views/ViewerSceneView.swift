@@ -136,7 +136,16 @@ class CustomSceneView: SCNView {
         case kVK_Escape:
             onCancel?()
         default:
-            super.keyDown(with: event)
+            // ⌃< / ⌃> cycle viewports. Matched on the typed character (with Control held, ignoring
+            // Shift) rather than a key code or menu key equivalent, so it works on any layout.
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags.contains(.control), !flags.contains(.command), !flags.contains(.option),
+               let viewModel = viewportController?.documentViewModel, viewModel.hasMultipleViewports,
+               let chars = event.charactersIgnoringModifiers, chars == "<" || chars == ">" {
+                viewModel.focusAdjacentViewport(forward: chars == ">")
+            } else {
+                super.keyDown(with: event)
+            }
         }
     }
 

@@ -1,10 +1,11 @@
 import Cocoa
 import ObjectiveC
 
-class MenuBuilder: NSObject, NSMenuDelegate {
+class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
     private var menuItems: [NSMenuItem] = []
     private var actions: [UUID: () -> Void] = [:]
     private var highlightActions: [UUID: (Bool, Bool) -> Void] = [:]
+    private var enabledStates: [UUID: Bool] = [:]
     private var previousHighlight: UUID?
 
     func addItem(
@@ -39,7 +40,15 @@ class MenuBuilder: NSObject, NSMenuDelegate {
 
         actions[uuid] = action
         highlightActions[uuid] = onHighlight
+        enabledStates[uuid] = enabled
         menuItems.append(item)
+    }
+
+    // The host menus auto-enable items (they re-enable anything whose target responds to the
+    // action), which would ignore our `enabled:` flag — so honour it here instead.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard let uuid = menuItem.representedObject as? UUID else { return true }
+        return enabledStates[uuid] ?? true
     }
 
     func addSeparator() {

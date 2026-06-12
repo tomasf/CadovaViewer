@@ -170,10 +170,12 @@ extension ViewportController {
         }
 
         if viewModel.hasMultipleViewports {
-            builder.addItem(label: "Focus Next Viewport", keyEquivalent: ">", modifiers: [.control]) {
+            // No menu key equivalent: ⌃< / ⌃> are handled in the scene view's keyDown, because
+            // punctuation key equivalents map to US physical keys and mis-render on other layouts.
+            builder.addItem(label: "Focus Next Viewport") {
                 viewModel.focusAdjacentViewport(forward: true)
             }
-            builder.addItem(label: "Focus Previous Viewport", keyEquivalent: "<", modifiers: [.control]) {
+            builder.addItem(label: "Focus Previous Viewport") {
                 viewModel.focusAdjacentViewport(forward: false)
             }
         }
