@@ -44,7 +44,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var sceneViewSize: CGSize = .zero
 
     var cameraNode = SCNNode()
+    /// A directional "headlight" kept aimed along the camera's view direction. It lives on its own
+    /// scene node (oriented each frame in `willRenderScene`) rather than being parented onto the
+    /// point-of-view node — re-parenting a single light as SceneKit swaps point-of-view nodes could
+    /// briefly leave it on two nodes, doubling the light and blowing out the model.
     let cameraLight = SCNLight()
+    private let headlightNode = SCNNode()
 
     let grid: ViewportGrid
     @Published var viewOptions = Preferences().viewOptions {
@@ -202,12 +207,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.defaultCameraController.automaticTarget = true
         sceneView.defaultCameraController.interactionMode = .orbitTurntable
 
-        // A real directional headlight, parented to the camera node. Because this viewport renders
-        // its own scene, the light affects only this viewport — no category-mask isolation needed.
+        // A real directional headlight on its own node (oriented to the camera in willRenderScene).
+        // This viewport renders its own scene, so the light affects only this viewport.
         sceneView.autoenablesDefaultLighting = false
         cameraLight.type = .directional
         cameraLight.intensity = 800
-        cameraNode.light = cameraLight
+        headlightNode.name = "Headlight"
+        headlightNode.light = cameraLight
+        scene.rootNode.addChildNode(headlightNode)
 
         sceneView.delegate = self
 
@@ -233,7 +240,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             Preferences().viewOptions = viewOptions
         }.store(in: &observers)
 
-        cameraNodeChanged(cameraNode)
         // Connect to the SpaceMouse driver off the critical path: NlCreate does a synchronous
         // driver handshake that can take a noticeable moment, and blocking here would stall
         // creating (and especially splitting) a viewport.
@@ -244,15 +250,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
         measurementRenderer.updateScreenSizes(renderer: sceneView)
 
+        // Track the active point-of-view node (SceneKit can swap it in). The headlight follows the
+        // camera independently, in willRenderScene.
         if let currentCameraNode = sceneView.pointOfView, currentCameraNode != cameraNode {
-            cameraNodeChanged(currentCameraNode)
+            cameraNode = currentCameraNode
         }
-    }
-
-    private func cameraNodeChanged(_ newCameraNode: SCNNode) {
-        cameraNode.light = nil
-        cameraNode = newCameraNode
-        newCameraNode.light = cameraLight
     }
 
     func viewDidChange() {
@@ -278,6 +280,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         grid.updateVisibility(cameraNode: cameraNode)
 
         guard let pov = renderer.pointOfView?.presentation else { return }
+
+        // Aim the headlight along the camera's view direction (both shine/look along their node's
+        // -Z), so it reads as a light coming from the viewer.
+        headlightNode.simdWorldOrientation = pov.simdWorldOrientation
 
         let indicatorValues = OrientationIndicatorValues(
             x: pov.convertVector(SCNVector3(1, 0, 0), from: nil),
