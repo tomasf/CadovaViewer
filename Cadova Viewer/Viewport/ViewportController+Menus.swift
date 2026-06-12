@@ -98,8 +98,40 @@ extension ViewportController {
         builder.addItem(label: "Measure", checked: measurementController.interactionMode == .measure, keyEquivalent: "2", modifiers: [.command, .shift]) {
             self.measurementController.interactionMode = .measure
         }
-        builder.addSeparator()
 
+        builder.addSeparator()
+        builder.addItem(label: "Zoom In", keyEquivalent: "+") {
+            self.zoomIn()
+        }
+        builder.addItem(label: "Zoom Out", keyEquivalent: "-") {
+            self.zoomOut()
+        }
+
+        builder.addSeparator()
+        builder.addItem(label: "Standard Views", submenu: buildStandardViewsMenu)
+        builder.addItem(label: "Camera Projection", submenu: { builder in
+            builder.addItem(label: "Perspective", checked: self.projection == .perspective) {
+                self.projection = .perspective
+            }
+            builder.addItem(label: "Orthographic", checked: self.projection == .orthographic) {
+                self.projection = .orthographic
+            }
+        })
+
+        builder.addItem(label: "Straighten Camera", keyEquivalent: "l") {
+            self.clearRoll()
+        }
+
+        builder.addSeparator()
+        buildViewOptionToggles(with: builder)
+        builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
+
+        buildViewportLayoutMenu(with: builder)
+    }
+
+    /// The "Standard Views" submenu: snap the camera to a preset orientation (with a live preview
+    /// while a row is highlighted).
+    private func buildStandardViewsMenu(_ builder: MenuBuilder) {
         let currentView = currentCameraView
 
         func preset(_ preset: ViewPreset, label: String, shortcut: String) {
@@ -119,34 +151,6 @@ extension ViewportController {
         preset(.right, label: "Right", shortcut: "4")
         preset(.top, label: "Top", shortcut: "5")
         preset(.bottom, label: "Bottom", shortcut: "6")
-
-        builder.addSeparator()
-        builder.addItem(label: "Zoom In", keyEquivalent: "+") {
-            self.zoomIn()
-        }
-        builder.addItem(label: "Zoom Out", keyEquivalent: "-") {
-            self.zoomOut()
-        }
-
-        builder.addSeparator()
-        builder.addItem(label: "Camera Projection", submenu: { builder in
-            builder.addItem(label: "Perspective", checked: self.projection == .perspective) {
-                self.projection = .perspective
-            }
-            builder.addItem(label: "Orthographic", checked: self.projection == .orthographic) {
-                self.projection = .orthographic
-            }
-        })
-
-        builder.addItem(label: "Straighten Camera", keyEquivalent: "l") {
-            self.clearRoll()
-        }
-
-        builder.addSeparator()
-        buildViewOptionToggles(with: builder)
-        builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
-
-        buildViewportLayoutMenu(with: builder)
     }
 
     /// The "Viewports" submenu: split / close / focus-cycling commands for the focused viewport.
