@@ -43,7 +43,7 @@ struct ViewportControlsOverlay: View {
 
 /// Shared minimum-size / divider metrics for viewport splitting.
 enum ViewportLayoutMetrics {
-    static let minPaneWidth: CGFloat = 500
-    static let minPaneHeight: CGFloat = 300
+    static let minPaneWidth: CGFloat = 280
+    static let minPaneHeight: CGFloat = 180
     static let dividerThickness: CGFloat = 8
 }
