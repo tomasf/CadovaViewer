@@ -131,9 +131,18 @@ class CustomSceneView: SCNView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // Escape
+        switch event.keyCode {
+        case 53: // Escape
             onCancel?()
-        } else {
+        case 48: // Tab — cycle viewports while a 3D view has focus (Shift-Tab goes backwards).
+            // Only consume Tab when there's more than one viewport; otherwise let it fall through
+            // to the normal key-view loop so Tab keeps its standard focus-traversal behaviour.
+            if let viewModel = viewportController?.documentViewModel, viewModel.hasMultipleViewports {
+                viewModel.focusAdjacentViewport(forward: !event.modifierFlags.contains(.shift))
+            } else {
+                super.keyDown(with: event)
+            }
+        default:
             super.keyDown(with: event)
         }
     }
