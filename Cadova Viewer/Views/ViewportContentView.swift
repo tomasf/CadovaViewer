@@ -17,6 +17,9 @@ struct ViewportContentView: View {
 
     var body: some View {
         ViewerSceneView(viewportController: viewportController)
+            // A dark backing so a freshly-created pane (before its scene view first renders) shows
+            // the viewport's background colour rather than flashing white.
+            .background(Color(white: 0.05))
             .onGeometryChange(for: CGSize.self, of: { $0.size }) {
                 viewportController.sceneViewSize = $0
                 viewportController.sceneView.overlaySKScene?.size = $0

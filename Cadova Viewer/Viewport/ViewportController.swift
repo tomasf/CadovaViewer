@@ -231,7 +231,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         }.store(in: &observers)
 
         cameraNodeChanged(cameraNode)
-        startNavLib()
+        // Connect to the SpaceMouse driver off the critical path: NlCreate does a synchronous
+        // driver handshake that can take a noticeable moment, and blocking here would stall
+        // creating (and especially splitting) a viewport.
+        DispatchQueue.main.async { [weak self] in self?.startNavLib() }
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {

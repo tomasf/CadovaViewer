@@ -13,6 +13,10 @@ extension ViewportController {
             print("NavLib initialization failed: \(error)")
         }
 
+        // Now that the session exists, claim the active session if this viewport is the focused one
+        // (focus may have been set while the session was still starting).
+        updateNavLibFocus()
+
         NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
