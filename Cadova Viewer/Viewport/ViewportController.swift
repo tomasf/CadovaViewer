@@ -257,7 +257,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         if cameraNode.camera == nil {
             return
         }
-        viewOptions.cameraTransform = cameraNode.transform
+        // Defer the @Published write: this can be reached from a NavLib/scene-view callback that
+        // runs inside a SwiftUI view update, and publishing there triggers "Publishing changes from
+        // within view updates is not allowed." Nothing reads the live transform — it's only for
+        // state restoration — so a runloop-turn's delay is fine.
+        let transform = cameraNode.transform
+        DispatchQueue.main.async { [weak self] in self?.viewOptions.cameraTransform = transform }
 
         let canReset = canResetRoll()
         if canReset != canResetCameraRoll {
