@@ -1,5 +1,8 @@
 import SwiftUI
 import Combine
+import AppKit
+import SceneKit
+import NavLib
 import ViewerCore
 
 /// Per-document coordinator for the (possibly split) set of viewports. Owns the shared
@@ -10,6 +13,11 @@ final class DocumentViewModel: ObservableObject {
     let sceneController: SceneController
     /// Document-global measurements, shared by every viewport and drawn in each.
     let measurements = MeasurementController()
+    /// One SpaceMouse (NavLib) session for the whole document. Its state provider is re-pointed to
+    /// the focused viewport, so exactly one session always drives whichever viewport has focus —
+    /// avoiding the multiple-active-session routing problem of a session per viewport.
+    let navLibSession = NavLibSession<SCNVector3>()
+    private var navLibActive = false
     weak var document: Document?
 
     @Published private(set) var layout: SplitLayout
@@ -53,6 +61,9 @@ final class DocumentViewModel: ObservableObject {
         measurements.$interactionMode.dropFirst().sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &cancellables)
+
+        // Start the document's single SpaceMouse session off the critical path (NlCreate blocks).
+        DispatchQueue.main.async { [weak self] in self?.startNavLib() }
     }
 
     /// Creates a viewport wired back to this view model (so its scene view can request focus and
@@ -63,13 +74,13 @@ final class DocumentViewModel: ObservableObject {
         return viewport
     }
 
-    /// Reacts to a focus change: refresh the toolbar forwarding, update each viewport's focus flag,
-    /// and hand the active NavLib (SpaceMouse) session to the newly focused viewport.
+    /// Reacts to a focus change: refresh the toolbar forwarding, point the SpaceMouse session at the
+    /// newly focused viewport, and update each viewport's focus flag.
     private func focusDidChange() {
         observeFocusedViewport()
+        navLibSession.stateProvider = focusedViewport
         for (id, viewport) in viewports {
             viewport.isFocusedViewport = (id == focusedViewportID)
-            viewport.updateNavLibFocus()
         }
         document?.invalidateRestorableState()
     }
@@ -138,6 +149,52 @@ final class DocumentViewModel: ObservableObject {
         guard let index = ids.firstIndex(of: focusedViewportID), ids.count > 1 else { return }
         let next = (index + (forward ? 1 : ids.count - 1)) % ids.count
         focus(ids[next])
+    }
+
+    // MARK: - SpaceMouse (NavLib)
+
+    /// Starts the document's single NavLib session (driving the focused viewport via its state
+    /// provider) and tracks when this document should receive SpaceMouse input.
+    private func startNavLib() {
+        do {
+            try navLibSession.start(stateProvider: focusedViewport, applicationName: "Model Viewer")
+        } catch {
+            print("NavLib initialization failed: \(error)")
+        }
+        updateNavLibActive()
+
+        NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateNavLibActive() }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.publisher(for: \.frontmostApplication).sink { [weak self] runningApp in
+            guard let self, let runningApp, navLibActive else { return }
+
+            if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
+                navLibSession.applicationHasFocus = true
+                return
+            }
+
+            let active = switch Preferences().navLibActivationBehavior {
+            case .always: true
+            case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
+            case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
+            }
+            navLibSession.applicationHasFocus = active
+        }.store(in: &cancellables)
+    }
+
+    /// Makes this document's session active while its window is the main one. (Across documents the
+    /// most recently activated session wins; within a document there's only this one session.)
+    private func updateNavLibActive() {
+        if let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) === document {
+            navLibSession.setAsActiveSession()
+            navLibSession.applicationHasFocus = true
+            navLibActive = true
+        } else {
+            navLibActive = false
+        }
     }
 
     // MARK: - State restoration

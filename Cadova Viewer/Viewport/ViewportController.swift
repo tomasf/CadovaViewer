@@ -67,8 +67,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     }
     var hasSetInitialView = false
 
-    var navLibSession = NavLibSession<SCNVector3>()
-    var navLibIsActive = false
+    /// Whether SpaceMouse-driven motion is currently suspended for this viewport (e.g. during a
+    /// mouse drag or an animated fly-to). The document's NavLib session checks this on the focused
+    /// viewport before applying motion.
     var navLibIsSuspended = false
 
     @Published var projection: CameraProjection = .perspective {
@@ -239,11 +240,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             // same on the restore path.)
             Preferences().viewOptions = viewOptions
         }.store(in: &observers)
-
-        // Connect to the SpaceMouse driver off the critical path: NlCreate does a synchronous
-        // driver handshake that can take a noticeable moment, and blocking here would stall
-        // creating (and especially splitting) a viewport.
-        DispatchQueue.main.async { [weak self] in self?.startNavLib() }
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {

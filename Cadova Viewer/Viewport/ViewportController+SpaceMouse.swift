@@ -5,72 +5,23 @@ import SceneKit
 import NavLib
 
 extension ViewportController {
-    func startNavLib() {
-        do {
-            try navLibSession.start(stateProvider: self, applicationName: "Model Viewer")
-            navLibIsActive = true
-        } catch {
-            print("NavLib initialization failed: \(error)")
-        }
-
-        // Now that the session exists, claim the active session if this viewport is the focused one
-        // (focus may have been set while the session was still starting).
-        updateNavLibFocus()
-
-        NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateNavLibFocus()
-            }.store(in: &observers)
-
-        NSWorkspace.shared.publisher(for: \.frontmostApplication).sink { [weak self] runningApp in
-            guard let self else { return }
-            guard let runningApp, navLibIsActive else { return }
-
-            if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
-                navLibSession.applicationHasFocus = true
-                return
-            }
-
-            let active = switch Preferences().navLibActivationBehavior {
-            case .always: true
-            case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
-            case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
-            }
-
-            navLibSession.applicationHasFocus = active
-        }.store(in: &observers)
-    }
-
-    func updateNavLibFocus() {
-        // Only the focused viewport drives the SpaceMouse. setAsActiveSession marks the focused
-        // session active, but the previously focused session stays active too (there's no API to
-        // clear it), so the driver would keep routing to it. Also gate each session with
-        // applicationHasFocus — NavLib uses it to decide whether to process input — turning it off
-        // for non-focused viewports so the old one stops receiving motion and on for the new one.
-        if isFocusedViewport, let main = NSApp.mainWindow, NSDocumentController.shared.document(for: main) == document {
-            navLibSession.setAsActiveSession()
-            navLibSession.applicationHasFocus = true
-            navLibIsActive = true
-        } else {
-            navLibSession.applicationHasFocus = false
-            navLibIsActive = false
-        }
-    }
+    // The document owns one NavLib session whose state provider is this viewport while it's focused
+    // (see DocumentViewModel). These push this viewport's state to that shared session — guarded on
+    // being the focused viewport, so a background viewport never drives it.
 
     func updateNavLibPointerPosition() {
-        guard let position = mousePosition else { return }
-        navLibSession.mousePosition = position
+        guard isFocusedViewport, let position = mousePosition else { return }
+        documentViewModel?.navLibSession.mousePosition = position
     }
 
     func updateNavLibProjection() {
-        guard let cameraProjection else { return }
-        navLibSession.cameraProjection = cameraProjection
+        guard isFocusedViewport, let cameraProjection else { return }
+        documentViewModel?.navLibSession.cameraProjection = cameraProjection
     }
 
     func setNavLibSuspended(_ suspend: Bool) {
         navLibIsSuspended = suspend
-        navLibSession.cancelMotion()
+        documentViewModel?.navLibSession.cancelMotion()
     }
 }
 
