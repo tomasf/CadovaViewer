@@ -8,6 +8,8 @@ import ViewerCore
 /// and menus act on `focusedViewport`.
 final class DocumentViewModel: ObservableObject {
     let sceneController: SceneController
+    /// Document-global measurements, shared by every viewport and drawn in each.
+    let measurements = MeasurementController()
     weak var document: Document?
 
     @Published private(set) var layout: SplitLayout
@@ -17,8 +19,8 @@ final class DocumentViewModel: ObservableObject {
         didSet { focusDidChange() }
     }
 
-    /// Re-publishes this model whenever the focused viewport (or its measurement controller)
-    /// changes, so the focus-following toolbar in `DocumentView` refreshes.
+    /// Re-publishes this model whenever the focused viewport changes, so the focus-following
+    /// toolbar in `DocumentView` refreshes.
     private var focusObservers: Set<AnyCancellable> = []
 
     /// Long-lived subscriptions (document-global options → restorable state).
@@ -37,6 +39,7 @@ final class DocumentViewModel: ObservableObject {
         let id = UUID()
         layout = .leaf(id)
         focusedViewportID = id
+        measurements.undoManager = document.measurementUndoManager
         viewports[id] = makeViewport(id: id, document: document)
         focusDidChange()
 
@@ -44,12 +47,18 @@ final class DocumentViewModel: ObservableObject {
         sceneController.$documentOptions.dropFirst().sink { [weak self] _ in
             self?.document?.invalidateRestorableState()
         }.store(in: &cancellables)
+
+        // The toolbar's measurement mode picker follows the shared mode. (The list overlay observes
+        // the controller directly, so only the mode needs to be forwarded here.)
+        measurements.$interactionMode.dropFirst().sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }.store(in: &cancellables)
     }
 
     /// Creates a viewport wired back to this view model (so its scene view can request focus and
     /// its menu can split/close/cycle focus).
     private func makeViewport(id: UUID, document: Document) -> ViewportController {
-        let viewport = ViewportController(viewportID: id, document: document, sceneController: sceneController)
+        let viewport = ViewportController(viewportID: id, document: document, sceneController: sceneController, measurements: measurements)
         viewport.documentViewModel = self
         return viewport
     }
@@ -68,9 +77,7 @@ final class DocumentViewModel: ObservableObject {
     private func observeFocusedViewport() {
         focusObservers.removeAll()
         guard let viewport = viewports[focusedViewportID] else { return }
-        for publisher in [viewport.objectWillChange, viewport.measurementController.objectWillChange] {
-            publisher.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &focusObservers)
-        }
+        viewport.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &focusObservers)
     }
 
     func ratio(for splitID: UUID) -> Binding<Double> {

@@ -31,9 +31,6 @@ struct ViewportContentView: View {
                 case .ended: viewportController.hoverPoint = nil
                 }
             }
-            .overlay(alignment: .topLeading) {
-                MeasurementListOverlay(controller: viewportController.measurementController)
-            }
             .overlay(alignment: .bottomLeading) {
                 PartListOverlay(viewportController: viewportController)
             }

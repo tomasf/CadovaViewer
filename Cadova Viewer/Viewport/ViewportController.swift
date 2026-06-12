@@ -24,7 +24,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// the active one, and the focus border.
     var isFocusedViewport = false
 
+    /// The document-global measurement state, shared by every viewport.
     let measurementController: MeasurementController
+    /// This viewport's drawing of those measurements, in its own scene.
+    let measurementRenderer: MeasurementRenderer
 
     /// This viewport's private clone of the shared model (clone nodes living in `scene`). Rebuilt
     /// whenever the model loads; mediates per-viewport visibility, hit testing, and the document-
@@ -114,13 +117,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let showInfoCallbackSignals = PassthroughSubject<Void, Never>()
     var showInfoSignal: AnyPublisher<Void, Never> { showInfoCallbackSignals.eraseToAnyPublisher() }
 
-    init(viewportID: UUID, document: Document, sceneController: SceneController) {
+    init(viewportID: UUID, document: Document, sceneController: SceneController, measurements: MeasurementController) {
         self.viewportID = viewportID
         self.sceneController = sceneController
+        measurementController = measurements
         grid = ViewportGrid()
         let measurementParent = SCNNode()
         measurementParent.name = "Measurements"
-        measurementController = MeasurementController(parentNode: measurementParent)
+        measurementRenderer = MeasurementRenderer(controller: measurements, parentNode: measurementParent)
 
         self.document = document
         super.init()
@@ -148,11 +152,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.onCancel = { [weak self] in
             self?.measurementController.cancelInProgress()
         }
-        measurementController.onVisualChange = { [weak self] in
+        measurementRenderer.onVisualChange = { [weak self] in
             // The redraw drives updateAtTime → updateScreenSizes, which does the sizing.
             self?.sceneView.setNeedsRedraw()
         }
-        measurementController.undoManager = document.measurementUndoManager
 
         overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
@@ -239,7 +242,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
-        measurementController.updateScreenSizes(renderer: sceneView)
+        measurementRenderer.updateScreenSizes(renderer: sceneView)
 
         if let currentCameraNode = sceneView.pointOfView, currentCameraNode != cameraNode {
             cameraNodeChanged(currentCameraNode)

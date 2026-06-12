@@ -22,12 +22,12 @@ class DocumentHostingController: NSHostingController<DocumentView>, NSMenuItemVa
     var viewportController: ViewportController { viewModel.focusedViewport }
 
     @objc func removeAllMeasurements(_ sender: Any?) {
-        viewModel.focusedViewport.measurementController.deleteAll()
+        viewModel.measurements.deleteAll()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(removeAllMeasurements(_:)) {
-            return !viewModel.focusedViewport.measurementController.measurements.isEmpty
+            return !viewModel.measurements.measurements.isEmpty
         }
         return true
     }

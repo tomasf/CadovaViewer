@@ -33,8 +33,8 @@ struct DocumentView: View {
     private var focused: ViewportController { viewModel.focusedViewport }
 
     private var interactionMode: Binding<InteractionMode> {
-        Binding(get: { viewModel.focusedViewport.measurementController.interactionMode },
-                set: { viewModel.focusedViewport.measurementController.interactionMode = $0 })
+        Binding(get: { viewModel.measurements.interactionMode },
+                set: { viewModel.measurements.interactionMode = $0 })
     }
 
     private var projection: Binding<ViewportController.CameraProjection> {
@@ -45,6 +45,10 @@ struct DocumentView: View {
     var body: some View {
         ViewportSplitView(viewModel: viewModel)
             .frame(minWidth: 500, minHeight: 300)
+            // Measurements are document-global: one list for the whole document, spanning all panes.
+            .overlay(alignment: .topLeading) {
+                MeasurementListOverlay(controller: viewModel.measurements)
+            }
             .overlay(alignment: .bottom) {
                 Text("Loading")
                     .font(.title2)
