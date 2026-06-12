@@ -170,12 +170,13 @@ extension ViewportController {
         }
 
         if viewModel.hasMultipleViewports {
-            // No menu key equivalent: ⌃< / ⌃> are handled in the scene view's keyDown, because
-            // punctuation key equivalents map to US physical keys and mis-render on other layouts.
-            builder.addItem(label: "Focus Next Viewport") {
+            // ⌃< / ⌃> as real menu shortcuts. Punctuation key equivalents map to US key positions,
+            // so on other layouts the glyph (and this equivalent) can land on a different key — the
+            // scene view's keyDown also matches the typed < / > so the physical key always works.
+            builder.addItem(label: "Focus Next Viewport", keyEquivalent: ">", modifiers: [.control]) {
                 viewModel.focusAdjacentViewport(forward: true)
             }
-            builder.addItem(label: "Focus Previous Viewport") {
+            builder.addItem(label: "Focus Previous Viewport", keyEquivalent: "<", modifiers: [.control]) {
                 viewModel.focusAdjacentViewport(forward: false)
             }
         }
