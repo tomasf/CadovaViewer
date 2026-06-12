@@ -15,6 +15,7 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         enabled: Bool = true,
         keyEquivalent: String = "",
         modifiers: NSEvent.ModifierFlags = [],
+        isAlternate: Bool = false,
         action: (() -> Void)? = nil,
         onHighlight: ((_ highlighted: Bool, _ isClosing: Bool) -> Void)? = nil,
         submenu: ((_ builder: MenuBuilder) -> ())? = nil
@@ -27,6 +28,7 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         item.isEnabled = enabled
         item.keyEquivalent = keyEquivalent
         item.image = icon
+        item.isAlternate = isAlternate
 
         if modifiers != [] {
             item.keyEquivalentModifierMask = modifiers

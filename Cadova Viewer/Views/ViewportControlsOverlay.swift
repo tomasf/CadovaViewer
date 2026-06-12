@@ -8,26 +8,36 @@ struct ViewportControlsOverlay: View {
     let viewportID: UUID
     let size: CGSize
 
-    var body: some View {
-        HStack(spacing: 4) {
-            Button {
-                viewModel.split(viewportID, axis: .horizontal)
-            } label: {
-                Image(systemName: "rectangle.split.2x1")
-            }
-            .help("Split Horizontally")
-            .disabled(size.width < ViewportLayoutMetrics.minPaneWidth * 2 + ViewportLayoutMetrics.dividerThickness)
+    private func canSplit(_ axis: SplitLayout.Axis) -> Bool {
+        let availableSize = axis == .horizontal ? size.width : size.height
+        let minimumPaneSize = axis == .horizontal ? ViewportLayoutMetrics.minPaneWidth : ViewportLayoutMetrics.minPaneHeight
+        return availableSize >= minimumPaneSize * 2 + ViewportLayoutMetrics.dividerThickness
+    }
 
-            Button {
-                viewModel.split(viewportID, axis: .vertical)
+    var body: some View {
+        HStack(spacing: 6) {
+            Menu {
+                Button {
+                    viewModel.split(viewportID, axis: .horizontal)
+                } label: {
+                    Label("Split Horizontally", systemImage: "rectangle.split.2x1")
+                }
+                .disabled(!canSplit(.horizontal))
+
+                Button {
+                    viewModel.split(viewportID, axis: .vertical)
+                } label: {
+                    Label("Split Vertically", systemImage: "rectangle.split.1x2")
+                }
+                .disabled(!canSplit(.vertical))
             } label: {
-                Image(systemName: "rectangle.split.1x2")
+                Image(systemName: "plus.rectangle.on.rectangle")
             }
-            .help("Split Vertically")
-            .disabled(size.height < ViewportLayoutMetrics.minPaneHeight * 2 + ViewportLayoutMetrics.dividerThickness)
+            .help("Split Viewport")
+            .disabled(!canSplit(.horizontal) && !canSplit(.vertical))
 
             if viewModel.hasMultipleViewports {
-                Button(role: .destructive) {
+                Button {
                     viewModel.close(viewportID)
                 } label: {
                     Image(systemName: "xmark")
@@ -37,7 +47,7 @@ struct ViewportControlsOverlay: View {
         }
         .buttonStyle(BlurButtonStyle())
         .controlSize(.large)
-        .padding(8)
+        .padding(6)
     }
 }
 

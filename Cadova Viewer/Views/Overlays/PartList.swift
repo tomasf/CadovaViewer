@@ -117,7 +117,7 @@ struct BlurButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .padding(5)
+                .padding(6)
                 .background(configuration.isPressed ? .thickMaterial : .ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)))
                 .opacity(isEnabled ? 1 : 0.35)

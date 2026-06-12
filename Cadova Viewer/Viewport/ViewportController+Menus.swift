@@ -41,7 +41,7 @@ extension ViewportController {
                 self.highlightedPartID = h ? part.id : nil
             }
 
-            builder.addItem(label: "Show only \"\(part.name)\"", checked: onlyVisiblePartID == part.id, modifiers: .option) {
+            builder.addItem(label: "Show only \"\(part.name)\"", checked: onlyVisiblePartID == part.id, modifiers: .option, isAlternate: true) {
                 self.onlyVisiblePartID = part.id
             } onHighlight: { h, _ in
                 self.highlightedPartID = h ? part.id : nil
