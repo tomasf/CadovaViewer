@@ -15,7 +15,7 @@ struct ViewportControlsOverlay: View {
             } label: {
                 Image(systemName: "rectangle.split.2x1")
             }
-            .help("Split Side by Side")
+            .help("Split Horizontally")
             .disabled(size.width < ViewportLayoutMetrics.minPaneWidth * 2 + ViewportLayoutMetrics.dividerThickness)
 
             Button {
@@ -23,7 +23,7 @@ struct ViewportControlsOverlay: View {
             } label: {
                 Image(systemName: "rectangle.split.1x2")
             }
-            .help("Split Top and Bottom")
+            .help("Split Vertically")
             .disabled(size.height < ViewportLayoutMetrics.minPaneHeight * 2 + ViewportLayoutMetrics.dividerThickness)
 
             if viewModel.hasMultipleViewports {
