@@ -11,9 +11,9 @@ public struct CoordinateSystemIndicator: View {
         self.stream = stream
     }
 
-    private let width = 120.0
-    private let radius = 50.0
-    private let textRadius = 60.0
+    private let width = 110.0
+    private let radius = 40.0
+    private let textRadius = 50.0
 
     public var body: some View {
         ZStack {
