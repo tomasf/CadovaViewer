@@ -104,14 +104,8 @@ extension ThreeMF.Color {
         .init(srgbRed: Double(red) / 255.0, green: Double(green) / 255.0, blue: Double(blue) / 255.0, alpha: Double(alpha) / 255.0)
     }
 
-    public static let white = Self(red: 0xFF, green: 0xFF, blue: 0xFF)
-
     public var isFullyTransparent: Bool {
         alpha == 0
-    }
-
-    public var isOpaque: Bool {
-        alpha == 255
     }
 }
 

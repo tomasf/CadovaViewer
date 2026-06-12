@@ -24,6 +24,16 @@ let package = Package(
                 .interoperabilityMode(.Cxx)
             ]
         ),
+        .testTarget(
+            name: "ViewerCoreTests",
+            dependencies: [
+                "ViewerCore",
+                .product(name: "ThreeMF", package: "ThreeMF"),
+            ],
+            swiftSettings: [
+                .interoperabilityMode(.Cxx)
+            ]
+        ),
     ],
     cxxLanguageStandard: .cxx17
 )

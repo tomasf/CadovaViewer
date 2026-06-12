@@ -32,6 +32,7 @@ struct ViewportControlsOverlay: View {
                 .disabled(!canSplit(.vertical))
             } label: {
                 Image(systemName: "plus.rectangle.on.rectangle")
+                    .frame(height: 16)
             }
             .help("Split Viewport")
             .disabled(!canSplit(.horizontal) && !canSplit(.vertical))
@@ -41,13 +42,14 @@ struct ViewportControlsOverlay: View {
                     viewModel.close(viewportID)
                 } label: {
                     Image(systemName: "xmark")
+                        .frame(height: 16)
                 }
                 .help("Close Viewport")
             }
         }
         .buttonStyle(BlurButtonStyle())
         .controlSize(.large)
-        .padding(6)
+        .padding(8)
     }
 }
 
