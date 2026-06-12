@@ -149,8 +149,9 @@ extension ViewportController {
         buildViewportLayoutMenu(with: builder)
     }
 
-    /// Split / close / focus-cycling commands for the focused viewport. Focus-cycling carries
-    /// keyboard shortcuts so a SpaceMouse button can be bound to move focus between viewports.
+    /// The "Viewports" submenu: split / close / focus-cycling commands for the focused viewport.
+    /// Focus-cycling carries keyboard shortcuts so a SpaceMouse button can be bound to move focus
+    /// between viewports.
     private func buildViewportLayoutMenu(with builder: MenuBuilder) {
         guard let viewModel = documentViewModel else { return }
         builder.addSeparator()
@@ -158,28 +159,32 @@ extension ViewportController {
         let canSplitWide = sceneViewSize.width >= ViewportLayoutMetrics.minPaneWidth * 2 + ViewportLayoutMetrics.dividerThickness
         let canSplitTall = sceneViewSize.height >= ViewportLayoutMetrics.minPaneHeight * 2 + ViewportLayoutMetrics.dividerThickness
 
-        builder.addItem(label: "Split Side by Side", enabled: canSplitWide) {
-            viewModel.split(self.viewportID, axis: .horizontal)
-        }
-        builder.addItem(label: "Split Top and Bottom", enabled: canSplitTall) {
-            viewModel.split(self.viewportID, axis: .vertical)
-        }
-        // Always present, disabled when there's a single viewport (per the HIG).
-        builder.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports,
-                        keyEquivalent: "w", modifiers: [.command, .control, .shift]) {
-            viewModel.close(self.viewportID)
-        }
+        builder.addItem(label: "Viewports", submenu: { submenu in
+            submenu.addItem(label: "Split Side by Side", enabled: canSplitWide) {
+                viewModel.split(self.viewportID, axis: .horizontal)
+            }
+            submenu.addItem(label: "Split Top and Bottom", enabled: canSplitTall) {
+                viewModel.split(self.viewportID, axis: .vertical)
+            }
+            // Always present, disabled when there's a single viewport (per the HIG).
+            submenu.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports,
+                            keyEquivalent: "w", modifiers: [.command, .control, .shift]) {
+                viewModel.close(self.viewportID)
+            }
 
-        // Focus next/previous. The key equivalent is the US backtick key, whose key position is the
-        // < / > (`<>|`) key on ISO layouts — so it reads as ⌘< / ⌘> there (and ⌘` on US ANSI).
-        builder.addItem(label: "Focus Next Viewport", enabled: viewModel.hasMultipleViewports,
-                        keyEquivalent: "`", modifiers: [.command]) {
-            viewModel.focusAdjacentViewport(forward: true)
-        }
-        builder.addItem(label: "Focus Previous Viewport", enabled: viewModel.hasMultipleViewports,
-                        keyEquivalent: "`", modifiers: [.command, .shift]) {
-            viewModel.focusAdjacentViewport(forward: false)
-        }
+            submenu.addSeparator()
+
+            // Focus next/previous. The key equivalent is the US backtick key, whose key position is
+            // the < / > (`<>|`) key on ISO layouts — so it reads as ⌘< / ⌘> there (and ⌘` on US ANSI).
+            submenu.addItem(label: "Focus Next Viewport", enabled: viewModel.hasMultipleViewports,
+                            keyEquivalent: "`", modifiers: [.command]) {
+                viewModel.focusAdjacentViewport(forward: true)
+            }
+            submenu.addItem(label: "Focus Previous Viewport", enabled: viewModel.hasMultipleViewports,
+                            keyEquivalent: "`", modifiers: [.command, .shift]) {
+                viewModel.focusAdjacentViewport(forward: false)
+            }
+        })
     }
 
     func buildFileMenu(with builder: MenuBuilder) {
