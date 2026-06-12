@@ -88,20 +88,22 @@ final class DocumentViewModel: ObservableObject {
 
         let newID = UUID()
         let viewport = makeViewport(id: newID, document: document)
-        // A new viewport starts with a clean clone of the model; mirror the source viewport's
-        // options (camera, grid, hidden parts) so the split starts out identical to it.
+        // Mirror the source viewport's options (camera, grid, hidden parts) so the split starts out
+        // identical to it. This is cheap; the model clone is built afterwards.
         viewport.setViewOptions(source.viewOptions)
-        // The model is already loaded (the source viewport exists), so build this viewport's clone
-        // and run the model-dependent setup the modelWasLoaded sink would otherwise do.
-        if !sceneController.parts.isEmpty {
-            viewport.applyLoadedModel()
-        }
 
         let splitID = UUID()
         viewports[newID] = viewport
         ratios[splitID] = 0.5
         layout = layout.replacingLeaf(id, with: .split(id: splitID, axis: axis, .leaf(id), .leaf(newID)))
         focusedViewportID = newID
+
+        // Build this viewport's clone of the model *after* the split has rendered, so the new pane
+        // appears immediately rather than waiting on the (potentially heavy) clone + snap-vertex
+        // work. The `modelWasLoaded` sink covers the case where the model isn't loaded yet.
+        if !sceneController.parts.isEmpty {
+            DispatchQueue.main.async { viewport.applyLoadedModel() }
+        }
     }
 
     func close(_ id: UUID) {
