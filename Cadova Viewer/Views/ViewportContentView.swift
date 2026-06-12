@@ -13,6 +13,10 @@ struct ViewportContentView: View {
     /// sync (the controller's `sceneViewSize` is a plain property and doesn't trigger a re-render).
     @State private var paneSize: CGSize = .zero
 
+    /// The focus ring flashes on when this pane gains focus, then fades out, so it signals the
+    /// change without staying on permanently.
+    @State private var focusRingOpacity: Double = 0
+
     private var isFocused: Bool { viewModel.focusedViewportID == viewportID }
 
     var body: some View {
@@ -47,9 +51,21 @@ struct ViewportContentView: View {
                 if viewModel.hasMultipleViewports {
                     Rectangle()
                         .strokeBorder(Color.accentColor, lineWidth: 2)
-                        .opacity(isFocused ? 1 : 0)
+                        .opacity(focusRingOpacity)
                         .allowsHitTesting(false)
                 }
             }
+            .onChange(of: isFocused) { _, focused in flashFocusRing(focused) }
+            // Flash the initially-focused pane too (e.g. the new pane right after a split).
+            .onAppear { if isFocused { flashFocusRing(true) } }
+    }
+
+    private func flashFocusRing(_ focused: Bool) {
+        if focused {
+            focusRingOpacity = 1
+            withAnimation(.easeOut(duration: 0.6).delay(0.4)) { focusRingOpacity = 0 }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) { focusRingOpacity = 0 }
+        }
     }
 }
