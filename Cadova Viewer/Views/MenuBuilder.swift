@@ -28,7 +28,6 @@ class MenuBuilder: NSObject, NSMenuDelegate {
         item.image = icon
 
         if modifiers != [] {
-            item.isAlternate = true
             item.keyEquivalentModifierMask = modifiers
         }
 

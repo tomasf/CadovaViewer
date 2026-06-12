@@ -61,7 +61,7 @@ struct ViewportContentView: View {
     }
 
     /// Peak opacity of the ring when a pane gains focus (kept semitransparent so it's a hint).
-    private static let focusRingPeak = 0.55
+    private static let focusRingPeak = 0.7
 
     private func flashFocusRing(_ focused: Bool) {
         if focused {

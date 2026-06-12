@@ -164,15 +164,16 @@ extension ViewportController {
         builder.addItem(label: "Split Top and Bottom", enabled: canSplitTall) {
             viewModel.split(self.viewportID, axis: .vertical)
         }
-        builder.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports) {
+        builder.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports,
+                        keyEquivalent: "w", modifiers: [.command, .control, .shift]) {
             viewModel.close(self.viewportID)
         }
 
         if viewModel.hasMultipleViewports {
-            builder.addItem(label: "Focus Next Viewport", keyEquivalent: "]") {
+            builder.addItem(label: "Focus Next Viewport", keyEquivalent: ">", modifiers: [.control]) {
                 viewModel.focusAdjacentViewport(forward: true)
             }
-            builder.addItem(label: "Focus Previous Viewport", keyEquivalent: "[") {
+            builder.addItem(label: "Focus Previous Viewport", keyEquivalent: "<", modifiers: [.control]) {
                 viewModel.focusAdjacentViewport(forward: false)
             }
         }

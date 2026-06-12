@@ -135,14 +135,6 @@ class CustomSceneView: SCNView {
         switch Int(event.keyCode) {
         case kVK_Escape:
             onCancel?()
-        case kVK_Tab: // cycle viewports while a 3D view has focus (Shift-Tab goes backwards).
-            // Only consume Tab when there's more than one viewport; otherwise let it fall through
-            // to the normal key-view loop so Tab keeps its standard focus-traversal behaviour.
-            if let viewModel = viewportController?.documentViewModel, viewModel.hasMultipleViewports {
-                viewModel.focusAdjacentViewport(forward: !event.modifierFlags.contains(.shift))
-            } else {
-                super.keyDown(with: event)
-            }
         default:
             super.keyDown(with: event)
         }
