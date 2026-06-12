@@ -56,4 +56,6 @@ enum ViewportLayoutMetrics {
     static let minPaneWidth: CGFloat = 280
     static let minPaneHeight: CGFloat = 180
     static let dividerThickness: CGFloat = 5
+    /// Matches the scene view's background so the dividers and a not-yet-rendered pane blend in.
+    static let backgroundColor = Color(white: 0.05)
 }

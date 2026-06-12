@@ -74,7 +74,7 @@ struct ResizableSplit<First: View, Second: View>: View {
 
     private func divider(horizontal: Bool, available: CGFloat, minExtent: CGFloat) -> some View {
         Rectangle()
-            .fill(Color.black)
+            .fill(ViewportLayoutMetrics.backgroundColor)
             .frame(width: horizontal ? ViewportLayoutMetrics.dividerThickness : nil,
                    height: horizontal ? nil : ViewportLayoutMetrics.dividerThickness)
             .overlay {
