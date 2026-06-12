@@ -170,14 +170,14 @@ extension ViewportController {
             viewModel.close(self.viewportID)
         }
 
-        // ⌘< / ⌘> — a Command modifier (unlike Control) matches the key equivalent by character, so
-        // it resolves to whichever key produces < / > on the active layout and displays correctly.
+        // Focus next/previous. The key equivalent is the US backtick key, whose key position is the
+        // < / > (`<>|`) key on ISO layouts — so it reads as ⌘< / ⌘> there (and ⌘` on US ANSI).
         builder.addItem(label: "Focus Next Viewport", enabled: viewModel.hasMultipleViewports,
-                        keyEquivalent: ">", modifiers: [.command]) {
+                        keyEquivalent: "`", modifiers: [.command]) {
             viewModel.focusAdjacentViewport(forward: true)
         }
         builder.addItem(label: "Focus Previous Viewport", enabled: viewModel.hasMultipleViewports,
-                        keyEquivalent: "<", modifiers: [.command]) {
+                        keyEquivalent: "`", modifiers: [.command, .shift]) {
             viewModel.focusAdjacentViewport(forward: false)
         }
     }
