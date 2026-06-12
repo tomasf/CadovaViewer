@@ -56,10 +56,9 @@ final class MeasurementRenderer {
         self.controller = controller
         self.parentNode = parentNode
 
-        // Reconcile after each change settles (the sink runs on the next main-thread tick, so the
-        // controller's published values are already updated when it reads them).
-        controller.objectWillChange
-            .receive(on: DispatchQueue.main)
+        // Reconcile synchronously when the state changes (in the same runloop turn, so the geometry
+        // tracks the cursor without a frame of lag).
+        controller.didChange
             .sink { [weak self] in self?.reconcile() }
             .store(in: &observers)
 

@@ -29,7 +29,14 @@ final class MeasurementController: ObservableObject {
 
     /// Measurement currently highlighted from the sidebar; its dots/line are emphasized in every
     /// viewport.
-    @Published var highlightedID: Measurement.ID?
+    @Published var highlightedID: Measurement.ID? {
+        didSet { if highlightedID != oldValue { didChange.send() } }
+    }
+
+    /// Fires synchronously after the measurement state changes (a point moved, a measurement was
+    /// added/removed, the highlight changed). Each viewport's `MeasurementRenderer` reconciles on
+    /// it in the same runloop turn, so the geometry tracks the cursor without a frame of lag.
+    let didChange = PassthroughSubject<Void, Never>()
 
     /// Whether the pointer is over the sidebar list. While true the model hover is ignored so
     /// moving over the list doesn't drive the measurement preview.
@@ -62,6 +69,7 @@ final class MeasurementController: ObservableObject {
         } else {
             clearHoverPreview()
         }
+        didChange.send()
     }
 
     func commitPoint(at worldPoint: SCNVector3) {
@@ -85,6 +93,7 @@ final class MeasurementController: ObservableObject {
             measurements.append(measurement)
             registerUndo(toRestore: before, actionName: "Set Measurement Start Point")
         }
+        didChange.send()
     }
 
     /// Cancels an in-progress length measurement (Escape, or leaving measure mode).
@@ -93,6 +102,7 @@ final class MeasurementController: ObservableObject {
         if let index = inProgressIndex {
             measurements.remove(at: index)
         }
+        didChange.send()
     }
 
     func delete(_ id: Measurement.ID) {
@@ -145,5 +155,6 @@ final class MeasurementController: ObservableObject {
         if let id = highlightedID, !measurements.contains(where: { $0.id == id }) {
             highlightedID = nil
         }
+        didChange.send()
     }
 }
