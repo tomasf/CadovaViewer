@@ -3,6 +3,7 @@ import AppKit
 import SwiftUI
 import ObjectiveC
 import Combine
+import Carbon.HIToolbox
 import ViewerCore
 
 struct ViewerSceneView: NSViewRepresentable {
@@ -131,10 +132,10 @@ class CustomSceneView: SCNView {
     }
 
     override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 53: // Escape
+        switch Int(event.keyCode) {
+        case kVK_Escape:
             onCancel?()
-        case 48: // Tab — cycle viewports while a 3D view has focus (Shift-Tab goes backwards).
+        case kVK_Tab: // cycle viewports while a 3D view has focus (Shift-Tab goes backwards).
             // Only consume Tab when there's more than one viewport; otherwise let it fall through
             // to the normal key-view loop so Tab keeps its standard focus-traversal behaviour.
             if let viewModel = viewportController?.documentViewModel, viewModel.hasMultipleViewports {
