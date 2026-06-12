@@ -303,7 +303,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         // Keep edge lines ~1pt wide regardless of the drawable's backing scale.
         let lineWidthInPoints = 1.0
         let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
-        renderer.currentRenderCommandEncoder?.setLineWidthPrivate(Float(lineWidthInPoints * scale))
+        if scale.isFinite {
+            renderer.currentRenderCommandEncoder?.setLineWidthPrivate(Float(lineWidthInPoints * scale))
+        }
     }
 
     func clearRoll() {
