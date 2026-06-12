@@ -50,7 +50,7 @@ struct ViewportContentView: View {
             .overlay {
                 if viewModel.hasMultipleViewports {
                     Rectangle()
-                        .strokeBorder(Color.accentColor, lineWidth: 2)
+                        .strokeBorder(Color.accentColor, lineWidth: 1)
                         .opacity(focusRingOpacity)
                         .allowsHitTesting(false)
                 }
@@ -60,12 +60,15 @@ struct ViewportContentView: View {
             .onAppear { if isFocused { flashFocusRing(true) } }
     }
 
+    /// Peak opacity of the ring when a pane gains focus (kept semitransparent so it's a hint).
+    private static let focusRingPeak = 0.55
+
     private func flashFocusRing(_ focused: Bool) {
         if focused {
-            focusRingOpacity = 1
-            withAnimation(.easeOut(duration: 0.6).delay(0.4)) { focusRingOpacity = 0 }
+            focusRingOpacity = Self.focusRingPeak
+            withAnimation(.easeOut(duration: 1.6).delay(0.4)) { focusRingOpacity = 0 }
         } else {
-            withAnimation(.easeOut(duration: 0.2)) { focusRingOpacity = 0 }
+            withAnimation(.easeOut(duration: 0.3)) { focusRingOpacity = 0 }
         }
     }
 }
