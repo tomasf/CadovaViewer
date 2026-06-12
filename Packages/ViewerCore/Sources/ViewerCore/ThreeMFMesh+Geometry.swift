@@ -9,6 +9,37 @@ extension Mesh {
         .init(vertexCount: vertices.count, triangleCount: triangles.count)
     }
 
+    /// Statistics for this mesh once placed into the scene by `transform`, including its surface
+    /// area and enclosed volume in the transformed coordinate space.
+    public func statistics(transform: simd_double4x4) -> ModelData.Statistics {
+        let (area, volume) = areaAndVolume(transform: transform)
+        return .init(vertexCount: vertices.count, triangleCount: triangles.count, surfaceArea: area, volume: volume)
+    }
+
+    /// Surface area and (absolute) enclosed volume of this mesh after applying `transform`.
+    ///
+    /// Volume is the signed-tetrahedron sum, meaningful only for a watertight mesh; its absolute
+    /// value is returned so a mirrored (negative-determinant) transform still reports a positive
+    /// volume. Area is the sum of the transformed triangle areas. Both are in the units of the
+    /// transformed space — pass a transform that maps mesh coordinates to millimetres for mm²/mm³.
+    public func areaAndVolume(transform: simd_double4x4) -> (area: Double, volume: Double) {
+        func point(_ index: Int) -> SIMD3<Double> {
+            let v = transform * SIMD4<Double>(vertices[index].simd, 1)
+            return SIMD3(v.x, v.y, v.z)
+        }
+
+        var area = 0.0
+        var signedVolume = 0.0
+        for t in triangles {
+            let a = point(t.v1)
+            let b = point(t.v2)
+            let c = point(t.v3)
+            area += 0.5 * simd_length(simd_cross(b - a, c - a))
+            signedVolume += simd_dot(a, simd_cross(b, c)) / 6.0
+        }
+        return (area, abs(signedVolume))
+    }
+
     public func edgeGeometries() -> (sharp: SCNGeometry, smooth: SCNGeometry) {
         let material = SCNMaterial()
         material.lightingModel = .constant

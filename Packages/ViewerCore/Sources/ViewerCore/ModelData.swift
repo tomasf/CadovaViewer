@@ -8,10 +8,15 @@ public struct ModelData: Sendable {
     public let parts: [Part]
     public let metadata: [ThreeMF.Metadata]
 
-    public init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata]) {
+    /// The model's axis-aligned bounding-box size in millimetres. Spatial (does not sum across
+    /// parts the way `Statistics` does), so it lives here rather than in `Statistics`.
+    public let boundingBoxSize: SIMD3<Double>
+
+    public init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata], boundingBoxSize: SIMD3<Double> = .zero) {
         self.rootNode = rootNode
         self.parts = parts
         self.metadata = metadata
+        self.boundingBoxSize = boundingBoxSize
     }
 
     public init() {
@@ -72,15 +77,24 @@ extension ModelData {
         public let vertexCount: Int
         public let triangleCount: Int
 
-        public init(vertexCount: Int, triangleCount: Int) {
+        /// Total surface area in mm².
+        public let surfaceArea: Double
+        /// Total enclosed volume in mm³ (meaningful only for watertight meshes).
+        public let volume: Double
+
+        public init(vertexCount: Int, triangleCount: Int, surfaceArea: Double = 0, volume: Double = 0) {
             self.vertexCount = vertexCount
             self.triangleCount = triangleCount
+            self.surfaceArea = surfaceArea
+            self.volume = volume
         }
 
         public init(_ stats: [Statistics]) {
             self.init(
                 vertexCount: stats.map(\.vertexCount).reduce(0, +),
-                triangleCount: stats.map(\.triangleCount).reduce(0, +)
+                triangleCount: stats.map(\.triangleCount).reduce(0, +),
+                surfaceArea: stats.map(\.surfaceArea).reduce(0, +),
+                volume: stats.map(\.volume).reduce(0, +)
             )
         }
     }

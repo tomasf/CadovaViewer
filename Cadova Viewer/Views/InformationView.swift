@@ -17,6 +17,10 @@ struct InformationView: View {
                 }
 
                 Section {
+                    LabeledContent("Dimensions") { Text(formattedDimensions) }
+                    LabeledContent("Volume") { Text(formattedVolume) }
+                    LabeledContent("Surface Area") { Text(formattedSurfaceArea) }
+                    LabeledContent("Parts") { Text("\(model.modelData.parts.count)") }
                     LabeledContent("Vertices") { Text("\(model.modelData.statistics.vertexCount)") }
                     LabeledContent("Triangles") { Text("\(model.modelData.statistics.triangleCount)") }
                 }
@@ -47,6 +51,22 @@ struct InformationView: View {
             return ""
         }
         return ByteCountFormatter().string(fromByteCount: Int64(size))
+    }
+
+    var formattedDimensions: String {
+        let size = model.modelData.boundingBoxSize
+        let format = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0...2))
+        return "\(size.x.formatted(format)) × \(size.y.formatted(format)) × \(size.z.formatted(format)) mm"
+    }
+
+    var formattedVolume: String {
+        let value = model.modelData.statistics.volume.formatted(.number.precision(.fractionLength(0)))
+        return "\(value) mm³"
+    }
+
+    var formattedSurfaceArea: String {
+        let value = model.modelData.statistics.surfaceArea.formatted(.number.precision(.fractionLength(0)))
+        return "\(value) mm²"
     }
 
     var sortedMetadataGroups: [(Metadata.Name, [Metadata])] {

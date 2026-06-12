@@ -8,6 +8,11 @@ extension ModelData {
         let loader = ModelLoader(url: url)
         let loadedModel = try await loader.load()
 
+        // Scale from the document's modelling unit to millimetres; applied both as the root
+        // node's transform and when measuring real-world area/volume/dimensions.
+        let multiplier = loadedModel.rootModel.unit?.millimetersPerUnit ?? 1
+        let unitScale = simd_double4x4(diagonal: SIMD4(Double(multiplier), Double(multiplier), Double(multiplier), 1))
+
         struct ComponentProducts: Sendable {
             let mainGeometry: SCNGeometry
             let sharpEdgesGeometry: SCNGeometry
@@ -33,6 +38,10 @@ extension ModelData {
 
                 let (geometry, emittedCorners) = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
 
+                // Mesh coords → millimetres = unit scale ∘ this component's placement transform.
+                let worldTransform = unitScale * simd_double4x4(loadedComponent.scnMatrix)
+                let stats = loadedMesh.mesh.statistics(transform: worldTransform)
+
                 if includeEdges && loadedComponent.meshIndex < indexedEdgeGeometries.count {
                     let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
                     return ComponentProducts(
@@ -41,7 +50,7 @@ extension ModelData {
                         smoothEdgesGeometry: smooth,
                         mesh: loadedMesh.mesh,
                         emittedCorners: emittedCorners,
-                        stats: loadedMesh.mesh.statistics,
+                        stats: stats,
                         transform: loadedComponent.scnMatrix
                     )
                 } else {
@@ -52,7 +61,7 @@ extension ModelData {
                         smoothEdgesGeometry: emptyGeometry,
                         mesh: loadedMesh.mesh,
                         emittedCorners: emittedCorners,
-                        stats: loadedMesh.mesh.statistics,
+                        stats: stats,
                         transform: loadedComponent.scnMatrix
                     )
                 }
@@ -119,15 +128,35 @@ extension ModelData {
 
         let container = SCNNode()
         container.name = "Model root"
-        if let multiplier = loadedModel.rootModel.unit?.millimetersPerUnit {
-            container.transform = SCNMatrix4MakeScale(multiplier, multiplier, multiplier)
-        }
+        container.transform = SCNMatrix4MakeScale(multiplier, multiplier, multiplier)
 
         for part in parts {
             container.addChildNode(part.nodes.container)
         }
 
-        self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata)
+        // `boundingBox` is in the container's local space (children transforms applied, the
+        // container's own unit scale not), so multiply by `multiplier` for the mm size.
+        let (boundsMin, boundsMax) = container.boundingBox
+        let boundingBoxSize = SIMD3(
+            Double(boundsMax.x - boundsMin.x),
+            Double(boundsMax.y - boundsMin.y),
+            Double(boundsMax.z - boundsMin.z)
+        ) * Double(multiplier)
+
+        self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize)
+    }
+}
+
+extension simd_double4x4 {
+    /// A double-precision matrix matching SceneKit's `simd_float4x4(_:)` layout for an `SCNMatrix4`.
+    init(_ m: SCNMatrix4) {
+        let f = simd_float4x4(m)
+        self.init(
+            SIMD4<Double>(f.columns.0),
+            SIMD4<Double>(f.columns.1),
+            SIMD4<Double>(f.columns.2),
+            SIMD4<Double>(f.columns.3)
+        )
     }
 }
 
