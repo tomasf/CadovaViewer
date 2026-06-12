@@ -164,21 +164,21 @@ extension ViewportController {
         builder.addItem(label: "Split Top and Bottom", enabled: canSplitTall) {
             viewModel.split(self.viewportID, axis: .vertical)
         }
+        // Always present, disabled when there's a single viewport (per the HIG).
         builder.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports,
                         keyEquivalent: "w", modifiers: [.command, .control, .shift]) {
             viewModel.close(self.viewportID)
         }
 
-        if viewModel.hasMultipleViewports {
-            // ⌃< / ⌃> as real menu shortcuts. Punctuation key equivalents map to US key positions,
-            // so on other layouts the glyph (and this equivalent) can land on a different key — the
-            // scene view's keyDown also matches the typed < / > so the physical key always works.
-            builder.addItem(label: "Focus Next Viewport", keyEquivalent: ">", modifiers: [.control]) {
-                viewModel.focusAdjacentViewport(forward: true)
-            }
-            builder.addItem(label: "Focus Previous Viewport", keyEquivalent: "<", modifiers: [.control]) {
-                viewModel.focusAdjacentViewport(forward: false)
-            }
+        // ⌘< / ⌘> — a Command modifier (unlike Control) matches the key equivalent by character, so
+        // it resolves to whichever key produces < / > on the active layout and displays correctly.
+        builder.addItem(label: "Focus Next Viewport", enabled: viewModel.hasMultipleViewports,
+                        keyEquivalent: ">", modifiers: [.command]) {
+            viewModel.focusAdjacentViewport(forward: true)
+        }
+        builder.addItem(label: "Focus Previous Viewport", enabled: viewModel.hasMultipleViewports,
+                        keyEquivalent: "<", modifiers: [.command]) {
+            viewModel.focusAdjacentViewport(forward: false)
         }
     }
 
