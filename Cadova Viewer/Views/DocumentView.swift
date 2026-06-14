@@ -45,10 +45,6 @@ struct DocumentView: View {
                 set: { viewModel.focusedViewport.projection = $0 })
     }
 
-    /// Whether the model has more than one part (the sidebar is only meaningful then). Read from the
-    /// loaded model data, which arrives asynchronously.
-    private var hasMultipleParts: Bool { (modelData?.parts.count ?? 0) > 1 }
-
     var body: some View {
         NavigationSplitView(columnVisibility: $viewModel.sidebarVisibility) {
             PartsSidebar(viewModel: viewModel)
@@ -140,7 +136,6 @@ struct DocumentView: View {
                 Label("Parts", systemImage: "sidebar.left")
             }
             .help("Show or hide the parts sidebar")
-            .disabled(!hasMultipleParts)
         }
 
         Group {
