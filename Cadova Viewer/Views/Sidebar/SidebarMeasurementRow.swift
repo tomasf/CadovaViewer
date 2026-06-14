@@ -45,6 +45,20 @@ struct SidebarMeasurementRow: View {
                 .buttonStyle(.plain)
             }
         }
+        .contextMenu {
+            Button("Copy") {
+                copyMeasurement()
+            }
+            Button("Delete", role: .destructive) {
+                onDelete()
+            }
+            .disabled(measurement.phase == .coordinate)
+        }
+    }
+
+    private func copyMeasurement() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(measurement.copyText, forType: .string)
     }
 
     @ViewBuilder
@@ -89,5 +103,45 @@ struct SidebarMeasurementRow: View {
 fileprivate extension Double {
     var formattedDistance: String {
         formatted(.number.precision(.integerAndFractionLength(integerLimits: 1..., fractionLimits: 3...3)))
+    }
+
+    var formattedMeasurementCopyValue: String {
+        let formatter = NumberFormatter()
+        formatter.locale = .current
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return (formatter.string(from: NSNumber(value: self)) ?? "\(self)") + " mm"
+    }
+}
+
+fileprivate extension CGFloat {
+    var formattedMeasurementCopyValue: String {
+        Double(self).formattedMeasurementCopyValue
+    }
+}
+
+private extension Measurement {
+    var copyText: String {
+        var sections = [pointText(title: "Point A", point: start)]
+        if let end {
+            sections.append(pointText(title: "Point B", point: end))
+        }
+        if let delta {
+            sections.append(pointText(title: "Delta", point: delta))
+        }
+        if let length {
+            sections.append("Length: \(length.formattedMeasurementCopyValue)")
+        }
+        return sections.joined(separator: "\n\n")
+    }
+
+    func pointText(title: String, point: SCNVector3) -> String {
+        """
+        \(title)
+        X: \(point.x.formattedMeasurementCopyValue)
+        Y: \(point.y.formattedMeasurementCopyValue)
+        Z: \(point.z.formattedMeasurementCopyValue)
+        """
     }
 }

@@ -76,7 +76,7 @@ final class DocumentViewModel: ObservableObject {
             self?.objectWillChange.send()
         }.store(in: &cancellables)
 
-        measurements.didChange.sink { [weak self] in
+        measurements.didChange.sink { [weak self] _ in
             self?.showSidebarIfMeasurementsAreVisible()
         }.store(in: &cancellables)
 

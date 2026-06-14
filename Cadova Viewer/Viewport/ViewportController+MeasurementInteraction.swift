@@ -7,12 +7,22 @@ import ViewerCore
 /// hits, Option-snapping to feature-edge corners, and Shift axis-constraint. The
 /// `MeasurementController` owns the measurement state; this is purely the hit-testing half.
 extension ViewportController {
+    func scheduleHoverPointUpdate() {
+        guard !hoverPointUpdateScheduled else { return }
+        hoverPointUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            hoverPointUpdateScheduled = false
+            hoverPointDidChange()
+        }
+    }
+
     func hoverPointDidChange() {
         // Update measurement geometry before rendering so the per-frame screen-size
         // scaling in updateAtTime applies to the freshly placed/moved dots.
         if measurementController.interactionMode == .measure {
             let worldPoint = measurementController.isPointerOverList ? nil : hoverPoint.flatMap { measurementPoint(atViewPoint: $0) }
-            measurementController.hover(at: worldPoint)
+            measurementController.hover(at: worldPoint, sourceViewportID: viewportID)
         }
 
         sceneView.setNeedsRedraw()

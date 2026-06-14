@@ -12,9 +12,10 @@ import ViewerCore
 struct DocumentSidebar: View {
     @ObservedObject var viewModel: DocumentViewModel
     @ObservedObject var thumbnails: PartThumbnailService
-    @ObservedObject var measurements: MeasurementController
+    let measurements: MeasurementController
     @State private var selection: Set<ModelData.Part.ID> = []
     @State private var useExclusiveSelection = false
+    @State private var measurementRows: [Measurement] = []
     @State private var lastMeasurementScrollSignature: MeasurementScrollSignature?
     @State private var measurementScrollToken = 0
     /// The sidebar's own size, persisted app-wide. Keep the old key so existing user preferences
@@ -30,9 +31,9 @@ struct DocumentSidebar: View {
     private var viewport: ViewportController { viewModel.focusedViewport }
     private var allParts: [ModelData.Part] { viewModel.sceneController.parts }
     private var hasMeasurements: Bool {
-        !measurements.measurements.isEmpty || measurements.hoverPreview != nil
+        !measurementRows.isEmpty
     }
-    private var measurementRows: [Measurement] {
+    private var currentMeasurementRows: [Measurement] {
         measurements.measurements + (measurements.hoverPreview.map { [$0] } ?? [])
     }
 
@@ -110,8 +111,11 @@ struct DocumentSidebar: View {
             .onDisappear {
                 measurements.isPointerOverList = false
             }
-            .onReceive(measurements.didChange) {
-                updateMeasurementScrollToken()
+            .onAppear {
+                refreshMeasurementRows()
+            }
+            .onReceive(measurements.didChange.throttle(for: .milliseconds(80), scheduler: RunLoop.main, latest: true)) { _ in
+                refreshMeasurementRows()
             }
             .onChange(of: measurementScrollToken) { _, _ in
                 scrollToLatestMeasurement(proxy)
@@ -167,8 +171,11 @@ struct DocumentSidebar: View {
         return "Slice \(ids.count) Parts"
     }
 
-    private func updateMeasurementScrollToken() {
-        let signature = MeasurementScrollSignature(rows: measurementRows)
+    private func refreshMeasurementRows() {
+        let rows = currentMeasurementRows
+        measurementRows = rows
+
+        let signature = MeasurementScrollSignature(rows: rows)
         guard signature != lastMeasurementScrollSignature else { return }
         lastMeasurementScrollSignature = signature
         measurementScrollToken += 1

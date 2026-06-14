@@ -92,8 +92,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
 
     var hoverPoint: CGPoint? {
-        didSet { hoverPointDidChange() }
+        didSet { scheduleHoverPointUpdate() }
     }
+    var hoverPointUpdateScheduled = false
     
     /// The geometry node currently named as the outline target, so its name can be cleared when
     /// the highlight moves. See `ViewportController+Highlight`.
@@ -130,7 +131,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         grid = ViewportGrid()
         let measurementParent = SCNNode()
         measurementParent.name = "Measurements"
-        measurementRenderer = MeasurementRenderer(controller: measurements, parentNode: measurementParent)
+        measurementRenderer = MeasurementRenderer(controller: measurements, parentNode: measurementParent, viewportID: viewportID)
 
         self.document = document
         super.init()

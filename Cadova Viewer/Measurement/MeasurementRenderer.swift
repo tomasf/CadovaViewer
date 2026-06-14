@@ -12,6 +12,7 @@ import ViewerCore
 final class MeasurementRenderer {
     private let controller: MeasurementController
     private let parentNode: SCNNode
+    private let viewportID: UUID
 
     /// Called when the geometry changes and a redraw is needed. Set by the viewport.
     var onVisualChange: (() -> Void)?
@@ -22,6 +23,9 @@ final class MeasurementRenderer {
 
     private struct MeasurementNodes {
         let container: SCNNode
+        let startDot: SCNNode
+        let endDot: SCNNode?
+        let line: SCNNode?
         /// Dots and line that need per-frame on-screen-size scaling. Captured once when
         /// the geometry is (re)built, so the render thread never walks the live scene
         /// graph (`childNodes`) while the main thread mutates it.
@@ -52,20 +56,30 @@ final class MeasurementRenderer {
 
     private var observers: Set<AnyCancellable> = []
 
-    init(controller: MeasurementController, parentNode: SCNNode) {
+    init(controller: MeasurementController, parentNode: SCNNode, viewportID: UUID) {
         self.controller = controller
         self.parentNode = parentNode
+        self.viewportID = viewportID
 
         // Reconcile synchronously when the state changes (in the same runloop turn, so the geometry
         // tracks the cursor without a frame of lag).
         controller.didChange
-            .sink { [weak self] in self?.reconcile() }
+            .sink { [weak self] change in self?.handleChange(change) }
             .store(in: &observers)
 
         reconcile() // build any measurements that already exist (e.g. on a split)
     }
 
     // MARK: - Reconciliation
+
+    private func handleChange(_ change: MeasurementController.Change) {
+        if case .live(let sourceViewportID) = change,
+           let sourceViewportID,
+           sourceViewportID != viewportID {
+            return
+        }
+        reconcile()
+    }
 
     /// Brings this viewport's geometry in line with the controller's current measurements and hover
     /// preview: builds new or moved measurements, drops removed ones, and flags the highlight
@@ -128,13 +142,18 @@ final class MeasurementRenderer {
 
     private func updateGeometry(id: UUID, color: NSColor, start: SCNVector3, end: SCNVector3?) {
         nodesLock.lock()
-        let container = nodes[id]?.container ?? {
+        let existing = nodes[id]
+        nodesLock.unlock()
+
+        if let existing, updateExistingGeometry(existing, id: id, start: start, end: end) {
+            return
+        }
+
+        let container = existing?.container ?? {
             let node = SCNNode()
             parentNode.addChildNode(node)
             return node
         }()
-        nodesLock.unlock()
-
         container.childNodes.forEach { $0.removeFromParentNode() }
 
         var scalables: [SCNNode] = []
@@ -160,10 +179,41 @@ final class MeasurementRenderer {
             overlayLine = overlay
         }
 
+        let line = scalables.first { $0.geometry is SCNCone }
         nodesLock.lock()
         pendingResizeIDs.insert(id)
-        nodes[id] = MeasurementNodes(container: container, scalables: scalables, overlayLine: overlayLine, start: start, end: end, color: color)
+        nodes[id] = MeasurementNodes(container: container, startDot: startDot, endDot: scalables.first { $0 !== startDot && $0.geometry is SCNSphere }, line: line, scalables: scalables, overlayLine: overlayLine, start: start, end: end, color: color)
         nodesLock.unlock()
+    }
+
+    private func updateExistingGeometry(_ existing: MeasurementNodes, id: UUID, start: SCNVector3, end: SCNVector3?) -> Bool {
+        switch (existing.end, end, existing.endDot, existing.line) {
+        case (nil, nil, _, _):
+            existing.startDot.position = start
+        case (_?, let newEnd?, let endDot?, let line?):
+            existing.startDot.position = start
+            endDot.position = newEnd
+            updateLineNode(line, from: start, to: newEnd)
+        default:
+            // Topology changed (point-only ↔ line measurement); rebuild child nodes once.
+            return false
+        }
+
+        nodesLock.lock()
+        pendingResizeIDs.insert(id)
+        nodes[id] = MeasurementNodes(
+            container: existing.container,
+            startDot: existing.startDot,
+            endDot: existing.endDot,
+            line: existing.line,
+            scalables: existing.scalables,
+            overlayLine: existing.overlayLine,
+            start: start,
+            end: end,
+            color: existing.color
+        )
+        nodesLock.unlock()
+        return true
     }
 
     private func dotNode(at position: SCNVector3, color: NSColor) -> SCNNode {
@@ -196,13 +246,20 @@ final class MeasurementRenderer {
 
         let node = SCNNode(geometry: cone)
         node.renderingOrder = 2 // over the dashed overlay so it hides the dashes where visible
+        updateLineNode(node, from: start, to: end)
+        return node
+    }
+
+    private func updateLineNode(_ node: SCNNode, from start: SCNVector3, to end: SCNVector3) {
+        if let cone = node.geometry as? SCNCone {
+            cone.height = CGFloat(end.distance(from: start))
+        }
         node.simdPosition = simd_float3(
             Float((start.x + end.x) / 2),
             Float((start.y + end.y) / 2),
             Float((start.z + end.z) / 2)
         )
         node.simdOrientation = orientation(from: start, to: end)
-        return node
     }
 
     /// Rotation that maps the cone's default +Y axis onto the start→end direction.
