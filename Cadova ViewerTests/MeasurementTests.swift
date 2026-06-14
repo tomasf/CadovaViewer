@@ -5,15 +5,10 @@ import ViewerCore
 
 struct MeasurementTests {
     @Test func `color index wraps around the palette`() {
-        let count = Measurement.palette.count
-        #expect(Measurement.color(forIndex: 0) == Measurement.palette[0])
-        #expect(Measurement.color(forIndex: count) == Measurement.palette[0])
-        #expect(Measurement.color(forIndex: count + 3) == Measurement.palette[3])
-    }
-
-    @Test func `a measurement exposes its palette color`() {
-        let m = Measurement(colorIndex: 2, start: SCNVector3(0, 0, 0), end: nil, phase: .coordinate)
-        #expect(m.color == Measurement.palette[2])
+        let count = MeasurementPalette.entries.count
+        #expect(MeasurementPalette.entry(forIndex: 0) == MeasurementPalette.entries[0])
+        #expect(MeasurementPalette.entry(forIndex: count) == MeasurementPalette.entries[0])
+        #expect(MeasurementPalette.entry(forIndex: count + 3) == MeasurementPalette.entries[3])
     }
 
     @Test func `delta is nil until an end point is set`() {

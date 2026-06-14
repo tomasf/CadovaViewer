@@ -84,6 +84,16 @@ struct DocumentSidebar: View {
                                     measurements.highlightedID = nil
                                 }
                             }
+                            .listRowBackground(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(.regularMaterial)
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 9)
+                                            .strokeBorder(MeasurementPalette.color(forIndex: measurement.colorIndex), lineWidth: 2)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 4)
+                            )
                         }
                     }
                 }
@@ -105,6 +115,10 @@ struct DocumentSidebar: View {
                 useExclusiveSelection = keys.contains(.option)
             }
             .onExitCommand { selection.removeAll() }
+            .onKeyPress(.space) {
+                toggleSelectedPartsVisibility()
+                return .handled
+            }
             .onHover { hovering in
                 measurements.isPointerOverList = hovering && hasMeasurements
             }
@@ -187,6 +201,17 @@ struct DocumentSidebar: View {
             withAnimation {
                 proxy.scrollTo(id, anchor: .bottom)
             }
+        }
+    }
+
+    private func toggleSelectedPartsVisibility() {
+        guard !selection.isEmpty else { return }
+        if selection.count == 1, let id = selection.first {
+            toggleVisibility(id)
+        } else if selection.allSatisfy({ viewport.hiddenPartIDs.contains($0) }) {
+            viewport.visibleParts.formUnion(selection)
+        } else {
+            viewport.visibleParts.subtract(selection)
         }
     }
 

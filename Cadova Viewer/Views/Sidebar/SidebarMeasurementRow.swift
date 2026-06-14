@@ -6,7 +6,7 @@ struct SidebarMeasurementRow: View {
     let measurement: Measurement
     let onDelete: () -> Void
 
-    private var color: Color { Color(measurement.color) }
+    private var color: Color { MeasurementPalette.color(forIndex: measurement.colorIndex) }
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
@@ -25,21 +25,16 @@ struct SidebarMeasurementRow: View {
         }
         .font(.system(.callout))
         .monospacedDigit()
-        .padding(14)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 6)
         .padding(.top, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(color, lineWidth: 2)
-        }
         .overlay(alignment: .topTrailing) {
             if measurement.phase != .coordinate {
                 Button(action: onDelete) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
-                        .padding(6)
+                        .frame(width: 26, height: 32, alignment: .center)
                 }
                 .contentShape(.interaction, Rectangle())
                 .buttonStyle(.plain)
