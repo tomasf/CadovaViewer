@@ -273,6 +273,7 @@ private struct PartRow: View {
     // Match the thumbnail to the system "Sidebar icon size" setting, which SwiftUI surfaces here and
     // also uses to size the row's text/height — so the image scales in step with the rest of the row.
     @Environment(\.sidebarRowSize) private var sidebarRowSize
+    @Environment(\.appearsActive) private var appearsActive
 
     let part: ModelData.Part
     let thumbnail: NSImage?
@@ -288,6 +289,16 @@ private struct PartRow: View {
         }
     }
 
+    private var checkmarkStyle: AnyShapeStyle {
+        if appearsActive, isVisible {
+            AnyShapeStyle(Color.accentColor)
+        } else if appearsActive {
+            AnyShapeStyle(.secondary)
+        } else {
+            AnyShapeStyle(.tertiary)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             thumbnailView
@@ -298,7 +309,7 @@ private struct PartRow: View {
             Button(action: toggleVisibility) {
                 Image(systemName: isVisible ? "checkmark.circle.fill" : "circle")
                     .imageScale(.large)
-                    .foregroundStyle(isVisible ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(checkmarkStyle)
             }
             .buttonStyle(.plain)
             .help(isVisible ? "Hide Part" : "Show Part")
