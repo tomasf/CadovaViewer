@@ -184,14 +184,11 @@ private struct PartRow: View {
     }
 
     @ViewBuilder private var thumbnailView: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color.primary.opacity(0.06))
+        Group {
             if let thumbnail {
                 Image(nsImage: thumbnail)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .padding(1)
             } else {
                 Image(systemName: "cube")
                     .foregroundStyle(.tertiary)
