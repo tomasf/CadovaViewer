@@ -103,13 +103,23 @@ struct PartsSidebar: View {
 }
 
 private struct PartRow: View {
-    /// Thumbnail side length. Fits within the sidebar list's ~40 pt minimum row height.
-    private static let thumbnailSize: CGFloat = 36
+    // Match the thumbnail to the system "Sidebar icon size" setting, which SwiftUI surfaces here and
+    // also uses to size the row's text/height — so the image scales in step with the rest of the row.
+    @Environment(\.sidebarRowSize) private var sidebarRowSize
 
     let part: ModelData.Part
     let thumbnail: NSImage?
     let isVisible: Bool
     let toggleVisibility: () -> Void
+
+    private var thumbnailSize: CGFloat {
+        switch sidebarRowSize {
+        case .small: 18
+        case .medium: 24
+        case .large: 32
+        @unknown default: 24
+        }
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -143,6 +153,6 @@ private struct PartRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .frame(width: Self.thumbnailSize, height: Self.thumbnailSize)
+        .frame(width: thumbnailSize, height: thumbnailSize)
     }
 }

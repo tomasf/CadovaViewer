@@ -46,6 +46,12 @@ class Document: NSDocument, NSWindowDelegate {
     override func makeWindowControllers() {
         let viewController = DocumentHostingController(document: self)
         let window = NSWindow(contentViewController: viewController)
+        // Make SwiftUI's NavigationSplitView draw the modern full-height sidebar — its material runs
+        // all the way up under the title bar. A pure SwiftUI WindowGroup configures this
+        // automatically; a manually created AppKit window needs both the unified toolbar style and
+        // `.fullSizeContentView` (so content, including the sidebar, extends into the title-bar area).
+        window.toolbarStyle = .unified
+        window.styleMask.insert(.fullSizeContentView)
         let windowController = NSWindowController(window: window)
         window.delegate = self
         self.addWindowController(windowController)
