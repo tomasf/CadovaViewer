@@ -112,8 +112,7 @@ extension ViewportController: NavLibStateProvider {
     }
 
     var mousePosition: SCNVector3? {
-        guard var hoverPoint = hoverPoint else { return nil }
-        hoverPoint.y = sceneViewSize.height - hoverPoint.y
+        guard let hoverPoint else { return nil }
         return sceneView.unprojectPoint(SCNVector3(hoverPoint.x, hoverPoint.y, 0))
     }
 

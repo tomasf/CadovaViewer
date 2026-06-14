@@ -11,7 +11,7 @@ extension ViewportController {
         // Update measurement geometry before rendering so the per-frame screen-size
         // scaling in updateAtTime applies to the freshly placed/moved dots.
         if measurementController.interactionMode == .measure {
-            let worldPoint = measurementController.isPointerOverList ? nil : hoverPoint.flatMap { measurementPoint(atViewPoint: $0, flipY: true) }
+            let worldPoint = measurementController.isPointerOverList ? nil : hoverPoint.flatMap { measurementPoint(atViewPoint: $0) }
             measurementController.hover(at: worldPoint)
         }
 
@@ -21,7 +21,7 @@ extension ViewportController {
 
     func handleMeasurementClick(at point: CGPoint) {
         guard measurementController.interactionMode == .measure else { return }
-        if let worldPoint = measurementPoint(atViewPoint: point, flipY: false) {
+        if let worldPoint = measurementPoint(atViewPoint: point) {
             measurementController.commitPoint(at: worldPoint)
             sceneView.setNeedsRedraw()
         }
@@ -31,23 +31,23 @@ extension ViewportController {
     /// length measurement is in progress, the point is constrained to an axis through the
     /// start point (projected from the cursor ray, so it needn't lie on the model);
     /// otherwise it's the model surface hit (nil if the cursor misses the model).
-    private func measurementPoint(atViewPoint point: CGPoint, flipY: Bool) -> SCNVector3? {
+    private func measurementPoint(atViewPoint point: CGPoint) -> SCNVector3? {
         let modifiers = NSEvent.modifierFlags
-        if modifiers.contains(.option), let vertex = nearestSnapVertex(toViewPoint: point, flipY: flipY) {
+        if modifiers.contains(.option), let vertex = nearestSnapVertex(toViewPoint: point) {
             return vertex
         }
         if modifiers.contains(.shift), let start = measurementController.inProgressStart {
-            return axisConstrainedPoint(atViewPoint: point, flipY: flipY, from: start)
+            return axisConstrainedPoint(atViewPoint: point, from: start)
         }
-        return surfaceWorldPoint(atViewPoint: point, flipY: flipY)
+        return surfaceWorldPoint(atViewPoint: point)
     }
 
     /// Nearest *visible* corner vertex (sharp-edge endpoint) whose screen projection is
     /// within a small radius of the cursor, or nil if none qualifies. Corners hidden
     /// behind the model are skipped.
-    private func nearestSnapVertex(toViewPoint point: CGPoint, flipY: Bool) -> SCNVector3? {
+    private func nearestSnapVertex(toViewPoint point: CGPoint) -> SCNVector3? {
         guard !snapVertices.isEmpty else { return nil }
-        let viewPoint = flipY ? CGPoint(x: point.x, y: sceneViewSize.height - point.y) : point
+        let viewPoint = point
         ensureSnapGrid()
 
         let threshold = 14.0 // view points
@@ -78,14 +78,15 @@ extension ViewportController {
         let worldTransform = pointOfView.worldTransform
         let projection = pointOfView.camera?.projectionTransform ?? SCNMatrix4Identity
 
-        if snapGridViewSize == sceneViewSize,
+        let viewSize = sceneView.bounds.size
+        if snapGridViewSize == viewSize,
            SCNMatrix4EqualToMatrix4(worldTransform, snapGridWorldTransform),
            SCNMatrix4EqualToMatrix4(projection, snapGridProjection) {
             return
         }
         snapGridWorldTransform = worldTransform
         snapGridProjection = projection
-        snapGridViewSize = sceneViewSize
+        snapGridViewSize = viewSize
 
         snapGridCells.removeAll(keepingCapacity: true)
         for vertex in snapVertices {
@@ -148,8 +149,8 @@ extension ViewportController {
 
     /// Projects the cursor ray onto an axis line through `start`, choosing the axis whose
     /// screen-space direction best matches the cursor's movement from the start point.
-    private func axisConstrainedPoint(atViewPoint point: CGPoint, flipY: Bool, from start: SCNVector3) -> SCNVector3? {
-        let viewPoint = flipY ? CGPoint(x: point.x, y: sceneViewSize.height - point.y) : point
+    private func axisConstrainedPoint(atViewPoint point: CGPoint, from start: SCNVector3) -> SCNVector3? {
+        let viewPoint = point
 
         let startScreen = sceneView.projectPoint(start)
         let screenDelta = simd_double2(Double(viewPoint.x) - Double(startScreen.x), Double(viewPoint.y) - Double(startScreen.y))
@@ -189,11 +190,11 @@ extension ViewportController {
     }
 
     /// Casts a ray at the given view point and returns the world coordinates of the
-    /// nearest model surface hit, or nil if the ray misses the model. `flipY` should
-    /// be true for SwiftUI (top-left origin) points such as `hoverPoint`, and false
-    /// for AppKit view-space points such as gesture recognizer locations.
-    private func surfaceWorldPoint(atViewPoint point: CGPoint, flipY: Bool) -> SCNVector3? {
-        let viewPoint = flipY ? CGPoint(x: point.x, y: sceneViewSize.height - point.y) : point
+    /// nearest model surface hit, or nil if the ray misses the model. `point` is in
+    /// AppKit view coordinates (the `SCNView`'s bottom-left origin), matching
+    /// SceneKit's hit-test/project/unproject APIs.
+    private func surfaceWorldPoint(atViewPoint point: CGPoint) -> SCNVector3? {
+        let viewPoint = point
         guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return nil }
 
         // Hit test each visible part's model node. Using the model node as the root (the

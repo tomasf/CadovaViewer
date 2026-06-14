@@ -155,6 +155,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         sceneView.onClick = { [weak self] point in
             self?.handleMeasurementClick(at: point)
         }
+        sceneView.onHover = { [weak self] point in
+            self?.hoverPoint = point
+        }
         sceneView.onCancel = { [weak self] in
             self?.measurementController.cancelInProgress()
         }

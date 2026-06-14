@@ -24,6 +24,7 @@ struct ViewerSceneView: NSViewRepresentable {
 
 class CustomSceneView: SCNView {
     var onClick: ((CGPoint) -> Void)? = nil
+    var onHover: ((CGPoint?) -> Void)? = nil
     var onCancel: (() -> Void)? = nil
     var mouseInteractionActive: AnyPublisher<Bool, Never> { mouseInteractionActiveSubject.eraseToAnyPublisher() }
     var mouseRotationPivot: AnyPublisher<SCNVector3?, Never> { mouseRotationPivotSubject.eraseToAnyPublisher() }
@@ -33,6 +34,7 @@ class CustomSceneView: SCNView {
     private let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     private let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
     private let contextMenuSubject = PassthroughSubject<NSEvent, Never>()
+    private var hoverTrackingArea: NSTrackingArea?
 
     override init(frame: NSRect, options: [String : Any]? = nil) {
         super.init(frame: frame, options: options)
@@ -55,6 +57,43 @@ class CustomSceneView: SCNView {
 
     override func rightMouseUp(with event: NSEvent) {
         mouseUp(with: event)
+    }
+
+    override func layout() {
+        super.layout()
+        overlaySKScene?.size = bounds.size
+    }
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+
+        super.updateTrackingAreas()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        onHover?(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onHover?(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onHover?(nil)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -215,4 +254,3 @@ extension CustomSceneView: SCNSceneRendererDelegate {
         renderer.currentRenderCommandEncoder?.setLineWidthPrivate(Float(snapshotScale))
     }
 }
-

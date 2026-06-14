@@ -28,14 +28,7 @@ struct ViewportContentView: View {
             .background(ViewportLayoutMetrics.backgroundColor)
             .onGeometryChange(for: CGSize.self, of: { $0.size }) {
                 viewportController.sceneViewSize = $0
-                viewportController.sceneView.overlaySKScene?.size = $0
                 paneSize = $0
-            }
-            .onContinuousHover(coordinateSpace: .local) { phase in
-                switch phase {
-                case .active(let point): viewportController.hoverPoint = point
-                case .ended: viewportController.hoverPoint = nil
-                }
             }
             .overlay(alignment: .bottomTrailing) {
                 if viewportController.viewOptions.showCoordinateSystemIndicator {
