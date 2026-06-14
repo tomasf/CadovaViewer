@@ -54,6 +54,20 @@ final class MeasurementRenderer {
     private var lastSizedCameraProjection = SCNMatrix4Identity
     private var lastHighlightedID: Measurement.ID?
 
+    /// On-screen length (view points) each measurement's dashed overlay was last rebuilt for.
+    /// Rebuilding the overlay allocates a fresh `SCNGeometry` every time, so it's skipped while
+    /// the projected length is essentially unchanged — the dashes are world-space points fixed on
+    /// the line, so only their on-screen spacing drifts between rebuilds, which is imperceptible
+    /// during motion and corrected the moment the length changes meaningfully (e.g. on zoom).
+    /// Render-thread-only (touched solely in `updateScreenSizes`); stale entries for removed
+    /// measurements are harmless.
+    private var overlayScreenLengths: [UUID: Double] = [:]
+
+    /// Fractional change in projected length that forces a dashed-overlay rebuild.
+    private let overlayRebuildThreshold = 0.04
+    /// Change in cone taper ratio (top/bottom radius) that forces a mesh re-tessellation.
+    private let coneTaperEpsilon: CGFloat = 0.01
+
     private var observers: Set<AnyCancellable> = []
 
     init(controller: MeasurementController, parentNode: SCNNode, viewportID: UUID) {
@@ -305,6 +319,7 @@ final class MeasurementRenderer {
         // measurements that changed since last time.
         let cameraChanged = !SCNMatrix4EqualToMatrix4(worldTransform, lastSizedCameraTransform)
             || !SCNMatrix4EqualToMatrix4(projection, lastSizedCameraProjection)
+        let changedIDs = pendingResizeIDs
         let ids = cameraChanged ? Array(nodes.keys) : Array(pendingResizeIDs)
         let entries = ids.compactMap { id in nodes[id].map { (id, $0) } }
         pendingResizeIDs.removeAll()
@@ -319,6 +334,7 @@ final class MeasurementRenderer {
             let emphasis = (id == highlighted) ? 1.7 : 1.0
             let dotRadius = dotScreenRadius * emphasis
             let lineRadius = lineScreenRadius * emphasis
+            let geometryChanged = changedIDs.contains(id)
 
             for child in entry.scalables {
                 // Scale via the node transform (not geometry radius) so changes apply in
@@ -336,26 +352,45 @@ final class MeasurementRenderer {
                     guard midRadius > 0 else { continue }
 
                     // Overall thickness comes from the node scale (a transform, applied this
-                    // frame); the cone radii only carry the taper ratio between ends.
-                    cone.topRadius = CGFloat(endRadius / midRadius)      // local +Y == end
-                    cone.bottomRadius = CGFloat(startRadius / midRadius) // local -Y == start
+                    // frame); the cone radii only carry the taper ratio between ends. Writing the
+                    // radii re-tessellates the cone mesh, so only do it when the taper actually
+                    // shifts — the per-frame thickness change rides on the node scale below.
+                    let topRatio = CGFloat(endRadius / midRadius)      // local +Y == end
+                    let bottomRatio = CGFloat(startRadius / midRadius) // local -Y == start
+                    if geometryChanged
+                        || abs(cone.topRadius - topRatio) > coneTaperEpsilon
+                        || abs(cone.bottomRadius - bottomRatio) > coneTaperEpsilon {
+                        cone.topRadius = topRatio
+                        cone.bottomRadius = bottomRatio
+                    }
                     child.simdScale = simd_float3(Float(midRadius), 1, Float(midRadius))
                 }
             }
 
             if let overlayLine = entry.overlayLine, let end = entry.end {
-                overlayLine.geometry = dashedOverlayGeometry(from: entry.start, to: end, color: entry.color, renderer: renderer)
+                // Rebuilding the overlay allocates a fresh geometry, so skip it unless the dashes
+                // have geometrically changed or the projected length moved enough to matter.
+                let screenLength = projectedScreenLength(from: entry.start, to: end, renderer: renderer)
+                let lastLength = overlayScreenLengths[id]
+                let lengthChangedEnough = lastLength.map { abs(screenLength - $0) > overlayRebuildThreshold * max($0, 1) } ?? true
+                if geometryChanged || lengthChangedEnough {
+                    overlayLine.geometry = dashedOverlayGeometry(from: entry.start, to: end, screenLength: screenLength, color: entry.color)
+                    overlayScreenLengths[id] = screenLength
+                }
             }
         }
     }
 
-    /// Builds the subtle dashed line drawn on top of the model, with a constant on-screen
-    /// dash size for the current camera.
-    private func dashedOverlayGeometry(from start: SCNVector3, to end: SCNVector3, color: NSColor, renderer: SCNSceneRenderer) -> SCNGeometry {
+    /// Projected on-screen length (view points) of the line between two world points.
+    private func projectedScreenLength(from start: SCNVector3, to end: SCNVector3, renderer: SCNSceneRenderer) -> Double {
         let projectedStart = renderer.projectPoint(start)
         let projectedEnd = renderer.projectPoint(end)
-        let screenLength = hypot(projectedEnd.x - projectedStart.x, projectedEnd.y - projectedStart.y)
+        return hypot(projectedEnd.x - projectedStart.x, projectedEnd.y - projectedStart.y)
+    }
 
+    /// Builds the subtle dashed line drawn on top of the model, with a constant on-screen
+    /// dash size for the current camera.
+    private func dashedOverlayGeometry(from start: SCNVector3, to end: SCNVector3, screenLength: Double, color: NSColor) -> SCNGeometry {
         let dashLength = 5.0   // view points
         let gapLength = 4.0
         let period = dashLength + gapLength
