@@ -76,6 +76,10 @@ final class DocumentViewModel: ObservableObject {
             self?.objectWillChange.send()
         }.store(in: &cancellables)
 
+        measurements.didChange.sink { [weak self] in
+            self?.showSidebarIfMeasurementsAreVisible()
+        }.store(in: &cancellables)
+
         // Start the document's single SpaceMouse session off the critical path (NlCreate blocks).
         DispatchQueue.main.async { [weak self] in self?.startNavLib() }
     }
@@ -103,6 +107,14 @@ final class DocumentViewModel: ObservableObject {
         focusObservers.removeAll()
         guard let viewport = viewports[focusedViewportID] else { return }
         viewport.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &focusObservers)
+    }
+
+    private func showSidebarIfMeasurementsAreVisible() {
+        guard sidebarVisibility == .detailOnly,
+              measurements.hoverPreview != nil || !measurements.measurements.isEmpty else { return }
+        withAnimation {
+            sidebarVisibility = .all
+        }
     }
 
     func ratio(for splitID: UUID) -> Binding<Double> {

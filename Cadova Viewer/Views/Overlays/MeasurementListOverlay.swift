@@ -2,24 +2,24 @@ import SwiftUI
 import SceneKit
 import AppKit
 
-struct MeasurementListOverlay: View {
+struct MeasurementSidebarSection: View {
     @ObservedObject var controller: MeasurementController
+    let height: CGFloat
+
+    @State private var contentHeight: CGFloat = 0
 
     private var rows: [Measurement] {
         controller.measurements + (controller.hoverPreview.map { [$0] } ?? [])
     }
 
-    /// Vertical space left clear at the bottom for the parts button overlay.
-    private let bottomClearance: CGFloat = 64
-
     var body: some View {
-        if controller.interactionMode == .measure || !controller.measurements.isEmpty {
-            GeometryReader { geometry in
+        if !rows.isEmpty, height > 1 {
+            VStack(spacing: 0) {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(rows) { measurement in
-                                MeasurementRow(measurement: measurement) {
+                                SidebarMeasurementRow(measurement: measurement) {
                                     withAnimation(.easeOut(duration: 0.2)) {
                                         if NSEvent.modifierFlags.contains(.option) {
                                             controller.deleteAll()
@@ -39,30 +39,36 @@ struct MeasurementListOverlay: View {
                                 }
                             }
                         }
-                        // The inset lives inside the scroll content so the boxes keep a
-                        // margin from the window edge without the ScrollView clipping them.
-                        .padding()
+                        .padding(8)
+                        .readHeight($contentHeight)
                     }
-                    // Content-sized (so empty space below doesn't capture clicks meant
-                    // for the model) but allowed to grow to the full available height.
-                    .frame(width: 272, alignment: .leading)
-                    .frame(maxHeight: max(geometry.size.height - bottomClearance, 0), alignment: .top)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .scrollClipDisabled()
+                    .frame(height: height)
                     .onHover { controller.isPointerOverList = $0 }
+                    .onDisappear { controller.isPointerOverList = false }
                     .onChange(of: rows.last?.id) { _, lastID in
-                        if let lastID {
-                            withAnimation { proxy.scrollTo(lastID, anchor: .bottom) }
-                        }
+                        scrollToBottom(proxy, lastID: lastID)
+                    }
+                    .onChange(of: rows.map(\.id)) { _, _ in
+                        contentHeight = 0
+                    }
+                    .onChange(of: contentHeight) { _, _ in
+                        scrollToBottom(proxy, lastID: rows.last?.id)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .background(.thinMaterial)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy, lastID: Measurement.ID?) {
+        if let lastID {
+            withAnimation { proxy.scrollTo(lastID, anchor: .bottom) }
         }
     }
 }
 
-private struct MeasurementRow: View {
+private struct SidebarMeasurementRow: View {
     let measurement: Measurement
     let onDelete: () -> Void
 
@@ -87,8 +93,8 @@ private struct MeasurementRow: View {
         .monospacedDigit()
         .padding(14)
         .padding(.trailing, 4)
-        .frame(width: 240, alignment: .leading)
-        .background(.ultraThinMaterial)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay {
             RoundedRectangle(cornerRadius: 10)
@@ -124,6 +130,8 @@ private struct MeasurementRow: View {
                 .foregroundStyle(.secondary)
                 .font(.caption)
             Text(value.formattedDistance)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
                 .textSelection(.enabled)
         }
         .frame(maxWidth: .infinity)
@@ -135,20 +143,31 @@ private struct MeasurementRow: View {
             Text(label)
                 .foregroundStyle(.secondary)
                 .font(.headline)
+                .frame(width: 28, alignment: .leading)
 
             keyValuePairBox("X", point.x)
             keyValuePairBox("Y", point.y)
             keyValuePairBox("Z", point.z)
         }
     }
+}
 
-    @ViewBuilder
-    private func deltaRow(_ delta: SCNVector3) -> some View {
-        HStack(alignment: .center, spacing: 0) {
-            keyValuePairBox("ΔX", delta.x)
-            keyValuePairBox("ΔY", delta.y)
-            keyValuePairBox("ΔZ", delta.z)
+private struct HeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private extension View {
+    func readHeight(_ height: Binding<CGFloat>) -> some View {
+        background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: HeightPreferenceKey.self, value: geometry.size.height)
+            }
         }
+        .onPreferenceChange(HeightPreferenceKey.self) { height.wrappedValue = $0 }
     }
 }
 

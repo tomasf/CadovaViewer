@@ -48,18 +48,10 @@ struct DocumentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $viewModel.sidebarVisibility) {
             PartsSidebar(viewModel: viewModel)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 250)
         } detail: {
-            ZStack {
-                // Everything here respects the safe area, so overlays (the measurement list, the
-                // per-pane controls inside `viewportArea`) clear the toolbar and floating sidebar. The
-                // edge-to-edge bleed that lets the sidebar's glass show the 3D scene underneath happens
-                // one level down, on the SceneKit view itself (see `ViewportContentView`).
-                viewportArea
-                MeasurementListOverlay(controller: viewModel.measurements)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
-            .colorScheme(.dark)
+            viewportArea
+                .colorScheme(.dark)
         }
         .toolbar(id: "document") { toolbar }
         .onReceive(viewModel.document!.loadingStream) { status in
@@ -85,9 +77,7 @@ struct DocumentView: View {
         }
     }
 
-    /// The 3D viewport (possibly split) and its document-global overlays — everything that lives in
-    /// the detail column behind the sidebar. The measurement list is layered separately (in `body`)
-    /// so it can respect the safe area while this bleeds full-screen.
+    /// The 3D viewport (possibly split) and its document-global overlays.
     private var viewportArea: some View {
         ViewportSplitView(viewModel: viewModel)
             .frame(minWidth: 500, minHeight: 300)

@@ -12,21 +12,60 @@ import ViewerCore
 struct PartsSidebar: View {
     @ObservedObject var viewModel: DocumentViewModel
     @ObservedObject var thumbnails: PartThumbnailService
+    @ObservedObject var measurements: MeasurementController
     @State private var selection: Set<ModelData.Part.ID> = []
     @State private var useExclusiveSelection = false
+    @State private var splitSpaceID = UUID()
     /// The sidebar's own size, persisted app-wide. We override the system "Sidebar icon size" with
     /// this so thumbnails are never as small as the system's Small option allows.
     @AppStorage("partsSidebarSize") private var sidebarSize: PartsSidebarSize = .large
+    @AppStorage("partsMeasurementsSidebarRatio") private var partsMeasurementsSplitRatio = 0.35
+
+    private let splitDividerHeight: CGFloat = 5
+    private let minimumPartsHeight: CGFloat = 120
+    private let minimumMeasurementHeight: CGFloat = 150
 
     init(viewModel: DocumentViewModel) {
         self.viewModel = viewModel
         self.thumbnails = viewModel.sceneController.thumbnails
+        self.measurements = viewModel.measurements
     }
 
     private var viewport: ViewportController { viewModel.focusedViewport }
     private var allParts: [ModelData.Part] { viewModel.sceneController.parts }
+    private var hasMeasurements: Bool {
+        !measurements.measurements.isEmpty || measurements.hoverPreview != nil
+    }
 
     var body: some View {
+        GeometryReader { geometry in
+            let measurementHeight = measurementHeight(for: geometry.size.height)
+            VStack(spacing: 0) {
+                partsPane
+                    .frame(maxHeight: .infinity)
+
+                if hasMeasurements {
+                    splitDivider(totalHeight: geometry.size.height)
+                    MeasurementSidebarSection(
+                        controller: measurements,
+                        height: measurementHeight
+                    )
+                }
+            }
+            .coordinateSpace(.named(splitSpaceID))
+        }
+        .navigationTitle("Parts")
+    }
+
+    private var partsPane: some View {
+        VStack(spacing: 0) {
+            partsList
+                .frame(maxHeight: .infinity)
+            sidebarBottomBar
+        }
+    }
+
+    private var partsList: some View {
         List(allParts, selection: $selection) { part in
             PartRow(
                 part: part,
@@ -57,43 +96,80 @@ struct PartsSidebar: View {
             useExclusiveSelection = keys.contains(.option)
         }
         .onExitCommand { selection.removeAll() }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                Divider()
-                HStack {
-                    Button {
-                        if viewport.hiddenPartIDs.isEmpty {
-                            viewport.visibleParts = []
-                        } else {
-                            viewport.hiddenPartIDs = []
-                        }
-                    } label: {
-                        Image(systemName: viewport.hiddenPartIDs.isEmpty ? "eye.slash" : "eye")
+    }
+
+    private var sidebarBottomBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack {
+                Button {
+                    if viewport.hiddenPartIDs.isEmpty {
+                        viewport.visibleParts = []
+                    } else {
+                        viewport.hiddenPartIDs = []
                     }
-                    .buttonStyle(.borderless)
-                    .help(viewport.hiddenPartIDs.isEmpty ? "Hide All" : "Show All")
-                    Spacer()
-                    Menu {
-                        Picker("Size", selection: $sidebarSize) {
-                            ForEach(PartsSidebarSize.allCases) { size in
-                                Text(size.title).tag(size)
-                            }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        Image(systemName: "square.grid.2x2")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("View Options")
+                } label: {
+                    Image(systemName: viewport.hiddenPartIDs.isEmpty ? "eye.slash" : "eye")
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .buttonStyle(.borderless)
+                .help(viewport.hiddenPartIDs.isEmpty ? "Hide All" : "Show All")
+                Spacer()
+                Menu {
+                    Picker("Size", selection: $sidebarSize) {
+                        ForEach(PartsSidebarSize.allCases) { size in
+                            Text(size.title).tag(size)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Image(systemName: "square.grid.2x2")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("View Options")
             }
-            .background(.thinMaterial)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .navigationTitle("Parts")
+        .background(.thinMaterial)
+    }
+
+    private func measurementHeight(for totalHeight: CGFloat) -> CGFloat {
+        let available = max(totalHeight - splitDividerHeight, 1)
+        return max(available * clampedSplitRatio(partsMeasurementsSplitRatio, available: available), 0)
+    }
+
+    private func clampedSplitRatio(_ ratio: Double, available: CGFloat) -> Double {
+        let lower = min(0.75, Double(min(minimumMeasurementHeight, available) / available))
+        let upper = max(lower, Double(max(available - minimumPartsHeight, 1) / available))
+        return min(max(ratio, lower), upper)
+    }
+
+    private func splitDivider(totalHeight: CGFloat) -> some View {
+        let available = max(totalHeight - splitDividerHeight, 1)
+        return Rectangle()
+            .fill(Color.clear)
+            .frame(height: splitDividerHeight)
+            .overlay {
+                Rectangle().fill(Color.secondary.opacity(0.25))
+                    .frame(height: 1)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(coordinateSpace: .named(splitSpaceID))
+                    .onChanged { value in
+                        let measurementHeight = max(totalHeight - value.location.y - splitDividerHeight, 0)
+                        partsMeasurementsSplitRatio = clampedSplitRatio(Double(measurementHeight / available), available: available)
+                    }
+            )
+            .onHover { inside in
+                if inside {
+                    NSCursor.resizeUpDown.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
     }
 
     private func parts(for ids: Set<ModelData.Part.ID>) -> [ModelData.Part] {
