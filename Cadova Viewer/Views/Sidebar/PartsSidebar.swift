@@ -14,6 +14,9 @@ struct PartsSidebar: View {
     @ObservedObject var thumbnails: PartThumbnailService
     @State private var selection: Set<ModelData.Part.ID> = []
     @State private var useExclusiveSelection = false
+    /// The sidebar's own size, persisted app-wide. We override the system "Sidebar icon size" with
+    /// this so thumbnails are never as small as the system's Small option allows.
+    @AppStorage("partsSidebarSize") private var sidebarSize: PartsSidebarSize = .large
 
     init(viewModel: DocumentViewModel) {
         self.viewModel = viewModel
@@ -35,6 +38,9 @@ struct PartsSidebar: View {
                 viewport.highlightedPartID = hovered ? part.id : nil
             }
         }
+        // Override the system "Sidebar icon size"; the rows (and their thumbnails, which read this)
+        // follow this choice instead.
+        .environment(\.sidebarRowSize, sidebarSize.rowSize)
         .contextMenu(forSelectionType: ModelData.Part.ID.self) { ids in
             if !ids.isEmpty {
                 Button("Center View") { viewport.centerView(onPartIDs: ids) }
@@ -64,6 +70,20 @@ struct PartsSidebar: View {
                     }
                     .buttonStyle(.borderless)
                     Spacer()
+                    Menu {
+                        Picker("Size", selection: $sidebarSize) {
+                            ForEach(PartsSidebarSize.allCases) { size in
+                                Text(size.title).tag(size)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        Image(systemName: "square.grid.2x2")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("View Options")
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
@@ -98,6 +118,30 @@ struct PartsSidebar: View {
             viewport.visibleParts.insert(id)
         } else {
             viewport.visibleParts.remove(id)
+        }
+    }
+}
+
+/// The sidebar's user-chosen size, shown in the bottom-bar view-options menu. It maps onto SwiftUI's
+/// `SidebarRowSize` so the whole row (text, height, thumbnail) scales, deliberately skipping the
+/// system's smallest size.
+enum PartsSidebarSize: String, CaseIterable, Identifiable {
+    case small
+    case large
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .small: "Small"
+        case .large: "Large"
+        }
+    }
+
+    var rowSize: SidebarRowSize {
+        switch self {
+        case .small: .medium
+        case .large: .large
         }
     }
 }
