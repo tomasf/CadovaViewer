@@ -48,6 +48,7 @@ struct MeasurementListOverlay: View {
                     .frame(width: 272, alignment: .leading)
                     .frame(maxHeight: max(geometry.size.height - bottomClearance, 0), alignment: .top)
                     .fixedSize(horizontal: false, vertical: true)
+                    .scrollClipDisabled()
                     .onHover { controller.isPointerOverList = $0 }
                     .onChange(of: rows.last?.id) { _, lastID in
                         if let lastID {

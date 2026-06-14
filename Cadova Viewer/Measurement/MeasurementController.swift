@@ -85,6 +85,11 @@ final class MeasurementController: ObservableObject {
             before[index].end = nil
             before[index].phase = .lengthInProgress
             registerUndo(toRestore: Snapshot(measurements: before, nextColorIndex: nextColorIndex), actionName: "Set Measurement Endpoint")
+
+            // A measurement is a one-shot action: once it's finished, drop back to view mode so the
+            // pointer goes straight back to orbiting. (Safe to do here — the measurement is now
+            // `.complete`, so the mode change's `cancelInProgress` has nothing to remove.)
+            interactionMode = .view
         } else {
             clearHoverPreview()
             let before = Snapshot(measurements: measurements, nextColorIndex: nextColorIndex)

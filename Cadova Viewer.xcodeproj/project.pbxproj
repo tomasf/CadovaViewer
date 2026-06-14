@@ -20,8 +20,8 @@
 		C9A941A72EA5018D00D5BAB2 /* Nodal in Frameworks */ = {isa = PBXBuildFile; productRef = C9A941A62EA5018D00D5BAB2 /* Nodal */; };
 		C9C7D33E2DE0981E00480B4E /* NavLibSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C9C7D33D2DE0981E00480B4E /* NavLibSwift */; };
 		CC81DD5586A646E8AD257888 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = F067A6B312C9480CB8822D14 /* ViewerCore */; };
-		E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = FD012F8F219446A99E10DAB0 /* ViewerCore */; };
 		CCAA000D2F0000000000000D /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCAA000C2F0000000000000C /* ViewerCore */; };
+		E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = FD012F8F219446A99E10DAB0 /* ViewerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -949,6 +949,11 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = NavLibSwift;
 		};
+		CCAA000C2F0000000000000C /* ViewerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
+			productName = ViewerCore;
+		};
 		D544785F95E7471F82221DBA /* ViewerCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
@@ -960,11 +965,6 @@
 			productName = ViewerCore;
 		};
 		FD012F8F219446A99E10DAB0 /* ViewerCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
-			productName = ViewerCore;
-		};
-		CCAA000C2F0000000000000C /* ViewerCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
 			productName = ViewerCore;
