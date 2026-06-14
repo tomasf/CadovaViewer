@@ -134,7 +134,7 @@ final class DocumentViewModel: ObservableObject {
         let viewport = makeViewport(id: newID, document: document)
         // Mirror the source viewport's options (camera, grid, hidden parts) so the split starts out
         // identical to it. This is cheap; the model clone is built afterwards.
-        viewport.setViewOptions(source.viewOptions)
+        viewport.setViewOptions(source.viewOptionsForStateRestoration)
 
         let splitID = UUID()
         viewports[newID] = viewport
@@ -232,7 +232,7 @@ final class DocumentViewModel: ObservableObject {
             layout: layout,
             ratios: ratios,
             focusedViewportID: focusedViewportID,
-            viewOptions: viewports.mapValues(\.viewOptions),
+            viewOptions: viewports.mapValues(\.viewOptionsForStateRestoration),
             documentOptions: sceneController.documentOptions,
             sidebarVisible: sidebarVisibility != .detailOnly
         )
