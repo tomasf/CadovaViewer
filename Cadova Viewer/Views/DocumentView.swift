@@ -221,7 +221,7 @@ struct DocumentView: View {
                     Label {
                         Text("Slice")
                     } icon: {
-                        Image(systemName: "square.stack.3d.up.fill")
+                        Image(systemName: "printer.fill")
                     }
                 }
                 .help("Slice in the preferred slicer (hold Option to slice only visible parts)")
