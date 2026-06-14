@@ -2,28 +2,24 @@ import SwiftUI
 import AppKit
 import ViewerCore
 
-/// The window-global parts sidebar. It always acts on the document's *focused* viewport: the
+/// The window-global document sidebar. It always acts on the document's *focused* viewport: part
 /// visibility checkmarks reflect and control that viewport's part visibility, and they update live as
 /// focus moves between split panes (`DocumentViewModel` forwards the focused viewport's changes, so
-/// observing it here is enough).
+/// observing it here is enough). Measurements are document-global.
 ///
 /// Rows are multi-selectable; right-click offers slice / show-only / center-view on the selected
 /// parts, and double-click (or Return) frames them. Each row carries an async-rendered thumbnail.
-struct PartsSidebar: View {
+struct DocumentSidebar: View {
     @ObservedObject var viewModel: DocumentViewModel
     @ObservedObject var thumbnails: PartThumbnailService
     @ObservedObject var measurements: MeasurementController
     @State private var selection: Set<ModelData.Part.ID> = []
     @State private var useExclusiveSelection = false
-    @State private var splitSpaceID = UUID()
-    /// The sidebar's own size, persisted app-wide. We override the system "Sidebar icon size" with
-    /// this so thumbnails are never as small as the system's Small option allows.
-    @AppStorage("partsSidebarSize") private var sidebarSize: PartsSidebarSize = .large
-    @AppStorage("partsMeasurementsSidebarRatio") private var partsMeasurementsSplitRatio = 0.35
-
-    private let splitDividerHeight: CGFloat = 5
-    private let minimumPartsHeight: CGFloat = 120
-    private let minimumMeasurementHeight: CGFloat = 150
+    @State private var lastMeasurementScrollSignature: MeasurementScrollSignature?
+    @State private var measurementScrollToken = 0
+    /// The sidebar's own size, persisted app-wide. Keep the old key so existing user preferences
+    /// survive the sidebar growing beyond parts.
+    @AppStorage("partsSidebarSize") private var sidebarSize: DocumentSidebarSize = .large
 
     init(viewModel: DocumentViewModel) {
         self.viewModel = viewModel
@@ -36,66 +32,91 @@ struct PartsSidebar: View {
     private var hasMeasurements: Bool {
         !measurements.measurements.isEmpty || measurements.hoverPreview != nil
     }
+    private var measurementRows: [Measurement] {
+        measurements.measurements + (measurements.hoverPreview.map { [$0] } ?? [])
+    }
 
     var body: some View {
-        GeometryReader { geometry in
-            let measurementHeight = measurementHeight(for: geometry.size.height)
-            VStack(spacing: 0) {
-                partsPane
-                    .frame(maxHeight: .infinity)
+        sidebarList
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                sidebarBottomBar
+            }
+            .navigationTitle("Contents")
+    }
+
+    private var sidebarList: some View {
+        ScrollViewReader { proxy in
+            List(selection: $selection) {
+                Section("Parts") {
+                    ForEach(allParts) { part in
+                        PartRow(
+                            part: part,
+                            thumbnail: thumbnails.thumbnail(for: part.id),
+                            isVisible: !viewport.hiddenPartIDs.contains(part.id),
+                            toggleVisibility: { toggleVisibility(part.id) }
+                        )
+                        .tag(part.id)
+                        .onHover { hovered in
+                            viewport.highlightedPartID = hovered ? part.id : nil
+                        }
+                    }
+                }
 
                 if hasMeasurements {
-                    splitDivider(totalHeight: geometry.size.height)
-                    MeasurementSidebarSection(
-                        controller: measurements,
-                        height: measurementHeight
-                    )
+                    Section("Measurements") {
+                        ForEach(measurementRows) { measurement in
+                            SidebarMeasurementRow(measurement: measurement) {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    if NSEvent.modifierFlags.contains(.option) {
+                                        measurements.deleteAll()
+                                    } else {
+                                        measurements.delete(measurement.id)
+                                    }
+                                }
+                            }
+                            .id(measurement.id)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                            .onHover { hovering in
+                                if hovering {
+                                    measurements.highlightedID = measurement.id
+                                } else if measurements.highlightedID == measurement.id {
+                                    measurements.highlightedID = nil
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            .coordinateSpace(.named(splitSpaceID))
-        }
-        .navigationTitle("Parts")
-    }
-
-    private var partsPane: some View {
-        VStack(spacing: 0) {
-            partsList
-                .frame(maxHeight: .infinity)
-            sidebarBottomBar
-        }
-    }
-
-    private var partsList: some View {
-        List(allParts, selection: $selection) { part in
-            PartRow(
-                part: part,
-                thumbnail: thumbnails.thumbnail(for: part.id),
-                isVisible: !viewport.hiddenPartIDs.contains(part.id),
-                toggleVisibility: { toggleVisibility(part.id) }
-            )
-            .onHover { hovered in
-                viewport.highlightedPartID = hovered ? part.id : nil
-            }
-        }
-        // Override the system "Sidebar icon size"; the rows (and their thumbnails, which read this)
-        // follow this choice instead.
-        .environment(\.sidebarRowSize, sidebarSize.rowSize)
-        .contextMenu(forSelectionType: ModelData.Part.ID.self) { ids in
-            if !ids.isEmpty {
-                Button("Center View") { viewport.centerView(onPartIDs: ids) }
-                Button("Show Only") { viewport.visibleParts = ids }
-                Divider()
-                Button(sliceTitle(for: ids)) {
-                    viewModel.document?.sliceModel(parts: parts(for: ids))
+            .environment(\.sidebarRowSize, sidebarSize.rowSize)
+            .contextMenu(forSelectionType: ModelData.Part.ID.self) { ids in
+                if !ids.isEmpty {
+                    Button("Center View") { viewport.centerView(onPartIDs: ids) }
+                    Button("Show Only") { viewport.visibleParts = ids }
+                    Divider()
+                    Button(sliceTitle(for: ids)) {
+                        viewModel.document?.sliceModel(parts: parts(for: ids))
+                    }
                 }
+            } primaryAction: { ids in
+                viewport.centerView(onPartIDs: ids)
             }
-        } primaryAction: { ids in
-            viewport.centerView(onPartIDs: ids)
+            .onModifierKeysChanged { _, keys in
+                useExclusiveSelection = keys.contains(.option)
+            }
+            .onExitCommand { selection.removeAll() }
+            .onHover { hovering in
+                measurements.isPointerOverList = hovering && hasMeasurements
+            }
+            .onDisappear {
+                measurements.isPointerOverList = false
+            }
+            .onReceive(measurements.didChange) {
+                updateMeasurementScrollToken()
+            }
+            .onChange(of: measurementScrollToken) { _, _ in
+                scrollToLatestMeasurement(proxy)
+            }
         }
-        .onModifierKeysChanged { _, keys in
-            useExclusiveSelection = keys.contains(.option)
-        }
-        .onExitCommand { selection.removeAll() }
     }
 
     private var sidebarBottomBar: some View {
@@ -116,7 +137,7 @@ struct PartsSidebar: View {
                 Spacer()
                 Menu {
                     Picker("Size", selection: $sidebarSize) {
-                        ForEach(PartsSidebarSize.allCases) { size in
+                        ForEach(DocumentSidebarSize.allCases) { size in
                             Text(size.title).tag(size)
                         }
                     }
@@ -135,43 +156,6 @@ struct PartsSidebar: View {
         .background(.thinMaterial)
     }
 
-    private func measurementHeight(for totalHeight: CGFloat) -> CGFloat {
-        let available = max(totalHeight - splitDividerHeight, 1)
-        return max(available * clampedSplitRatio(partsMeasurementsSplitRatio, available: available), 0)
-    }
-
-    private func clampedSplitRatio(_ ratio: Double, available: CGFloat) -> Double {
-        let lower = min(0.75, Double(min(minimumMeasurementHeight, available) / available))
-        let upper = max(lower, Double(max(available - minimumPartsHeight, 1) / available))
-        return min(max(ratio, lower), upper)
-    }
-
-    private func splitDivider(totalHeight: CGFloat) -> some View {
-        let available = max(totalHeight - splitDividerHeight, 1)
-        return Rectangle()
-            .fill(Color.clear)
-            .frame(height: splitDividerHeight)
-            .overlay {
-                Rectangle().fill(Color.secondary.opacity(0.25))
-                    .frame(height: 1)
-            }
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(coordinateSpace: .named(splitSpaceID))
-                    .onChanged { value in
-                        let measurementHeight = max(totalHeight - value.location.y - splitDividerHeight, 0)
-                        partsMeasurementsSplitRatio = clampedSplitRatio(Double(measurementHeight / available), available: available)
-                    }
-            )
-            .onHover { inside in
-                if inside {
-                    NSCursor.resizeUpDown.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
-    }
-
     private func parts(for ids: Set<ModelData.Part.ID>) -> [ModelData.Part] {
         allParts.filter { ids.contains($0.id) }
     }
@@ -181,6 +165,22 @@ struct PartsSidebar: View {
             return "Slice \"\(part.name)\""
         }
         return "Slice \(ids.count) Parts"
+    }
+
+    private func updateMeasurementScrollToken() {
+        let signature = MeasurementScrollSignature(rows: measurementRows)
+        guard signature != lastMeasurementScrollSignature else { return }
+        lastMeasurementScrollSignature = signature
+        measurementScrollToken += 1
+    }
+
+    private func scrollToLatestMeasurement(_ proxy: ScrollViewProxy) {
+        guard let id = measurementRows.last?.id else { return }
+        DispatchQueue.main.async {
+            withAnimation {
+                proxy.scrollTo(id, anchor: .bottom)
+            }
+        }
     }
 
     /// Toggles a part's visibility in the focused viewport. Mirrors the old popover list: a plain
@@ -204,7 +204,7 @@ struct PartsSidebar: View {
 /// The sidebar's user-chosen size, shown in the bottom-bar view-options menu. It maps onto SwiftUI's
 /// `SidebarRowSize` so the whole row (text, height, thumbnail) scales, deliberately skipping the
 /// system's smallest size.
-enum PartsSidebarSize: String, CaseIterable, Identifiable {
+enum DocumentSidebarSize: String, CaseIterable, Identifiable {
     case small
     case large
 
@@ -222,6 +222,18 @@ enum PartsSidebarSize: String, CaseIterable, Identifiable {
         case .small: .medium
         case .large: .large
         }
+    }
+}
+
+private struct MeasurementScrollSignature: Equatable {
+    var count: Int
+    var lastID: Measurement.ID?
+    var lastHasEnd: Bool
+
+    init(rows: [Measurement]) {
+        count = rows.count
+        lastID = rows.last?.id
+        lastHasEnd = rows.last?.end != nil
     }
 }
 

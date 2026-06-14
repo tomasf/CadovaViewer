@@ -47,8 +47,8 @@ struct DocumentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $viewModel.sidebarVisibility) {
-            PartsSidebar(viewModel: viewModel)
-                .navigationSplitViewColumnWidth(min: 200, ideal: 250)
+            DocumentSidebar(viewModel: viewModel)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 250)
         } detail: {
             viewportArea
                 .colorScheme(.dark)
