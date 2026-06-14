@@ -2,6 +2,7 @@ import Foundation
 import SpriteKit
 import SceneKit
 import Combine
+import Synchronization
 
 final class OverlayScene: SKScene {
     private weak var sceneKitRenderer: SCNSceneRenderer!
@@ -10,7 +11,16 @@ final class OverlayScene: SKScene {
     private let transientNodeContainer = SKNode()
 
     private let pivotPointIndicator = SKShapeNode(circleOfRadius: 4)
-    var pivotPointLocation = SCNVector3(0, 0, 0)
+
+    /// The world-space point the pivot indicator tracks. Written on the main thread (from the
+    /// scene view's rotation-pivot stream) and read every frame by `update(_:)`, which SpriteKit
+    /// drives on its own render thread — so it's guarded by a `Mutex` to avoid a torn read of the
+    /// `SCNVector3` components.
+    var pivotPointLocation: SCNVector3 {
+        get { _pivotPointLocation.withLock { $0 } }
+        set { _pivotPointLocation.withLock { $0 = newValue } }
+    }
+    private let _pivotPointLocation = Mutex<SCNVector3>(SCNVector3(0, 0, 0))
     var pivotPointVisibility = false {
         didSet {
             guard pivotPointVisibility != oldValue else { return }

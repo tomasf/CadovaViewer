@@ -5,6 +5,7 @@ import AppKit
 import NavLib
 import simd
 import ViewerCore
+import Synchronization
 
 class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     let sceneView = CustomSceneView(frame: .zero)
@@ -32,7 +33,16 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// This viewport's private clone of the shared model (clone nodes living in `scene`). Rebuilt
     /// whenever the model loads; mediates per-viewport visibility, hit testing, and the document-
     /// global geometry options. See `ViewportModelInstance`.
-    var modelInstance = ViewportModelInstance()
+    ///
+    /// `SCNView` drives the `SCNSceneRendererDelegate` callbacks on its own render thread, which
+    /// reads this, while the main thread reassigns it when the model loads. The `Mutex` makes that
+    /// safe — without it, reassigning the node-bearing struct races ARC retain/release and corrupts
+    /// the heap (surfacing as an unrelated `EXC_BAD_ACCESS`, e.g. in `swift_task_dealloc`).
+    var modelInstance: ViewportModelInstance {
+        get { _modelInstance.withLock { $0 } }
+        set { _modelInstance.withLock { $0 = newValue } }
+    }
+    private let _modelInstance = Mutex<ViewportModelInstance>(ViewportModelInstance())
 
     /// Holds this viewport's chrome — grid, origin, measurements, highlight ghosts — under one node
     /// so it can be hidden when copying a no-background snapshot.
@@ -41,9 +51,21 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// The model's edge-line geometry nodes in this viewport's scene (depth offset + hit exclusion).
     var edgeNodes: [SCNNode] { modelInstance.edgeGeometryNodes }
 
-    var sceneViewSize: CGSize = .zero
+    /// The scene view's current point size. Written on the main thread (the SwiftUI geometry
+    /// callback) and read by the render-loop delegate, so it's guarded by a `Mutex`.
+    var sceneViewSize: CGSize {
+        get { _sceneViewSize.withLock { $0 } }
+        set { _sceneViewSize.withLock { $0 = newValue } }
+    }
+    private let _sceneViewSize = Mutex<CGSize>(.zero)
 
-    var cameraNode = SCNNode()
+    /// The active point-of-view node. Reassigned both on the render thread (SceneKit can swap the
+    /// point of view in) and the main thread, and read from both, so it's guarded by a `Mutex`.
+    var cameraNode: SCNNode {
+        get { _cameraNode.withLock { $0 } }
+        set { _cameraNode.withLock { $0 = newValue } }
+    }
+    private let _cameraNode = Mutex<SCNNode>(SCNNode())
     /// A directional "headlight" kept aimed along the camera's view direction. It lives on its own
     /// scene node (oriented each frame in `willRenderScene`) rather than being parented onto the
     /// point-of-view node — re-parenting a single light as SceneKit swaps point-of-view nodes could
