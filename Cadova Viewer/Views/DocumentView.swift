@@ -43,7 +43,47 @@ struct DocumentView: View {
                 set: { viewModel.focusedViewport.projection = $0 })
     }
 
+    /// Whether the model has more than one part (the sidebar is only meaningful then). Read from the
+    /// loaded model data, which arrives asynchronously.
+    private var hasMultipleParts: Bool { (modelData?.parts.count ?? 0) > 1 }
+
     var body: some View {
+        NavigationSplitView(columnVisibility: $viewModel.sidebarVisibility) {
+            // The sidebar is a standard translucent column that follows the system appearance (the
+            // viewport beneath shows through), so it is *not* forced dark like the viewport area.
+            PartsSidebar(viewModel: viewModel)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 240)
+        } detail: {
+            viewportArea
+                .colorScheme(.dark)
+        }
+        .toolbar(id: "document") { toolbar }
+        .onReceive(viewModel.document!.loadingStream) { status in
+            withAnimation(.easeInOut) {
+                isLoading = status
+            }
+        }
+        .onReceive(viewModel.document!.slicingStream) { status in
+            withAnimation(.easeInOut) {
+                isSlicing = status
+            }
+        }
+        .onReceive(viewModel.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
+            self.modelData = modelData
+        }
+        .onReceive(focused.showInfoSignal) { _ in
+            if let modelData, let document = viewModel.document {
+                self.infoData = .init(document: document, modelData: modelData)
+            }
+        }
+        .sheet(item: $infoData) { infoModel in
+            InformationView(model: infoModel)
+        }
+    }
+
+    /// The 3D viewport (possibly split) and its document-global overlays — everything that lives in
+    /// the detail column behind the sidebar.
+    private var viewportArea: some View {
         ViewportSplitView(viewModel: viewModel)
             .frame(minWidth: 500, minHeight: 300)
             // Measurements are document-global: one list for the whole document, spanning all panes.
@@ -84,33 +124,22 @@ struct DocumentView: View {
                 .padding()
                 .allowsHitTesting(false)
             }
-            .colorScheme(.dark)
-            .toolbar(id: "document") { toolbar }
-            .onReceive(viewModel.document!.loadingStream) { status in
-                withAnimation(.easeInOut) {
-                    isLoading = status
-                }
-            }
-            .onReceive(viewModel.document!.slicingStream) { status in
-                withAnimation(.easeInOut) {
-                    isSlicing = status
-                }
-            }
-            .onReceive(viewModel.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
-                self.modelData = modelData
-            }
-            .onReceive(focused.showInfoSignal) { _ in
-                if let modelData, let document = viewModel.document {
-                    self.infoData = .init(document: document, modelData: modelData)
-                }
-            }
-            .sheet(item: $infoData) { infoModel in
-                InformationView(model: infoModel)
-            }
     }
 
     @ToolbarContentBuilder
     var toolbar: some CustomizableToolbarContent {
+        ToolbarItem(id: "sidebar", placement: .navigation) {
+            Button {
+                withAnimation {
+                    viewModel.sidebarVisibility = viewModel.sidebarVisibility == .detailOnly ? .all : .detailOnly
+                }
+            } label: {
+                Label("Parts", systemImage: "sidebar.left")
+            }
+            .help("Show or hide the parts sidebar")
+            .disabled(!hasMultipleParts)
+        }
+
         Group {
             ToolbarItem(id: "interaction-mode", placement: .primaryAction) {
                 Picker("Mode", selection: interactionMode) {

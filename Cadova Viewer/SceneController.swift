@@ -19,6 +19,10 @@ final class SceneController: ObservableObject {
 
     @Published var parts: [ModelData.Part] = []
 
+    /// Document-global, lazily-rendered part thumbnails for the parts sidebar. Shared across
+    /// viewports (the geometry is the same in each), so it lives here.
+    let thumbnails = PartThumbnailService()
+
     /// Document-wide view options that act on the shared geometry (smooth shading, edge
     /// visibility). Owned here, not on any single viewport, because they apply to every viewport
     /// identically. Viewports observe `documentGeometryChanged` and apply them to their own clones.
@@ -67,6 +71,7 @@ final class SceneController: ObservableObject {
     private func load(_ modelData: ModelData) {
         self.modelData = modelData
         parts = modelData.parts
+        thumbnails.setParts(modelData.parts)
 
         modelBoundingBox = modelData.rootNode.boundingBox
         modelBoundingSphere = modelData.rootNode.boundingSphere

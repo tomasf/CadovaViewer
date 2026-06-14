@@ -1,9 +1,9 @@
 import SwiftUI
 import ViewerCore
 
-/// One viewport pane: its scene view plus the per-viewport overlays (measurement list, parts
-/// list, axis indicator), the top-right split/close controls, and a focus border when the
-/// document has more than one viewport.
+/// One viewport pane: its scene view plus the per-viewport overlays (axis indicator), the
+/// top-right split/close controls, and a focus border when the document has more than one
+/// viewport.
 struct ViewportContentView: View {
     @ObservedObject var viewModel: DocumentViewModel
     @ObservedObject var viewportController: ViewportController
@@ -35,9 +35,6 @@ struct ViewportContentView: View {
                 case .active(let point): viewportController.hoverPoint = point
                 case .ended: viewportController.hoverPoint = nil
                 }
-            }
-            .overlay(alignment: .bottomLeading) {
-                PartListOverlay(viewportController: viewportController)
             }
             .overlay(alignment: .bottomTrailing) {
                 if viewportController.viewOptions.showCoordinateSystemIndicator {

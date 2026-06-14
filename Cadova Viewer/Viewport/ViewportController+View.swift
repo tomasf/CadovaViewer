@@ -115,25 +115,37 @@ extension ViewportController {
     }
 
     func cameraView(for preset: ViewPreset) -> CameraView {
-        guard let cameraNode = sceneView.pointOfView,
-              let camera = cameraNode.camera else { return (CATransform3DIdentity, 1) }
-
         let (min, max) = sceneController.modelBoundingBox
         let center = SIMD3<Double>(sceneController.modelBoundingSphere.center)
+        return cameraView(axis: Self.viewAxis(for: preset),
+                          boundingBox: (SIMD3<Double>(min), SIMD3<Double>(max)),
+                          center: center)
+    }
 
-        // Unit vector pointing from the model center toward the camera (the outward view axis).
-        let axis: SIMD3<Double>
+    /// The outward view axis (a unit vector pointing from the model center toward the camera) for
+    /// each standard preset.
+    static func viewAxis(for preset: ViewPreset) -> SIMD3<Double> {
         switch preset {
         case .isometric:
             let isoAngle = 35.264 * (.pi / 180)
-            axis = simd_normalize(SIMD3(-cos(isoAngle), -cos(isoAngle), sin(isoAngle)))
-        case .front:  axis = SIMD3(0, -1, 0)
-        case .back:   axis = SIMD3(0,  1, 0)
-        case .left:   axis = SIMD3(-1, 0, 0)
-        case .right:  axis = SIMD3( 1, 0, 0)
-        case .top:    axis = SIMD3(0, 0,  1)
-        case .bottom: axis = SIMD3(0, 0, -1)
+            return simd_normalize(SIMD3(-cos(isoAngle), -cos(isoAngle), sin(isoAngle)))
+        case .front:  return SIMD3(0, -1, 0)
+        case .back:   return SIMD3(0,  1, 0)
+        case .left:   return SIMD3(-1, 0, 0)
+        case .right:  return SIMD3( 1, 0, 0)
+        case .top:    return SIMD3(0, 0,  1)
+        case .bottom: return SIMD3(0, 0, -1)
         }
+    }
+
+    /// Frames a world-space bounding box from the given outward `axis`, looking at `center`, with
+    /// the same margin the standard presets use. Shared by the preset views and by centering on a
+    /// subset of parts.
+    func cameraView(axis: SIMD3<Double>, boundingBox: (min: SIMD3<Double>, max: SIMD3<Double>), center: SIMD3<Double>) -> CameraView {
+        guard let cameraNode = sceneView.pointOfView,
+              let camera = cameraNode.camera else { return (CATransform3DIdentity, 1) }
+
+        let (min, max) = boundingBox
 
         // Build a provisional orientation (distance-independent) so we know the camera's
         // right/up vectors, then project the 8 bbox corners onto them to get the true
@@ -179,6 +191,46 @@ extension ViewportController {
         let position = center + axis * distance
 
         return (SCNMatrix4(float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(center))), orthoScale)
+    }
+
+    /// Animates the camera to an isometric framing of the given parts (their combined world-space
+    /// bounding box). No-op if none of the ids resolve to a part node with measurable bounds.
+    func centerView(onPartIDs ids: Set<ModelData.Part.ID>) {
+        guard let box = combinedWorldBoundingBox(ofPartIDs: ids) else { return }
+        let center = (box.min + box.max) / 2
+        setCameraView(cameraView(axis: Self.viewAxis(for: .isometric), boundingBox: box, center: center), movement: .large)
+    }
+
+    /// The union, in world space, of the bounding boxes of the given parts' clone container nodes in
+    /// this viewport's scene. Returns nil if no node resolves or the result has no extent.
+    private func combinedWorldBoundingBox(ofPartIDs ids: Set<ModelData.Part.ID>) -> (min: SIMD3<Double>, max: SIMD3<Double>)? {
+        var result: (min: SIMD3<Double>, max: SIMD3<Double>)?
+        for id in ids {
+            guard let node = modelInstance.partContainers[id] else { continue }
+            let (localMin, localMax) = node.boundingBox
+            let transform = node.simdWorldTransform
+            let corners: [SIMD3<Float>] = [
+                SIMD3(Float(localMin.x), Float(localMin.y), Float(localMin.z)),
+                SIMD3(Float(localMin.x), Float(localMin.y), Float(localMax.z)),
+                SIMD3(Float(localMin.x), Float(localMax.y), Float(localMin.z)),
+                SIMD3(Float(localMin.x), Float(localMax.y), Float(localMax.z)),
+                SIMD3(Float(localMax.x), Float(localMin.y), Float(localMin.z)),
+                SIMD3(Float(localMax.x), Float(localMin.y), Float(localMax.z)),
+                SIMD3(Float(localMax.x), Float(localMax.y), Float(localMin.z)),
+                SIMD3(Float(localMax.x), Float(localMax.y), Float(localMax.z))
+            ]
+            for corner in corners {
+                let world = SIMD3<Double>((transform * SIMD4<Float>(corner, 1)).xyz)
+                if result == nil {
+                    result = (world, world)
+                } else {
+                    result!.min = simd_min(result!.min, world)
+                    result!.max = simd_max(result!.max, world)
+                }
+            }
+        }
+        guard let box = result, box.max.x > box.min.x || box.max.y > box.min.y || box.max.z > box.min.z else { return nil }
+        return box
     }
 }
 

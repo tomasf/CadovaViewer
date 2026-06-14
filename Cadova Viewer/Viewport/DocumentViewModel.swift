@@ -27,6 +27,12 @@ final class DocumentViewModel: ObservableObject {
         didSet { focusDidChange() }
     }
 
+    /// Whether the window-global parts sidebar is shown. Window-level UI state, persisted with the
+    /// document's restorable state so a reopened document keeps its last open/closed choice.
+    @Published var sidebarVisibility: NavigationSplitViewVisibility = .detailOnly {
+        didSet { document?.invalidateRestorableState() }
+    }
+
     /// Re-publishes this model whenever the focused viewport changes, so the focus-following
     /// toolbar in `DocumentView` refreshes.
     private var focusObservers: Set<AnyCancellable> = []
@@ -207,7 +213,8 @@ final class DocumentViewModel: ObservableObject {
             ratios: ratios,
             focusedViewportID: focusedViewportID,
             viewOptions: viewports.mapValues(\.viewOptions),
-            documentOptions: sceneController.documentOptions
+            documentOptions: sceneController.documentOptions,
+            sidebarVisible: sidebarVisibility != .detailOnly
         )
     }
 
@@ -238,6 +245,7 @@ final class DocumentViewModel: ObservableObject {
         layout = state.layout
         focusedViewportID = state.layout.leafIDs.contains(state.focusedViewportID)
             ? state.focusedViewportID : state.layout.leafIDs[0]
+        sidebarVisibility = (state.sidebarVisible ?? false) ? .all : .detailOnly
         focusDidChange()
     }
 }
@@ -249,4 +257,6 @@ struct DocumentLayoutState: Codable {
     var focusedViewportID: UUID
     var viewOptions: [UUID: ViewOptions]
     var documentOptions: DocumentViewOptions
+    /// Optional so documents saved before the sidebar existed still decode (treated as closed).
+    var sidebarVisible: Bool?
 }
