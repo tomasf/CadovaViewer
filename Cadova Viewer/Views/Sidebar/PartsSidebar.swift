@@ -61,14 +61,17 @@ struct PartsSidebar: View {
             VStack(spacing: 0) {
                 Divider()
                 HStack {
-                    Button(viewport.hiddenPartIDs.isEmpty ? "Hide All" : "Show All") {
+                    Button {
                         if viewport.hiddenPartIDs.isEmpty {
                             viewport.visibleParts = []
                         } else {
                             viewport.hiddenPartIDs = []
                         }
+                    } label: {
+                        Image(systemName: viewport.hiddenPartIDs.isEmpty ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .help(viewport.hiddenPartIDs.isEmpty ? "Hide All" : "Show All")
                     Spacer()
                     Menu {
                         Picker("Size", selection: $sidebarSize) {
@@ -88,7 +91,7 @@ struct PartsSidebar: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
             }
-            .background(.bar)
+            .background(.thinMaterial)
         }
         .navigationTitle("Parts")
     }
@@ -133,8 +136,8 @@ enum PartsSidebarSize: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .small: "Small"
-        case .large: "Large"
+        case .small: "Small Icons"
+        case .large: "Large Icons"
         }
     }
 

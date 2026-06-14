@@ -177,9 +177,19 @@ extension ViewportController {
         let width = maxU - minU
         let height = maxV - minV
 
-        let aspect = sceneViewSize.height > 0 ? sceneViewSize.width / sceneViewSize.height : 1
-        let fitWidthScale = width / 2 / aspect
-        let fitHeightScale = height / 2
+        // The scene view spans the whole detail area, but part of it is hidden under the floating
+        // sidebar (and the title bar). Fit and centre the model in the *visible* sub-rectangle so it
+        // isn't undersized or shoved under the sidebar. `safeAreaInsets` reports exactly how much of
+        // each edge is obscured.
+        let full = sceneViewSize
+        let insets = sceneView.safeAreaInsets
+        let visibleWidth = Swift.max(full.width - insets.left - insets.right, 1)
+        let visibleHeight = Swift.max(full.height - insets.top - insets.bottom, 1)
+
+        // orthoScale is half the world-height that fills the *full* view height, so scale the fit by
+        // full/visible to make the model fit the smaller visible rectangle instead.
+        let fitWidthScale = width / 2 * full.height / visibleWidth
+        let fitHeightScale = height / 2 * full.height / visibleHeight
         let orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
 
         // Place the camera at the distance that makes calculateOrthographicScale()
@@ -188,9 +198,19 @@ extension ViewportController {
         // The same distance frames the model with matching margin in perspective mode.
         let fovRadians = camera.fieldOfView * (.pi / 180.0)
         let distance = orthoScale / tan(fovRadians / 2)
-        let position = center + axis * distance
 
-        return (SCNMatrix4(float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(center))), orthoScale)
+        // Pan the camera so the model centre lands at the centre of the visible rectangle rather than
+        // the full view. The visible centre is offset from the full centre by half the difference of
+        // opposing insets; shifting the camera the opposite way moves the model the matching amount on
+        // screen. (AppKit y grows upward, matching `up`; x grows right, matching `right`.)
+        let worldPerPoint = full.height > 0 ? 2 * orthoScale / full.height : 0
+        let offsetRight = (insets.left - insets.right) / 2 * worldPerPoint
+        let offsetUp = (insets.bottom - insets.top) / 2 * worldPerPoint
+        let shift = right * -offsetRight + up * -offsetUp
+        let shiftedCenter = center + shift
+        let position = shiftedCenter + axis * distance
+
+        return (SCNMatrix4(float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(shiftedCenter))), orthoScale)
     }
 
     /// Animates the camera to an isometric framing of the given parts (their combined world-space

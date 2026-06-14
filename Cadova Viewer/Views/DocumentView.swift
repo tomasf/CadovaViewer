@@ -49,12 +49,11 @@ struct DocumentView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: $viewModel.sidebarVisibility) {
-            // The sidebar is a standard translucent column that follows the system appearance (the
-            // viewport beneath shows through), so it is *not* forced dark like the viewport area.
             PartsSidebar(viewModel: viewModel)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 240)
         } detail: {
             viewportArea
+                .ignoresSafeArea(.all)
                 .colorScheme(.dark)
         }
         .toolbar(id: "document") { toolbar }
@@ -130,9 +129,7 @@ struct DocumentView: View {
     var toolbar: some CustomizableToolbarContent {
         ToolbarItem(id: "sidebar", placement: .navigation) {
             Button {
-                withAnimation {
-                    viewModel.sidebarVisibility = viewModel.sidebarVisibility == .detailOnly ? .all : .detailOnly
-                }
+                viewModel.toggleSidebar()
             } label: {
                 Label("Parts", systemImage: "sidebar.left")
             }

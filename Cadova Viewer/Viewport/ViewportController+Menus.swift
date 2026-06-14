@@ -136,6 +136,19 @@ extension ViewportController {
         builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
 
         buildViewportLayoutMenu(with: builder)
+
+        // Sits just above the system "Show/Hide Toolbar" item (the end marker is the separator right
+        // before it). Mirrors the toolbar button: only meaningful, and so only enabled, when there's
+        // more than one part.
+        if let viewModel = documentViewModel {
+            builder.addSeparator()
+            let sidebarShown = viewModel.sidebarVisibility != .detailOnly
+            builder.addItem(label: sidebarShown ? "Hide Sidebar" : "Show Sidebar",
+                            enabled: sceneController.parts.count > 1,
+                            keyEquivalent: "s", modifiers: [.command, .control]) {
+                viewModel.toggleSidebar()
+            }
+        }
     }
 
     /// The "Standard Views" submenu: snap the camera to a preset orientation (with a live preview

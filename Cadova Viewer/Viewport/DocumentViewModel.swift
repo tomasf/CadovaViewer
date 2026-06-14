@@ -33,6 +33,14 @@ final class DocumentViewModel: ObservableObject {
         didSet { document?.invalidateRestorableState() }
     }
 
+    /// Toggles the parts sidebar open/closed, animated to match the standard sidebar show/hide. Shared
+    /// by the toolbar button and the View menu item.
+    func toggleSidebar() {
+        withAnimation {
+            sidebarVisibility = sidebarVisibility == .detailOnly ? .all : .detailOnly
+        }
+    }
+
     /// Re-publishes this model whenever the focused viewport changes, so the focus-following
     /// toolbar in `DocumentView` refreshes.
     private var focusObservers: Set<AnyCancellable> = []
