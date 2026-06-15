@@ -3,6 +3,7 @@ import SceneKit
 import Combine
 import AppKit
 import simd
+import Synchronization
 import ViewerCore
 
 /// Draws one viewport's copy of the document-global measurements. It observes the shared
@@ -39,19 +40,23 @@ final class MeasurementRenderer {
         let color: NSColor
     }
 
-    /// Keyed by measurement id (and a fixed key for the hover preview). Mutated on the
-    /// main thread but read from the render thread (updateScreenSizes), so all access
-    /// goes through `nodesLock`.
-    private var nodes: [UUID: MeasurementNodes] = [:]
-    private let nodesLock = NSLock()
-    private let hoverPreviewKey = UUID()
+    /// State touched by both the main thread (which builds and mutates the geometry) and the
+    /// render thread (`updateScreenSizes`). Bundled under a single `Mutex` so the related fields
+    /// can only be read and written together, consistently, while the lock is held.
+    private struct SharedState {
+        /// Keyed by measurement id (and a fixed key for the hover preview).
+        var nodes: [UUID: MeasurementNodes] = [:]
 
-    /// Ids whose geometry changed since they were last sized. Lets the per-frame screen-size
-    /// pass skip untouched measurements while the camera is still — otherwise it regenerates
-    /// every line's cone mesh and dashed overlay on every frame.
-    private var pendingResizeIDs: Set<UUID> = []
-    private var lastSizedCameraTransform = SCNMatrix4Identity
-    private var lastSizedCameraProjection = SCNMatrix4Identity
+        /// Ids whose geometry changed since they were last sized. Lets the per-frame screen-size
+        /// pass skip untouched measurements while the camera is still — otherwise it regenerates
+        /// every line's cone mesh and dashed overlay on every frame.
+        var pendingResizeIDs: Set<UUID> = []
+        var lastSizedCameraTransform = SCNMatrix4Identity
+        var lastSizedCameraProjection = SCNMatrix4Identity
+    }
+    private let shared = Mutex(SharedState())
+
+    private let hoverPreviewKey = UUID()
     private var lastHighlightedID: Measurement.ID?
 
     /// On-screen length (view points) each measurement's dashed overlay was last rebuilt for.
@@ -108,18 +113,14 @@ final class MeasurementRenderer {
         }
         let desiredIDs = Set(desired.map(\.id))
 
-        nodesLock.lock()
-        let existingIDs = Set(nodes.keys)
-        nodesLock.unlock()
+        let existingIDs = shared.withLock { Set($0.nodes.keys) }
 
         for id in existingIDs.subtracting(desiredIDs) {
             removeNode(for: id)
         }
 
         for item in desired {
-            nodesLock.lock()
-            let existing = nodes[item.id]
-            nodesLock.unlock()
+            let existing = shared.withLock { $0.nodes[item.id] }
             // A measurement's colour is fixed for its lifetime, so only the points can change.
             let changed = existing == nil
                 || !samePoint(existing!.start, item.start)
@@ -130,10 +131,10 @@ final class MeasurementRenderer {
         }
 
         if controller.highlightedID != lastHighlightedID {
-            nodesLock.lock()
-            if let old = lastHighlightedID { pendingResizeIDs.insert(old) }
-            if let new = controller.highlightedID { pendingResizeIDs.insert(new) }
-            nodesLock.unlock()
+            shared.withLock {
+                if let old = lastHighlightedID { $0.pendingResizeIDs.insert(old) }
+                if let new = controller.highlightedID { $0.pendingResizeIDs.insert(new) }
+            }
             lastHighlightedID = controller.highlightedID
         }
 
@@ -155,9 +156,7 @@ final class MeasurementRenderer {
     // MARK: - 3D geometry
 
     private func updateGeometry(id: UUID, color: NSColor, start: SCNVector3, end: SCNVector3?) {
-        nodesLock.lock()
-        let existing = nodes[id]
-        nodesLock.unlock()
+        let existing = shared.withLock { $0.nodes[id] }
 
         if let existing, updateExistingGeometry(existing, id: id, start: start, end: end) {
             return
@@ -194,10 +193,11 @@ final class MeasurementRenderer {
         }
 
         let line = scalables.first { $0.geometry is SCNCone }
-        nodesLock.lock()
-        pendingResizeIDs.insert(id)
-        nodes[id] = MeasurementNodes(container: container, startDot: startDot, endDot: scalables.first { $0 !== startDot && $0.geometry is SCNSphere }, line: line, scalables: scalables, overlayLine: overlayLine, start: start, end: end, color: color)
-        nodesLock.unlock()
+        let measurementNodes = MeasurementNodes(container: container, startDot: startDot, endDot: scalables.first { $0 !== startDot && $0.geometry is SCNSphere }, line: line, scalables: scalables, overlayLine: overlayLine, start: start, end: end, color: color)
+        shared.withLock {
+            $0.pendingResizeIDs.insert(id)
+            $0.nodes[id] = measurementNodes
+        }
     }
 
     private func updateExistingGeometry(_ existing: MeasurementNodes, id: UUID, start: SCNVector3, end: SCNVector3?) -> Bool {
@@ -213,9 +213,7 @@ final class MeasurementRenderer {
             return false
         }
 
-        nodesLock.lock()
-        pendingResizeIDs.insert(id)
-        nodes[id] = MeasurementNodes(
+        let updated = MeasurementNodes(
             container: existing.container,
             startDot: existing.startDot,
             endDot: existing.endDot,
@@ -226,7 +224,10 @@ final class MeasurementRenderer {
             end: end,
             color: existing.color
         )
-        nodesLock.unlock()
+        shared.withLock {
+            $0.pendingResizeIDs.insert(id)
+            $0.nodes[id] = updated
+        }
         return true
     }
 
@@ -297,10 +298,10 @@ final class MeasurementRenderer {
     }
 
     private func removeNode(for id: UUID) {
-        nodesLock.lock()
-        let entry = nodes.removeValue(forKey: id)
-        pendingResizeIDs.remove(id)
-        nodesLock.unlock()
+        let entry = shared.withLock { state -> MeasurementNodes? in
+            state.pendingResizeIDs.remove(id)
+            return state.nodes.removeValue(forKey: id)
+        }
         entry?.container.removeFromParentNode()
     }
 
@@ -313,19 +314,20 @@ final class MeasurementRenderer {
         let worldTransform = pointOfView.worldTransform
         let projection = pointOfView.camera?.projectionTransform ?? SCNMatrix4Identity
 
-        nodesLock.lock()
-        // Sizing depends on the camera (constant on-screen size) and on each measurement's
-        // own geometry. If the camera moved, everything must be resized; otherwise only the
-        // measurements that changed since last time.
-        let cameraChanged = !SCNMatrix4EqualToMatrix4(worldTransform, lastSizedCameraTransform)
-            || !SCNMatrix4EqualToMatrix4(projection, lastSizedCameraProjection)
-        let changedIDs = pendingResizeIDs
-        let ids = cameraChanged ? Array(nodes.keys) : Array(pendingResizeIDs)
-        let entries = ids.compactMap { id in nodes[id].map { (id, $0) } }
-        pendingResizeIDs.removeAll()
-        lastSizedCameraTransform = worldTransform
-        lastSizedCameraProjection = projection
-        nodesLock.unlock()
+        let (changedIDs, entries) = shared.withLock { state -> (Set<UUID>, [(UUID, MeasurementNodes)]) in
+            // Sizing depends on the camera (constant on-screen size) and on each measurement's
+            // own geometry. If the camera moved, everything must be resized; otherwise only the
+            // measurements that changed since last time.
+            let cameraChanged = !SCNMatrix4EqualToMatrix4(worldTransform, state.lastSizedCameraTransform)
+                || !SCNMatrix4EqualToMatrix4(projection, state.lastSizedCameraProjection)
+            let changedIDs = state.pendingResizeIDs
+            let ids = cameraChanged ? Array(state.nodes.keys) : Array(state.pendingResizeIDs)
+            let entries = ids.compactMap { id in state.nodes[id].map { (id, $0) } }
+            state.pendingResizeIDs.removeAll()
+            state.lastSizedCameraTransform = worldTransform
+            state.lastSizedCameraProjection = projection
+            return (changedIDs, entries)
+        }
 
         if entries.isEmpty { return }
         let highlighted = controller.highlightedID
