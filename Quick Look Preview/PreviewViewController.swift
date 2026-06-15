@@ -42,7 +42,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             ambientLightNode.light = ambientLight
             scene.rootNode.addChildNode(ambientLightNode)
 
-            let grid = ViewportGrid(categoryID: 0)
+            let grid = ViewportGrid()
             grid.updateBounds(geometry: modelData.rootNode)
             grid.showOrigin = false
             scene.rootNode.addChildNode(grid.node)

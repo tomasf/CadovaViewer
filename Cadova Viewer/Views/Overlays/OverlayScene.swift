@@ -8,8 +8,6 @@ final class OverlayScene: SKScene {
     private weak var sceneKitRenderer: SCNSceneRenderer!
     private weak var viewportController: ViewportController?
 
-    private let transientNodeContainer = SKNode()
-
     private let pivotPointIndicator = SKShapeNode(circleOfRadius: 4)
 
     /// The world-space point the pivot indicator tracks. Written on the main thread (from the
@@ -48,10 +46,9 @@ final class OverlayScene: SKScene {
         super.init(size: .zero)
         isUserInteractionEnabled = false
 
-        addChild(transientNodeContainer)
         addChild(pivotPointIndicator)
 
-        pivotPointIndicator.fillColor = .red.withAlphaComponent(1)
+        pivotPointIndicator.fillColor = .red
         pivotPointIndicator.strokeColor = .black.withAlphaComponent(0.5)
         pivotPointIndicator.alpha = 0
     }
@@ -61,8 +58,6 @@ final class OverlayScene: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        transientNodeContainer.removeAllChildren()
-
         guard let sceneKitRenderer else { return }
 
         let projectedPivot = sceneKitRenderer.projectPoint(pivotPointLocation)

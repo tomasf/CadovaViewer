@@ -20,13 +20,11 @@ public final class ViewportGrid {
 
     private let maxGridOpacity = 0.15
 
-    public init(categoryID: Int = 0) {
+    public init() {
         node.name = "Grid"
 
         coarseGrid.name = "Coarse grid"
-        coarseGrid.setSubtreeCategoryBitMask(1 << categoryID)
         fineGrid.name = "Fine grid"
-        fineGrid.setSubtreeCategoryBitMask(1 << categoryID)
 
         node.addChildNode(gridContainer)
         gridContainer.addChildNode(coarseGrid)
