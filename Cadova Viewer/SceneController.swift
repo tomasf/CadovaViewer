@@ -19,7 +19,7 @@ final class SceneController: ObservableObject {
 
     @Published var parts: [ModelData.Part] = []
 
-    /// Document-global, lazily-rendered part thumbnails for the parts sidebar. Shared across
+    /// Document-global, lazily-rendered part thumbnails for the sidebar. Shared across
     /// viewports (the geometry is the same in each), so it lives here.
     let thumbnails = PartThumbnailService()
 

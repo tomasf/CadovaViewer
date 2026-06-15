@@ -18,9 +18,8 @@ struct DocumentSidebar: View {
     @State private var measurementRows: [Measurement] = []
     @State private var lastMeasurementScrollSignature: MeasurementScrollSignature?
     @State private var measurementScrollToken = 0
-    /// The sidebar's own size, persisted app-wide. Keep the old key so existing user preferences
-    /// survive the sidebar growing beyond parts.
-    @AppStorage("partsSidebarSize") private var sidebarSize: DocumentSidebarSize = .large
+    /// The sidebar's own size, persisted app-wide.
+    @AppStorage("documentSidebarSize") private var sidebarSize: DocumentSidebarSize = .large
 
     init(viewModel: DocumentViewModel) {
         self.viewModel = viewModel

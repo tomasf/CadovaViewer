@@ -123,9 +123,9 @@ struct DocumentView: View {
             Button {
                 viewModel.toggleSidebar()
             } label: {
-                Label("Parts", systemImage: "sidebar.left")
+                Label("Contents", systemImage: "sidebar.left")
             }
-            .help("Show or hide the parts sidebar")
+            .help("Show or hide the sidebar")
         }
 
         Group {

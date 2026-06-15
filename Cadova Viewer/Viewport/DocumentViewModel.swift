@@ -27,13 +27,13 @@ final class DocumentViewModel: ObservableObject {
         didSet { focusDidChange() }
     }
 
-    /// Whether the window-global parts sidebar is shown. Window-level UI state, persisted with the
+    /// Whether the window-global document sidebar is shown. Window-level UI state, persisted with the
     /// document's restorable state so a reopened document keeps its last open/closed choice.
     @Published var sidebarVisibility: NavigationSplitViewVisibility = .detailOnly {
         didSet { document?.invalidateRestorableState() }
     }
 
-    /// Toggles the parts sidebar open/closed, animated to match the standard sidebar show/hide. Shared
+    /// Toggles the document sidebar open/closed, animated to match the standard sidebar show/hide. Shared
     /// by the toolbar button and the View menu item.
     func toggleSidebar() {
         withAnimation {
