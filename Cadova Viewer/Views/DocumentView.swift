@@ -11,6 +11,7 @@ struct DocumentView: View {
     @ObservedObject var viewModel: DocumentViewModel
     @State var isLoading = false
     @State var isSlicing = false
+    @State private var showCrossSectionPopover = false
     @State var infoData: InformationView.Model?
     @State var modelData: ModelData?
 
@@ -150,6 +151,21 @@ struct DocumentView: View {
                         .tag(ViewportController.CameraProjection.orthographic)
                 }
                 .pickerStyle(.segmented)
+            }
+
+            spacer
+
+            ToolbarItem(id: "cross-section", placement: .primaryAction) {
+                Button {
+                    showCrossSectionPopover.toggle()
+                } label: {
+                    Label("Cross-Section", systemImage: "cube.transparent")
+                }
+                .help("Cut the model along a plane to see inside")
+                .disabled(modelData == nil)
+                .popover(isPresented: $showCrossSectionPopover, arrowEdge: .bottom) {
+                    CrossSectionControls(viewport: focused)
+                }
             }
 
             spacer

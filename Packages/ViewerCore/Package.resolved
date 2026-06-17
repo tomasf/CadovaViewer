@@ -1,6 +1,15 @@
 {
   "pins" : [
     {
+      "identity" : "manifold-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/manifold-swift.git",
+      "state" : {
+        "revision" : "94a4f7bbfef3a7f23207f9d8a1d8ca2172fe0b61",
+        "version" : "1.1.0"
+      }
+    },
+    {
       "identity" : "nodal",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/Nodal",

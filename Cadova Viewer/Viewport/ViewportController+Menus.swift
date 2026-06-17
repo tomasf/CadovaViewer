@@ -255,6 +255,10 @@ extension ViewportController {
         builder.addItem(label: "Show Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
             self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
         }
+
+        builder.addItem(label: "Cross-Section", checked: crossSection.enabled) {
+            self.crossSection.enabled.toggle()
+        }
     }
 
     func buildEdgeVisibilityMenu(_ menuBuilder: MenuBuilder) {

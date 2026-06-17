@@ -21,6 +21,9 @@ extension ModelData {
             let emittedCorners: [Int32]
             let stats: ModelData.Statistics
             let transform: SCNMatrix4
+            let dominantColor: SIMD4<Float>?
+            let capVertices: [SIMD3<Float>]
+            let capIndices: [UInt32]
         }
 
         let indexedEdgeGeometries: [(sharp: SCNGeometry, smooth: SCNGeometry)]
@@ -36,11 +39,24 @@ extension ModelData {
                 let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
                 let model = loadedModel.models[loadedMesh.modelIndex]
 
-                let (geometry, emittedCorners) = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
+                let (geometry, emittedCorners, dominantColor) = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
 
                 // Mesh coords → millimetres = unit scale ∘ this component's placement transform.
                 let worldTransform = unitScale * simd_double4x4(loadedComponent.scnMatrix)
                 let stats = loadedMesh.mesh.statistics(transform: worldTransform)
+
+                // World-space indexed mesh (same space as the scene) for the cross-section cap.
+                var capVertices: [SIMD3<Float>] = []
+                capVertices.reserveCapacity(loadedMesh.mesh.vertices.count)
+                for vertex in loadedMesh.mesh.vertices {
+                    let world = worldTransform * SIMD4(vertex.simd, 1)
+                    capVertices.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
+                }
+                var capIndices: [UInt32] = []
+                capIndices.reserveCapacity(loadedMesh.mesh.triangles.count * 3)
+                for triangle in loadedMesh.mesh.triangles {
+                    capIndices += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
+                }
 
                 if includeEdges && loadedComponent.meshIndex < indexedEdgeGeometries.count {
                     let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
@@ -51,7 +67,10 @@ extension ModelData {
                         mesh: loadedMesh.mesh,
                         emittedCorners: emittedCorners,
                         stats: stats,
-                        transform: loadedComponent.scnMatrix
+                        transform: loadedComponent.scnMatrix,
+                        dominantColor: dominantColor,
+                        capVertices: capVertices,
+                        capIndices: capIndices
                     )
                 } else {
                     let emptyGeometry = SCNGeometry()
@@ -62,7 +81,10 @@ extension ModelData {
                         mesh: loadedMesh.mesh,
                         emittedCorners: emittedCorners,
                         stats: stats,
-                        transform: loadedComponent.scnMatrix
+                        transform: loadedComponent.scnMatrix,
+                        dominantColor: dominantColor,
+                        capVertices: capVertices,
+                        capIndices: capIndices
                     )
                 }
             }
@@ -115,6 +137,22 @@ extension ModelData {
                 ))
             }
 
+            // The part's cap colour is the dominant colour of its heaviest component (most triangles).
+            let dominantColor = products
+                .filter { $0.dominantColor != nil }
+                .max { $0.stats.triangleCount < $1.stats.triangleCount }?
+                .dominantColor
+
+            // Concatenate the components' indexed meshes (offsetting indices) into one solid for caps.
+            var capVertices: [SIMD3<Float>] = []
+            var capIndices: [UInt32] = []
+            for product in products {
+                let offset = UInt32(capVertices.count)
+                capVertices += product.capVertices
+                capIndices += product.capIndices.map { $0 + offset }
+            }
+            let capSolid = capVertices.isEmpty ? nil : PartSolid(vertices: capVertices, indices: capIndices)
+
             return Part(
                 nodes: nodes,
                 itemIndex: itemIndex,
@@ -122,7 +160,9 @@ extension ModelData {
                 id: loadedItem.item.partNumber,
                 semantic: loadedItem.item.semantic,
                 stats: Statistics(products.map(\.stats)),
-                modelGeometryVariants: modelGeometryVariants
+                modelGeometryVariants: modelGeometryVariants,
+                dominantColor: dominantColor,
+                capSolid: capSolid
             )
         }
 

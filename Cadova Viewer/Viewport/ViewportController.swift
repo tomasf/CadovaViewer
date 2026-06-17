@@ -48,6 +48,26 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// so it can be hidden when copying a no-background snapshot.
     let privateRoot = SCNNode()
 
+    /// The translucent locator quad drawn at the cross-section plane. See
+    /// `ViewportController+CrossSection`.
+    let crossSectionPlaneNode = SCNNode()
+
+    /// Holds the per-part filled cap geometry drawn where the cut plane slices each part. Rebuilt off
+    /// the main thread whenever the plane moves; see `ViewportController+CrossSection`.
+    let crossSectionCapNode = SCNNode()
+    /// Whether a cap computation is currently running. Only one runs at a time; new requests during a
+    /// drag set `crossSectionCapNeedsRebuild` instead of piling up a backlog of stale full scans.
+    var crossSectionCapInFlight = false
+    /// Set when the plane moved while a cap computation was in flight, so the latest value is rebuilt
+    /// once the current one finishes (a trailing update).
+    var crossSectionCapNeedsRebuild = false
+    /// Serialises the (potentially heavy) cap geometry computation off the main thread.
+    let crossSectionCapQueue = DispatchQueue(label: "cross-section-cap", qos: .userInitiated)
+    /// Persistent per-part cap nodes and materials, reused across rebuilds so a slider drag only swaps
+    /// geometry — avoiding per-frame material/shader-modifier recreation (which stutters).
+    var crossSectionCapNodesByPart: [ModelData.Part.ID: SCNNode] = [:]
+    var crossSectionCapMaterialsByPart: [ModelData.Part.ID: SCNMaterial] = [:]
+
     /// The model's edge-line geometry nodes in this viewport's scene (depth offset + hit exclusion).
     var edgeNodes: [SCNNode] { modelInstance.edgeGeometryNodes }
 
@@ -106,6 +126,17 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     @Published var highlightedPartID: ModelData.Part.ID? {
         didSet { updateHighlightedPart(oldID: oldValue, newID: highlightedPartID) }
     }
+
+    /// This viewport's cutting plane. Per-viewport (a cut in one split pane leaves others intact),
+    /// applied to this viewport's own materials. See `ViewportController+CrossSection`.
+    @Published var crossSection = CrossSection() {
+        didSet {
+            if crossSection != oldValue { applyCrossSection() }
+        }
+    }
+    /// Set once per model load so the offset slider has a sensible range before the user opens the
+    /// cross-section controls.
+    private(set) var hasInitializedCrossSectionOffset = false
 
     @Published private(set) var canResetCameraRoll: Bool = false
     @Published var canShowPresets: [ViewPreset: Bool] = [:]
@@ -166,6 +197,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         scene.rootNode.addChildNode(privateRoot)
         privateRoot.addChildNode(grid.node)
         privateRoot.addChildNode(measurementParent)
+        crossSectionPlaneNode.name = "Cross-section plane"
+        crossSectionPlaneNode.isHidden = true
+        privateRoot.addChildNode(crossSectionPlaneNode)
+        crossSectionCapNode.name = "Cross-section caps"
+        privateRoot.addChildNode(crossSectionCapNode)
 
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
@@ -260,6 +296,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             grid.showGrid = viewOptions.showGrid
             grid.showOrigin = viewOptions.showOrigin
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
+            // A part hidden/shown while a cut is active must drop/gain its cap.
+            if crossSection.enabled { updateCrossSectionCap() }
             // Persist as the default for newly opened documents. Menu toggles only mutate
             // viewOptions (+ restorable state), which isn't reapplied on a manual reopen; this
             // keeps display options like smooth shading remembered. (setViewOptions does the
@@ -384,6 +422,19 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         applyDocumentOptions()
         updatePartNodeVisibility(viewOptions.hiddenPartIDs)
 
+        // Center the cut plane on the model the first time so the offset slider opens mid-range.
+        let bounds = crossSectionModelBounds
+        if !hasInitializedCrossSectionOffset, bounds.min != bounds.max {
+            crossSection.offset = (bounds.min[crossSection.axis.index] + bounds.max[crossSection.axis.index]) / 2
+            hasInitializedCrossSectionOffset = true
+        }
+        // Drop any cap nodes/materials from a previously-loaded model before rebuilding.
+        crossSectionCapNode.childNodes.forEach { $0.removeFromParentNode() }
+        crossSectionCapNodesByPart.removeAll()
+        crossSectionCapMaterialsByPart.removeAll()
+        installCrossSectionShader()
+        applyCrossSection()
+
         if !hasSetInitialView {
             showViewPreset(.isometric, animated: false)
             hasSetInitialView = true
@@ -406,8 +457,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         for container in modelInstance.smoothEdgeContainers {
             container.isHidden = options.edgeVisibility != .all
         }
-        for (node, variant) in modelInstance.variantSwaps {
-            node.geometry = options.smoothShading ? (variant.smoothIfAvailable ?? variant.flat) : variant.flat
+        for variant in modelInstance.variantSwaps {
+            variant.apply(smoothShading: options.smoothShading)
         }
     }
 

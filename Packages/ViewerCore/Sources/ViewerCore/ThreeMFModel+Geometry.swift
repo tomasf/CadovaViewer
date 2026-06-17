@@ -15,11 +15,18 @@ extension ThreeMF.Model {
     /// `emittedCorners[i]` is the packed `triangleIndex * 3 + corner` that the i-th emitted
     /// vertex came from. This lets us later compute smooth per-vertex normals aligned to the
     /// vertex source without re-deriving the (material-grouped, transparency-filtered) order.
-    public func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> (geometry: SCNGeometry, emittedCorners: [Int32]) {
+    public func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> (geometry: SCNGeometry, emittedCorners: [Int32], dominantColor: SIMD4<Float>?) {
         var colors: [SCNVector4] = []
         var positions: [SCNVector3] = []
         var emittedCorners: [Int32] = []
         var elementPerMaterial: [PBRMaterial?: [Int32]] = [:]
+
+        // Track, per material group, how many triangles use it and the sum of their corner colors,
+        // so we can pick a representative ("dominant") colour for the cross-section cap fill: the
+        // colour of whichever material covers the most of the part. PBR groups use their diffuse;
+        // the vertex-colour group averages its accumulated corner colours.
+        var triangleCountPerMaterial: [PBRMaterial?: Int] = [:]
+        var colorSumPerMaterial: [PBRMaterial?: SIMD4<Double>] = [:]
 
         for (triangleIndex, triangle) in mesh.triangles.enumerated() {
             let material = material(for: triangle, inheritedProperty: inheritedProperty)
@@ -36,15 +43,25 @@ extension ThreeMF.Model {
             let cornerBase = Int32(triangleIndex * 3)
             emittedCorners += [cornerBase, cornerBase + 1, cornerBase + 2]
 
+            let materialKey: PBRMaterial?
             if case .pbr (let pbrMaterial) = material {
-                elementPerMaterial[pbrMaterial, default: []].append(contentsOf: vertexIndices)
+                materialKey = pbrMaterial
             } else {
-                elementPerMaterial[nil, default: []].append(contentsOf: vertexIndices)
+                materialKey = nil
             }
+            elementPerMaterial[materialKey, default: []].append(contentsOf: vertexIndices)
+            triangleCountPerMaterial[materialKey, default: 0] += 1
 
             let colorValues = material?.colorValues ?? [.white, .white, .white]
-            colors += colorValues.map(\.scnVector4)
+            let cornerColors = colorValues.map(\.scnVector4)
+            colors += cornerColors
+            colorSumPerMaterial[materialKey, default: .zero] += cornerColors.reduce(.zero) { $0 + SIMD4($1.x, $1.y, $1.z, $1.w) }
         }
+
+        let dominantColor = dominantColor(
+            triangleCountPerMaterial: triangleCountPerMaterial,
+            colorSumPerMaterial: colorSumPerMaterial
+        )
 
         let vertexSource = SCNGeometrySource(vertices: positions)
         let colorSource = SCNGeometrySource.colors(colors)
@@ -63,7 +80,26 @@ extension ThreeMF.Model {
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: elements)
         geometry.materials = orderedMaterials.map { $0?.scnMaterial ?? defaultMaterial }
         geometry.name = UUID().uuidString
-        return (geometry, emittedCorners)
+        return (geometry, emittedCorners, dominantColor)
+    }
+
+    /// The colour of whichever material group covers the most triangles, as linear RGBA. PBR groups
+    /// use their diffuse colour; the vertex-colour group (`nil` key) averages its corner colours.
+    private func dominantColor(
+        triangleCountPerMaterial: [PBRMaterial?: Int],
+        colorSumPerMaterial: [PBRMaterial?: SIMD4<Double>]
+    ) -> SIMD4<Float>? {
+        guard let (key, triangleCount) = triangleCountPerMaterial.max(by: { $0.value < $1.value }), triangleCount > 0 else {
+            return nil
+        }
+        if let pbrMaterial = key {
+            let c = pbrMaterial.diffuse.scnVector4
+            return SIMD4(Float(c.x), Float(c.y), Float(c.z), Float(c.w))
+        } else {
+            let sum = colorSumPerMaterial[key] ?? .zero
+            let average = sum / Double(triangleCount * 3)
+            return SIMD4(Float(average.x), Float(average.y), Float(average.z), Float(average.w))
+        }
     }
 }
 
