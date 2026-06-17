@@ -71,6 +71,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var crossSectionCapMaterialsByKey: [CrossSectionCapKey: SCNMaterial] = [:]
     /// In-progress gizmo drag (handle grabbed + the section state when the drag began).
     var crossSectionDrag: CrossSectionDragState?
+    /// Cross-sections as they were when a gizmo drag began, so the whole drag is one undo step.
+    var crossSectionDragUndoSnapshot: [CrossSection]?
     /// Next palette colour index for a newly-added cross-section (mirrors measurement colouring).
     var nextCrossSectionColorIndex = 0
 
@@ -144,6 +146,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     @Published var crossSections: [CrossSection] = [] {
         didSet {
             guard crossSections != oldValue else { return }
+            // Undo/redo (or delete) can drop the selected/hovered section — forget it so the gizmo and
+            // plane don't reference a section that no longer exists.
+            if let id = selectedCrossSectionID, !crossSections.contains(where: { $0.id == id }) {
+                selectedCrossSectionID = nil
+            }
+            if let id = hoveredCrossSectionID, !crossSections.contains(where: { $0.id == id }) {
+                hoveredCrossSectionID = nil
+            }
             applyCrossSection()
             scheduleRestorableStateInvalidation() // coalesced — safe to hit per frame during a drag
         }
@@ -536,6 +546,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     func tearDown() {
         setNavLibSuspended(true)
         observers.removeAll()
+        // Undo actions strong-reference this controller as their target; drop a closed viewport's so
+        // it isn't kept alive (and stale cross-section undos for it can't fire).
+        document?.interactionUndoManager.removeAllActions(withTarget: self)
     }
 
     func showSceneKitRenderingOptions() {

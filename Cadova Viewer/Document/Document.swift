@@ -30,10 +30,10 @@ class Document: NSDocument, NSWindowDelegate {
         slicingSubject.map { $0 > 0 }.removeDuplicates().receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
 
-    /// Dedicated undo manager for measurement operations. Kept separate from the document's
-    /// own `undoManager` so registering measurement undos doesn't mark the (read-only)
+    /// Dedicated undo manager for in-view interactions (measurements, cross-sections). Kept separate
+    /// from the document's own `undoManager` so registering these undos doesn't mark the (read-only)
     /// document as edited. Vended to the window below so Edit ▸ Undo/Redo (⌘Z/⌘⇧Z) use it.
-    let measurementUndoManager = UndoManager()
+    let interactionUndoManager = UndoManager()
 
     override class func canConcurrentlyReadDocuments(ofType typeName: String) -> Bool {
         true
@@ -212,6 +212,6 @@ class Document: NSDocument, NSWindowDelegate {
     }
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
-        measurementUndoManager
+        interactionUndoManager
     }
 }

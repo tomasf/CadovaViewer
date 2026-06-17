@@ -315,7 +315,7 @@ extension ViewportController {
         return simd_normalize(u + v)
     }
 
-    // MARK: - Mutators (called from the UI)
+    // MARK: - Mutators (called from the UI) — all undoable via the interaction undo manager
 
     /// Adds a new cross-section (flat along Z through the model centre), selects it, and shows it.
     func addCrossSection() {
@@ -324,47 +324,70 @@ extension ViewportController {
         let center = (bounds.min + bounds.max) / 2
         let section = CrossSection.axisAligned(.z, origin: center, colorIndex: nextCrossSectionColorIndex)
         nextCrossSectionColorIndex += 1
-        crossSections.append(section)
+        updateCrossSections(crossSections + [section], actionName: "Add Cross-Section")
         selectedCrossSectionID = section.id
     }
 
     func deleteCrossSection(_ id: UUID) {
-        if selectedCrossSectionID == id { selectedCrossSectionID = nil }
-        if hoveredCrossSectionID == id { hoveredCrossSectionID = nil }
+        guard crossSections.contains(where: { $0.id == id }) else { return }
         for (key, node) in crossSectionCapNodesByKey where key.section == id {
             node.removeFromParentNode()
             crossSectionCapNodesByKey[key] = nil
             crossSectionCapMaterialsByKey[key] = nil
         }
-        crossSections.removeAll { $0.id == id }
-        // Start colours over once the last cut is gone, like measurements after delete-all.
-        if crossSections.isEmpty { nextCrossSectionColorIndex = 0 }
+        updateCrossSections(crossSections.filter { $0.id != id }, actionName: "Delete Cross-Section")
     }
 
     func flipSelectedCrossSection() {
-        mutateSelectedCrossSection { $0.flip() }
+        mutateSelectedCrossSection(actionName: "Flip Cross-Section") { $0.flip() }
     }
 
     func setCrossSectionEnabled(_ id: UUID, _ enabled: Bool) {
-        guard let index = crossSections.firstIndex(where: { $0.id == id }) else { return }
-        crossSections[index].enabled = enabled
+        guard let index = crossSections.firstIndex(where: { $0.id == id }), crossSections[index].enabled != enabled else { return }
+        var sections = crossSections
+        sections[index].enabled = enabled
+        updateCrossSections(sections, actionName: enabled ? "Show Cross-Section" : "Hide Cross-Section")
     }
 
-    /// Activates or deactivates every cross-section at once (single update).
+    /// Activates or deactivates every cross-section at once (single undo step).
     func setAllCrossSectionsEnabled(_ enabled: Bool) {
         guard crossSections.contains(where: { $0.enabled != enabled }) else { return }
         var sections = crossSections
         for index in sections.indices { sections[index].enabled = enabled }
-        crossSections = sections
+        updateCrossSections(sections, actionName: enabled ? "Show All Cross-Sections" : "Hide All Cross-Sections")
     }
 
     func alignSelectedCrossSection(to axis: CrossSection.Axis) {
-        mutateSelectedCrossSection { $0.orientation = CrossSection.orientation(for: axis) }
+        mutateSelectedCrossSection(actionName: "Align Cross-Section to \(axis.displayName)") {
+            $0.orientation = CrossSection.orientation(for: axis)
+        }
     }
 
-    private func mutateSelectedCrossSection(_ transform: (inout CrossSection) -> Void) {
+    private func mutateSelectedCrossSection(actionName: String, _ transform: (inout CrossSection) -> Void) {
         guard let id = selectedCrossSectionID, let index = crossSections.firstIndex(where: { $0.id == id }) else { return }
-        transform(&crossSections[index])
+        var sections = crossSections
+        transform(&sections[index])
+        updateCrossSections(sections, actionName: actionName)
+    }
+
+    // MARK: - Undo
+
+    /// Replaces the cross-sections and registers a self-inverting undo so the Edit-menu Undo/Redo
+    /// (⌘Z/⌘⇧Z, on the shared interaction undo manager) step through cross-section changes.
+    func updateCrossSections(_ new: [CrossSection], actionName: String) {
+        guard crossSections != new else { return }
+        registerCrossSectionUndo(restoring: crossSections, actionName: actionName)
+        crossSections = new
+    }
+
+    /// Registers an undo restoring `old` without changing the current state — for when the live state
+    /// has already been mutated (e.g. throughout a gizmo drag, so the whole drag is one undo step).
+    func registerCrossSectionUndo(restoring old: [CrossSection], actionName: String) {
+        let undoManager = document?.interactionUndoManager
+        undoManager?.registerUndo(withTarget: self) { controller in
+            controller.updateCrossSections(old, actionName: actionName)
+        }
+        undoManager?.setActionName(actionName)
     }
 
     /// The model's world-space axis-aligned bounding box (min, max) in millimetres.

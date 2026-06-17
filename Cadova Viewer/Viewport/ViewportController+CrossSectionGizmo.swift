@@ -26,6 +26,7 @@ extension ViewportController {
             grab = rotationAngle(origin: section.origin, axis: worldAxis(axis, of: section), ray: ray) ?? 0
         }
         crossSectionDrag = CrossSectionDragState(handle: handle, startSection: section, grab: grab)
+        crossSectionDragUndoSnapshot = crossSections // for one undo step covering the whole drag
         crossSectionGizmo.setActiveHandle(handle) // dim the other handles
         sceneView.setNeedsRedraw()
         return true
@@ -51,6 +52,16 @@ extension ViewportController {
     }
 
     func endCrossSectionGizmoDrag() {
+        // Register one undo for the whole drag (the live updates above bypassed undo).
+        if let snapshot = crossSectionDragUndoSnapshot, let drag = crossSectionDrag, snapshot != crossSections {
+            let actionName: String
+            switch drag.handle {
+            case .translate: actionName = "Move Cross-Section"
+            case .rotate: actionName = "Rotate Cross-Section"
+            }
+            registerCrossSectionUndo(restoring: snapshot, actionName: actionName)
+        }
+        crossSectionDragUndoSnapshot = nil
         crossSectionDrag = nil
         crossSectionGizmo.setActiveHandle(nil) // restore all handles
         sceneView.setNeedsRedraw()

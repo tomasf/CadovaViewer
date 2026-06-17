@@ -61,7 +61,7 @@ final class DocumentViewModel: ObservableObject {
         let id = UUID()
         layout = .leaf(id)
         focusedViewportID = id
-        measurements.undoManager = document.measurementUndoManager
+        measurements.undoManager = document.interactionUndoManager
         viewports[id] = makeViewport(id: id, document: document)
         focusDidChange()
 
