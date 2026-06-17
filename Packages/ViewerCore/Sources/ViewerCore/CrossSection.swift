@@ -83,6 +83,27 @@ public struct CrossSection: Identifiable, Equatable, Sendable, Codable {
         simd_quatd(from: SIMD3(0, 0, 1), to: axis.unit)
     }
 
+    /// Snaps the plane's normal to the nearest signed world axis (±X/±Y/±Z), keeping `origin` and the
+    /// half that's currently kept. Useful after free rotation with the gizmo to get a clean
+    /// axis-aligned cut.
+    public mutating func snapToNearestAxis() {
+        let n = normal
+        var best = SIMD3<Double>(0, 0, 1)
+        var bestDot = -Double.infinity
+        for axis in Axis.allCases {
+            for sign in [1.0, -1.0] {
+                let direction = axis.unit * sign
+                let dot = simd_dot(n, direction)
+                if dot > bestDot { bestDot = dot; best = direction }
+            }
+        }
+        let z = SIMD3<Double>(0, 0, 1)
+        // `simd_quatd(from:to:)` is undefined for antiparallel vectors, so turn 180° explicitly there.
+        orientation = simd_dot(best, z) < -0.5
+            ? simd_quatd(angle: .pi, axis: SIMD3(1, 0, 0))
+            : simd_quatd(from: z, to: best)
+    }
+
     /// A new section flat along `axis` (normal = that axis) through `origin`.
     public static func axisAligned(_ axis: Axis, origin: SIMD3<Double>, colorIndex: Int = 0) -> CrossSection {
         CrossSection(origin: origin, orientation: orientation(for: axis), colorIndex: colorIndex)

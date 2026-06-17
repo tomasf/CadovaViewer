@@ -57,6 +57,26 @@ struct CrossSectionTests {
         #expect(close(decoded.normal, original.normal))
     }
 
+    @Test func `snapping to the nearest axis aligns the normal and keeps the origin and side`() {
+        let origin = SIMD3<Double>(3, -2, 7)
+
+        // A slight tilt off +Z snaps to +Z, keeping the origin.
+        var nearZ = CrossSection(origin: origin, orientation: simd_quatd(angle: 0.15, axis: simd_normalize(SIMD3(1, 0.3, 0))))
+        nearZ.snapToNearestAxis()
+        #expect(close(nearZ.normal, SIMD3(0, 0, 1)))
+        #expect(nearZ.origin == origin)
+
+        // A normal leaning toward −X snaps to −X (the kept side is preserved), not +X.
+        var nearNegX = CrossSection(origin: origin, orientation: simd_quatd(from: SIMD3(0, 0, 1), to: simd_normalize(SIMD3(-1, 0.2, 0.1))))
+        nearNegX.snapToNearestAxis()
+        #expect(close(nearNegX.normal, SIMD3(-1, 0, 0)))
+
+        // The antiparallel case (toward −Z) is handled without producing NaNs.
+        var nearNegZ = CrossSection(origin: origin, orientation: simd_quatd(from: SIMD3(0, 0, 1), to: simd_normalize(SIMD3(0.1, 0.1, -1))))
+        nearNegZ.snapToNearestAxis()
+        #expect(close(nearNegZ.normal, SIMD3(0, 0, -1)))
+    }
+
     @Test func `a tilted section has a unit normal and passes through its origin`() {
         let origin = SIMD3<Double>(3, -2, 7)
         let tilt = simd_quatd(angle: .pi / 4, axis: simd_normalize(SIMD3(1, 1, 0)))

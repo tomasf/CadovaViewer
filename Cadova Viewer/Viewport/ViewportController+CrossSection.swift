@@ -373,6 +373,10 @@ extension ViewportController {
         }
     }
 
+    func snapSelectedCrossSectionToNearestAxis() {
+        mutateSelectedCrossSection(actionName: "Snap Cross-Section to Axis") { $0.snapToNearestAxis() }
+    }
+
     private func mutateSelectedCrossSection(actionName: String, _ transform: (inout CrossSection) -> Void) {
         guard let id = selectedCrossSectionID, let index = crossSections.firstIndex(where: { $0.id == id }) else { return }
         var sections = crossSections

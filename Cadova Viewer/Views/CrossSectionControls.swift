@@ -19,6 +19,8 @@ struct CrossSectionControls: View {
                 }
             }
 
+            Button("Snap to Nearest Axis") { viewport.snapSelectedCrossSectionToNearestAxis() }
+
             Divider()
 
             HStack {
