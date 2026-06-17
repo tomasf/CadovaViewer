@@ -3,41 +3,44 @@ import simd
 @testable import ViewerCore
 
 struct CrossSectionTests {
-    /// A fragment is kept when `dot(position, normal) <= distance`.
     private func keeps(_ section: CrossSection, _ point: SIMD3<Double>) -> Bool {
         let plane = section.plane()
         return simd_dot(point, SIMD3(plane.x, plane.y, plane.z)) <= plane.w
     }
 
-    @Test func `unflipped plane keeps the low side of the axis`() {
-        let section = CrossSection(axis: .x, offset: 5, flipped: false)
+    private func close(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> Bool {
+        simd_length(a - b) < 1e-3
+    }
+
+    @Test func `an axis-aligned section's normal points along that axis`() {
+        #expect(close(CrossSection.axisAligned(.x, origin: .zero).normal, SIMD3(1, 0, 0)))
+        #expect(close(CrossSection.axisAligned(.y, origin: .zero).normal, SIMD3(0, 1, 0)))
+        #expect(close(CrossSection.axisAligned(.z, origin: .zero).normal, SIMD3(0, 0, 1)))
+    }
+
+    @Test func `the plane distance is the normal projected onto the origin`() {
+        let section = CrossSection.axisAligned(.x, origin: SIMD3(5, 99, -99))
+        let plane = section.plane()
+        #expect(plane.w ≈ 5) // distance along +X
         #expect(keeps(section, SIMD3(4, 0, 0)))   // below the plane → kept
         #expect(!keeps(section, SIMD3(6, 0, 0)))  // above the plane → cut away
     }
 
-    @Test func `flipped plane keeps the high side of the axis`() {
-        let section = CrossSection(axis: .x, offset: 5, flipped: true)
-        #expect(!keeps(section, SIMD3(4, 0, 0))) // below the plane → cut away
-        #expect(keeps(section, SIMD3(6, 0, 0)))  // above the plane → kept
+    @Test func `flipping keeps the other half`() {
+        var section = CrossSection.axisAligned(.x, origin: SIMD3(5, 0, 0))
+        section.flipped = true
+        #expect(close(section.normal, SIMD3(-1, 0, 0)))
+        #expect(keeps(section, SIMD3(6, 0, 0)))   // now the high side is kept
+        #expect(!keeps(section, SIMD3(4, 0, 0)))
     }
 
-    @Test func `plane normal follows the chosen axis`() {
-        #expect(CrossSection(axis: .x).plane().xyz == SIMD3(1, 0, 0))
-        #expect(CrossSection(axis: .y).plane().xyz == SIMD3(0, 1, 0))
-        #expect(CrossSection(axis: .z).plane().xyz == SIMD3(0, 0, 1))
-        #expect(CrossSection(axis: .z, flipped: true).plane().xyz == SIMD3(0, 0, -1))
+    @Test func `a tilted section has a unit normal and passes through its origin`() {
+        let origin = SIMD3<Double>(3, -2, 7)
+        let tilt = simd_quatd(angle: .pi / 4, axis: simd_normalize(SIMD3(1, 1, 0)))
+        let section = CrossSection(origin: origin, orientation: tilt)
+        #expect(simd_length(section.normal) ≈ 1)
+        // The origin lies exactly on the plane: dot(origin, n) == distance.
+        let plane = section.plane()
+        #expect(simd_dot(origin, SIMD3(plane.x, plane.y, plane.z)) ≈ plane.w)
     }
-
-    @Test func `offset range spans the box extent along the axis and ignores flip`() {
-        let boxMin = SIMD3<Double>(-10, -20, -30)
-        let boxMax = SIMD3<Double>(10, 20, 30)
-
-        #expect(CrossSection(axis: .x).offsetRange(boxMin: boxMin, boxMax: boxMax) == -10...10)
-        #expect(CrossSection(axis: .y).offsetRange(boxMin: boxMin, boxMax: boxMax) == -20...20)
-        #expect(CrossSection(axis: .z, flipped: true).offsetRange(boxMin: boxMin, boxMax: boxMax) == -30...30)
-    }
-}
-
-private extension SIMD4 where Scalar == Double {
-    var xyz: SIMD3<Double> { SIMD3(x, y, z) }
 }

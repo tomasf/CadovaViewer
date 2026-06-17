@@ -26,6 +26,12 @@ class CustomSceneView: SCNView {
     var onClick: ((CGPoint) -> Void)? = nil
     var onHover: ((CGPoint?) -> Void)? = nil
     var onCancel: (() -> Void)? = nil
+    /// Cross-section gizmo drag hooks. `beginGizmoDrag` returns true if a gizmo handle was grabbed at
+    /// the point, in which case the drag is fed to `updateGizmoDrag` (view points) and `endGizmoDrag`
+    /// is called at the end — taking precedence over camera control.
+    var beginGizmoDrag: ((CGPoint) -> Bool)? = nil
+    var updateGizmoDrag: ((CGPoint) -> Void)? = nil
+    var endGizmoDrag: (() -> Void)? = nil
     var mouseInteractionActive: AnyPublisher<Bool, Never> { mouseInteractionActiveSubject.eraseToAnyPublisher() }
     var mouseRotationPivot: AnyPublisher<SCNVector3?, Never> { mouseRotationPivotSubject.eraseToAnyPublisher() }
     var showContextMenu: AnyPublisher<NSEvent, Never> { contextMenuSubject.eraseToAnyPublisher() }
@@ -109,10 +115,33 @@ class CustomSceneView: SCNView {
     override func mouseDown(with event: NSEvent) {
         // Any click (including the start of a camera drag) focuses this viewport.
         viewportController?.requestFocus()
+
+        let localPoint = convert(event.locationInWindow, from: nil)
+
+        // A left-press on a cross-section gizmo handle starts a manipulation, ahead of camera control.
+        if event.type == .leftMouseDown, beginGizmoDrag?(localPoint) == true {
+            // Disable camera control for the whole drag, or SCNView also rotates the view from it.
+            let wasCameraControl = allowsCameraControl
+            allowsCameraControl = false
+            mouseInteractionActiveSubject.send(true)
+            NSCursor.hide()
+            _ = MouseTracker.track(with: event) { [weak self] location in
+                guard let self else { return }
+                updateGizmoDrag?(convert(location, from: nil))
+            }
+            NSCursor.unhide()
+            endGizmoDrag?()
+            // MouseTracker reads raw deltas and leaves the drag events in the queue; flush them so
+            // they don't reach the camera and jump the view once control is restored.
+            while NSApp.nextEvent(matching: .leftMouseDragged, until: .distantPast, inMode: .default, dequeue: true) != nil {}
+            mouseInteractionActiveSubject.send(false)
+            allowsCameraControl = wasCameraControl
+            return
+        }
+
         guard let viewportController, allowsCameraControl else { return }
 
         super.mouseDown(with: event)
-        let localPoint = convert(event.locationInWindow, from: nil)
         let edgeNodes = viewportController.edgeNodes
 
         if let result = hitTest(localPoint, options: [

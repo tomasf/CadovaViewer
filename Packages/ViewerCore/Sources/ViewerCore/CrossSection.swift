@@ -4,26 +4,25 @@ import simd
 /// A per-viewport cutting plane that hides everything on one side so the model's interior is
 /// visible, with a filled "cap" drawn on the cut surface.
 ///
-/// The plane is axis-aligned (the initial UI only offers X/Y/Z presets), defined by an `axis`, an
-/// `offset` along that axis in world millimetres, and a `flipped` flag choosing which half is kept.
-/// `plane()` turns that into the world-space half-space test the shader and cap passes use:
-/// a fragment at world position `p` is kept when `dot(p, normal) <= distance`.
-public struct CrossSection: Equatable, Sendable {
-    public var enabled: Bool
-    public var axis: Axis
-    /// Position of the plane along `axis`, in world millimetres.
-    public var offset: Double
-    /// Keep the high side of the axis instead of the low side.
+/// The plane is arbitrary: it passes through `origin` (a world-millimetre point) with a normal given
+/// by `orientation` applied to +Z, optionally `flipped` to keep the other half. `plane()` turns that
+/// into the world-space half-space the shader and cap use: a fragment at `p` is kept when
+/// `dot(p, normal) <= distance`. A viewport holds an array of these; each is positioned/oriented with
+/// the interactive gizmo, or snapped to an axis with the X/Y/Z reset buttons.
+public struct CrossSection: Identifiable, Equatable, Sendable {
+    public let id: UUID
+    /// A point the plane passes through, in world millimetres.
+    public var origin: SIMD3<Double>
+    /// Rotation taking the reference normal (+Z) to this plane's normal.
+    public var orientation: simd_quatd
+    /// Keep the other half-space (negate the normal).
     public var flipped: Bool
-    /// Draw the translucent locator quad at the cut plane.
-    public var showPlane: Bool
 
-    public init(enabled: Bool = false, axis: Axis = .z, offset: Double = 0, flipped: Bool = false, showPlane: Bool = true) {
-        self.enabled = enabled
-        self.axis = axis
-        self.offset = offset
+    public init(id: UUID = UUID(), origin: SIMD3<Double>, orientation: simd_quatd = simd_quatd(ix: 0, iy: 0, iz: 0, r: 1), flipped: Bool = false) {
+        self.id = id
+        self.origin = origin
+        self.orientation = orientation
         self.flipped = flipped
-        self.showPlane = showPlane
     }
 
     public enum Axis: Int, CaseIterable, Sendable {
@@ -50,22 +49,32 @@ public struct CrossSection: Equatable, Sendable {
         }
     }
 
-    /// The world-space half-space, as `(normal.xyz, distance)`. Fragments are kept where
-    /// `dot(position, normal) <= distance`.
-    ///
-    /// Keeping the meaning of `offset` fixed (it's always the world coordinate of the plane along
-    /// the axis) means a flip negates both the normal and the distance: not flipped keeps
-    /// `p[axis] <= offset`; flipped keeps `p[axis] >= offset`.
-    public func plane() -> SIMD4<Double> {
-        let sign: Double = flipped ? -1 : 1
-        let normal = axis.unit * sign
-        return SIMD4(normal.x, normal.y, normal.z, sign * offset)
+    /// The plane's unit normal in world space (the kept half is `dot(p, normal) <= distance`).
+    public var normal: SIMD3<Double> {
+        let base = orientation.act(SIMD3(0, 0, 1))
+        return (flipped ? -1 : 1) * base
     }
 
-    /// The slider range for `offset`: the model's extent along the axis. Independent of `flipped`.
-    public func offsetRange(boxMin: SIMD3<Double>, boxMax: SIMD3<Double>) -> ClosedRange<Double> {
-        let lo = boxMin[axis.index]
-        let hi = boxMax[axis.index]
-        return lo <= hi ? lo...hi : hi...lo
+    /// The world-space half-space as `(normal.xyz, distance)`; kept where `dot(p, normal) <= distance`.
+    public func plane() -> SIMD4<Double> {
+        let n = normal
+        return SIMD4(n.x, n.y, n.z, simd_dot(n, origin))
+    }
+
+    /// The orientation whose +Z maps onto the given world axis (for the X/Y/Z reset shortcuts).
+    public static func orientation(for axis: Axis) -> simd_quatd {
+        simd_quatd(from: SIMD3(0, 0, 1), to: axis.unit)
+    }
+
+    /// A new section flat along `axis` (normal = that axis) through `origin`.
+    public static func axisAligned(_ axis: Axis, origin: SIMD3<Double>) -> CrossSection {
+        CrossSection(origin: origin, orientation: orientation(for: axis), flipped: false)
+    }
+
+    public static func == (lhs: CrossSection, rhs: CrossSection) -> Bool {
+        lhs.id == rhs.id
+            && lhs.origin == rhs.origin
+            && lhs.orientation.vector == rhs.orientation.vector
+            && lhs.flipped == rhs.flipped
     }
 }

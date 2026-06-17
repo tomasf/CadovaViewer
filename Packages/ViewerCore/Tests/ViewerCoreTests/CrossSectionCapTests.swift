@@ -48,6 +48,18 @@ struct CrossSectionCapTests {
         #expect(cap.allSatisfy { abs($0.x - 1) < 1e-4 }) // lies on x = 1
     }
 
+    @Test func `a tilted plane caps correctly and lies on the plane`() {
+        let cube: Manifold<V3> = .cube(size: V3(x: 2, y: 2, z: 2), center: true)
+        let normal = simd_normalize(SIMD3<Double>(1, 1, 0))
+        let cap = solid(from: cube).capTriangles(planeNormal: normal, offset: 0)
+
+        #expect(!cap.isEmpty)
+        // The cross-section of a 2-cube by x+y=0 is a 2√2 × 2 rectangle → area 4√2.
+        #expect(abs(triangleArea(cap) - 4 * 2.0.squareRoot()) < 1e-3)
+        // Every vertex lies on the plane dot(v, n) = 0.
+        #expect(cap.allSatisfy { abs(simd_dot(SIMD3<Double>($0), normal)) < 1e-4 })
+    }
+
     @Test func `a hole is subtracted from the cap (tube caps as an annulus)`() {
         let outer: Manifold<V3> = .cube(size: V3(x: 4, y: 4, z: 4), center: true)
         let inner: Manifold<V3> = .cube(size: V3(x: 2, y: 2, z: 10), center: true)

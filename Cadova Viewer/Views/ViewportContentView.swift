@@ -39,6 +39,9 @@ struct ViewportContentView: View {
             .overlay(alignment: .topTrailing) {
                 ViewportControlsOverlay(viewModel: viewModel, viewportID: viewportID, size: paneSize)
             }
+            .overlay(alignment: .topLeading) {
+                CrossSectionButtonsOverlay(viewport: viewportController)
+            }
             .overlay {
                 if viewModel.hasMultipleViewports {
                     Rectangle()
