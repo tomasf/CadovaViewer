@@ -7,36 +7,38 @@ struct CrossSectionControls: View {
     @ObservedObject var viewport: ViewportController
 
     private var selected: CrossSection? {
-        guard let id = viewport.selectedCrossSectionID else { return nil }
-        return viewport.crossSections.first { $0.id == id }
+        viewport.crossSections.first { $0.id == viewport.selectedCrossSectionID }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Cross-Section").font(.headline)
-
             HStack(spacing: 6) {
-                Text("Align to").foregroundStyle(.secondary)
+                Button("Flip") { viewport.flipSelectedCrossSection() }
                 ForEach(CrossSection.Axis.allCases, id: \.self) { axis in
                     Button(axis.displayName) { viewport.alignSelectedCrossSection(to: axis) }
                 }
             }
 
-            Toggle("Flip side", isOn: flipBinding)
-
             Divider()
 
-            Button(role: .destructive) {
-                if let id = viewport.selectedCrossSectionID { viewport.deleteCrossSection(id) }
-            } label: {
-                Label("Delete Cross-Section", systemImage: "trash")
+            HStack {
+                Toggle("Active", isOn: Binding(
+                    get: { selected?.enabled ?? true },
+                    set: { active in
+                        if let id = viewport.selectedCrossSectionID { viewport.setCrossSectionEnabled(id, active) }
+                    }
+                ))
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    if let id = viewport.selectedCrossSectionID { viewport.deleteCrossSection(id) }
+                } label: {
+                    Text("Remove")
+                }
             }
         }
         .frame(width: 220)
         .padding()
-    }
-
-    private var flipBinding: Binding<Bool> {
-        Binding(get: { selected?.flipped ?? false }, set: { _ in viewport.flipSelectedCrossSection() })
     }
 }

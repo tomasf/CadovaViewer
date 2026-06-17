@@ -71,6 +71,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var crossSectionCapMaterialsByKey: [CrossSectionCapKey: SCNMaterial] = [:]
     /// In-progress gizmo drag (handle grabbed + the section state when the drag began).
     var crossSectionDrag: CrossSectionDragState?
+    /// Next palette colour index for a newly-added cross-section (mirrors measurement colouring).
+    var nextCrossSectionColorIndex = 0
 
     /// The model's edge-line geometry nodes in this viewport's scene (depth offset + hit exclusion).
     var edgeNodes: [SCNNode] { modelInstance.edgeGeometryNodes }
@@ -108,6 +110,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             if highlightedPartID != nil, viewOptions.hiddenPartIDs != oldValue.hiddenPartIDs {
                 applyHighlight()
                 sceneView.setNeedsRedraw()
+            }
+            // Caps cover only visible parts, so rebuild when visibility changes. Done here (didSet)
+            // and not the $viewOptions sink for the same willSet reason: the sink would still see the
+            // old `hiddenPartIDs`, building caps for exactly the wrong set of parts.
+            if viewOptions.hiddenPartIDs != oldValue.hiddenPartIDs, !activeCrossSections.isEmpty {
+                updateCrossSectionCap()
             }
         }
     }
@@ -320,8 +328,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
             grid.showGrid = viewOptions.showGrid
             grid.showOrigin = viewOptions.showOrigin
             updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-            // A part hidden/shown while a cut is active must drop/gain its cap.
-            if !crossSections.isEmpty { updateCrossSectionCap() }
             // Persist as the default for newly opened documents. Menu toggles only mutate
             // viewOptions (+ restorable state), which isn't reapplied on a manual reopen; this
             // keeps display options like smooth shading remembered. (setViewOptions does the

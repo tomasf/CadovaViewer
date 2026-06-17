@@ -28,10 +28,12 @@ struct CrossSectionTests {
 
     @Test func `flipping keeps the other half`() {
         var section = CrossSection.axisAligned(.x, origin: SIMD3(5, 0, 0))
-        section.flipped = true
+        section.flip()
         #expect(close(section.normal, SIMD3(-1, 0, 0)))
         #expect(keeps(section, SIMD3(6, 0, 0)))   // now the high side is kept
         #expect(!keeps(section, SIMD3(4, 0, 0)))
+        // The plane still passes through the same origin after flipping.
+        #expect(section.plane().w ≈ -5)
     }
 
     @Test func `a tilted section has a unit normal and passes through its origin`() {

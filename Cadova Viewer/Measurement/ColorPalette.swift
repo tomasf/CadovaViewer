@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-enum MeasurementPalette {
+enum ColorPalette {
     struct Entry: Equatable {
         let red: Double
         let green: Double
@@ -32,5 +32,14 @@ enum MeasurementPalette {
     static func color(forIndex index: Int) -> Color {
         let entry = entry(forIndex: index)
         return Color(red: entry.red, green: entry.green, blue: entry.blue, opacity: entry.alpha)
+    }
+
+    /// Linear RGBA for shader uniforms (the palette entries are sRGB; SceneKit shading is linear).
+    static func linearComponents(forIndex index: Int) -> SIMD4<Float> {
+        let entry = entry(forIndex: index)
+        func linear(_ c: Double) -> Float {
+            Float(c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4))
+        }
+        return SIMD4(linear(entry.red), linear(entry.green), linear(entry.blue), Float(entry.alpha))
     }
 }

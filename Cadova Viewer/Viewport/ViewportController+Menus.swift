@@ -135,6 +135,23 @@ extension ViewportController {
         }
         builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
 
+        builder.addSeparator()
+        builder.addItem(label: "Cross-Sections", submenu: { submenu in
+            submenu.addItem(label: "New Cross-Section", enabled: self.crossSections.count < Self.maxCrossSections,
+                            keyEquivalent: "n", modifiers: [.command, .control]) {
+                self.addCrossSection()
+            }
+            submenu.addSeparator()
+            submenu.addItem(label: "Activate All", enabled: self.crossSections.contains { !$0.enabled },
+                            keyEquivalent: "a", modifiers: [.command, .control]) {
+                self.setAllCrossSectionsEnabled(true)
+            }
+            submenu.addItem(label: "Deactivate All", enabled: self.crossSections.contains { $0.enabled },
+                            keyEquivalent: "a", modifiers: [.command, .control, .shift]) {
+                self.setAllCrossSectionsEnabled(false)
+            }
+        })
+
         buildViewportLayoutMenu(with: builder)
 
         // Sits just above the system "Show/Hide Toolbar" item (the end marker is the separator right

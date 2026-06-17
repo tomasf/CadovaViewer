@@ -28,7 +28,11 @@ final class CrossSectionGizmo {
         // (X/Y) do nothing on an infinite, normal-symmetric cut, so those handles are omitted.
         root.addChildNode(makeRing(axis: .x))
         root.addChildNode(makeRing(axis: .y))
-        root.addChildNode(makeArrow(axis: .z))
+        // The translate arrow points along the kept (active) half — local −Z. Flipping the section
+        // rotates the whole gizmo, so the arrow then points the other way automatically.
+        let arrow = makeArrow(axis: .z)
+        arrow.simdOrientation = simd_quatf(angle: -.pi / 2, axis: SIMD3(1, 0, 0)) // +Y → −Z
+        root.addChildNode(arrow)
         let cube = SCNNode(geometry: SCNBox(width: 0.13, height: 0.13, length: 0.13, chamferRadius: 0.02))
         cube.geometry?.firstMaterial = material(color: NSColor(white: 0.85, alpha: 1))
         cube.name = "cs.gizmo.center"

@@ -52,6 +52,7 @@ extension ViewportController {
     float crossSectionCount;
     float crossSectionSkip;
     float4 capColor;
+    float4 capStripeColor;
     float3 hatchDirection;
     float hatchSpacing;
     #pragma body
@@ -65,8 +66,8 @@ extension ViewportController {
     }
     _surface.diffuse = capColor;
     float hatchCoordinate = dot(csWorld, hatchDirection) / hatchSpacing;
-    if (fract(hatchCoordinate) < 0.12) {
-        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, float3(0.0), 0.22);
+    if (fract(hatchCoordinate) < 0.5) {
+        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, 0.45);
     }
     """
 
@@ -84,8 +85,15 @@ extension ViewportController {
     /// Applies the current cross-sections. The locator plane + gizmo update live here; the clip planes
     /// and caps are applied together when the (background) cap slice finishes, so the cut surface and
     /// its fill stay in sync. Removing all cuts restores the geometry immediately.
+    /// The cross-sections whose cut is currently applied (disabled ones still exist but don't clip).
+    var activeCrossSections: [CrossSection] { crossSections.filter { $0.enabled } }
+
     func applyCrossSection() {
-        guard !crossSections.isEmpty else {
+        // Overlays follow selection/hover regardless of enabled state, so a disabled section can still
+        // be edited and previewed.
+        updateCrossSectionOverlays()
+
+        guard !activeCrossSections.isEmpty else {
             let packed = packedClipPlanes([])
             for material in modelInstance.clipMaterials {
                 setClipUniforms(on: material, packed: packed, skip: -1)
@@ -93,11 +101,9 @@ extension ViewportController {
             }
             crossSectionCapNeedsRebuild = false
             clearCrossSectionCaps()
-            updateCrossSectionOverlays()
             sceneView.setNeedsRedraw()
             return
         }
-        updateCrossSectionOverlays()
         updateCrossSectionCap()
     }
 
@@ -159,7 +165,7 @@ extension ViewportController {
     /// Rebuilds caps for every section/part off the main thread, then applies clip planes + caps
     /// together on the main thread. One slice in flight at a time with a trailing rebuild (no backlog).
     func updateCrossSectionCap() {
-        guard !crossSections.isEmpty else {
+        guard !activeCrossSections.isEmpty else {
             crossSectionCapNeedsRebuild = false
             clearCrossSectionCaps()
             return
@@ -171,22 +177,23 @@ extension ViewportController {
         crossSectionCapInFlight = true
         crossSectionCapNeedsRebuild = false
 
-        let sections = Array(crossSections.prefix(Self.maxCrossSections))
+        let sections = Array(activeCrossSections.prefix(Self.maxCrossSections))
         let packed = packedClipPlanes(sections)
         let bounds = crossSectionModelBounds
         let hatchSpacing = Float(max((bounds.max - bounds.min).max() / 90, 0.3))
 
-        struct SectionJob { let id: UUID; let index: Int; let normal: SIMD3<Double>; let offset: Double; let hatch: SIMD3<Float> }
+        struct SectionJob { let id: UUID; let index: Int; let normal: SIMD3<Double>; let offset: Double; let hatch: SIMD3<Float>; let stripeColor: SIMD4<Float> }
         let jobs = sections.enumerated().map { index, section in
             SectionJob(id: section.id, index: index, normal: section.normal, offset: section.plane().w,
-                       hatch: hatchDirection(for: SIMD3<Float>(section.normal)))
+                       hatch: hatchDirection(for: SIMD3<Float>(section.normal)),
+                       stripeColor: ColorPalette.linearComponents(forIndex: section.colorIndex))
         }
         let hidden = hiddenPartIDs
         let parts = sceneController.parts.filter { !hidden.contains($0.id) && $0.capSolid != nil }
         let partInputs = parts.map { (id: $0.id, solid: $0.capSolid!, color: $0.dominantColor) }
 
         crossSectionCapQueue.async { [weak self] in
-            var results: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, hatch: SIMD3<Float>)] = []
+            var results: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, stripeColor: SIMD4<Float>, hatch: SIMD3<Float>)] = []
             for job in jobs {
                 for part in partInputs {
                     let triangles = part.solid.capTriangles(planeNormal: job.normal, offset: job.offset)
@@ -195,14 +202,14 @@ extension ViewportController {
                     let element = SCNGeometryElement(indices: Array(UInt32(0)..<UInt32(triangles.count)), primitiveType: .triangles)
                     results.append((CrossSectionCapKey(section: job.id, part: part.id), job.index,
                                     SCNGeometry(sources: [source], elements: [element]),
-                                    part.color ?? SIMD4(0.7, 0.7, 0.7, 1), job.hatch))
+                                    part.color ?? SIMD4(0.7, 0.7, 0.7, 1), job.stripeColor, job.hatch))
                 }
             }
 
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.crossSectionCapInFlight = false
-                guard !self.crossSections.isEmpty else { self.clearCrossSectionCaps(); return }
+                guard !self.activeCrossSections.isEmpty else { self.clearCrossSectionCaps(); return }
 
                 for material in self.modelInstance.clipMaterials {
                     self.setClipUniforms(on: material, packed: packed, skip: -1)
@@ -219,7 +226,7 @@ extension ViewportController {
     /// Installs computed caps onto persistent per-(section,part) nodes, reusing each node + material
     /// (only the geometry changes). Each cap material clips by the *other* planes (skip = its index).
     private func applyCrossSectionCaps(
-        _ caps: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, hatch: SIMD3<Float>)],
+        _ caps: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, stripeColor: SIMD4<Float>, hatch: SIMD3<Float>)],
         packed: PackedClipPlanes, hatchSpacing: Float
     ) {
         var present: Set<CrossSectionCapKey> = []
@@ -235,6 +242,7 @@ extension ViewportController {
                 material.isDoubleSided = true
                 material.shaderModifiers = [.surface: Self.capShaderModifier]
                 material.setValue(NSValue(scnVector4: SCNVector4(cap.color.x, cap.color.y, cap.color.z, 1)), forKey: "capColor")
+                material.setValue(NSValue(scnVector4: SCNVector4(cap.stripeColor.x, cap.stripeColor.y, cap.stripeColor.z, 1)), forKey: "capStripeColor")
                 crossSectionCapMaterialsByKey[cap.key] = material
             }
             setClipUniforms(on: material, packed: packed, skip: cap.sectionIndex)
@@ -303,7 +311,8 @@ extension ViewportController {
         guard crossSections.count < Self.maxCrossSections else { return }
         let bounds = crossSectionModelBounds
         let center = (bounds.min + bounds.max) / 2
-        let section = CrossSection.axisAligned(.z, origin: center)
+        let section = CrossSection.axisAligned(.z, origin: center, colorIndex: nextCrossSectionColorIndex)
+        nextCrossSectionColorIndex += 1
         crossSections.append(section)
         selectedCrossSectionID = section.id
     }
@@ -317,17 +326,29 @@ extension ViewportController {
             crossSectionCapMaterialsByKey[key] = nil
         }
         crossSections.removeAll { $0.id == id }
+        // Start colours over once the last cut is gone, like measurements after delete-all.
+        if crossSections.isEmpty { nextCrossSectionColorIndex = 0 }
     }
 
     func flipSelectedCrossSection() {
-        mutateSelectedCrossSection { $0.flipped.toggle() }
+        mutateSelectedCrossSection { $0.flip() }
+    }
+
+    func setCrossSectionEnabled(_ id: UUID, _ enabled: Bool) {
+        guard let index = crossSections.firstIndex(where: { $0.id == id }) else { return }
+        crossSections[index].enabled = enabled
+    }
+
+    /// Activates or deactivates every cross-section at once (single update).
+    func setAllCrossSectionsEnabled(_ enabled: Bool) {
+        guard crossSections.contains(where: { $0.enabled != enabled }) else { return }
+        var sections = crossSections
+        for index in sections.indices { sections[index].enabled = enabled }
+        crossSections = sections
     }
 
     func alignSelectedCrossSection(to axis: CrossSection.Axis) {
-        mutateSelectedCrossSection {
-            $0.orientation = CrossSection.orientation(for: axis)
-            $0.flipped = false
-        }
+        mutateSelectedCrossSection { $0.orientation = CrossSection.orientation(for: axis) }
     }
 
     private func mutateSelectedCrossSection(_ transform: (inout CrossSection) -> Void) {
