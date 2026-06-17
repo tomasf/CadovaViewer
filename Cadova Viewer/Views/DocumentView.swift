@@ -119,14 +119,21 @@ struct DocumentView: View {
 
     @ToolbarContentBuilder
     var toolbar: some CustomizableToolbarContent {
-        ToolbarItem(id: "sidebar", placement: .navigation) {
-            Button {
-                viewModel.toggleSidebar()
-            } label: {
-                Label("Contents", systemImage: "sidebar.left")
-            }
-            .help("Show or hide the sidebar")
+        // Use the real system sidebar toggle + tracking separator: SwiftUI substitutes the native
+        // `NSToolbarToggleSidebarItem` / `NSTrackingSeparatorToolbarItem` when a ToolbarItem's id
+        // matches the system identifier. The separator docks the toggle into the sidebar's toolbar
+        // region (Mail-style). This works under our manual `NSHostingController` window, whereas the
+        // automatic toggle only appears for a SwiftUI `WindowGroup` scene. The toggle drives the
+        // sidebar via the `toggleSidebar:` responder action; the View menu command uses the binding.
+        ToolbarItem(id: NSToolbarItem.Identifier.toggleSidebar.rawValue, placement: .navigation) {
+            Text("")
         }
+        .customizationBehavior(.disabled)
+
+        ToolbarItem(id: NSToolbarItem.Identifier.sidebarTrackingSeparator.rawValue, placement: .navigation) {
+            Text("")
+        }
+        .customizationBehavior(.disabled)
 
         Group {
             ToolbarItem(id: "interaction-mode", placement: .primaryAction) {
