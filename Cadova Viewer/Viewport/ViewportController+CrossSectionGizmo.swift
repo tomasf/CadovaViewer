@@ -66,9 +66,9 @@ extension ViewportController {
         crossSectionDragUndoSnapshot = nil
         crossSectionDrag = nil
         crossSectionGizmo.setActiveHandle(nil) // restore all handles
-        // Ease the gizmo back to the view centre on its (possibly moved) plane instead of snapping.
+        // Re-centre the gizmo immediately; animating this can create a visible bump on release.
         if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
-            crossSectionGizmo.settle(to: crossSectionGizmoAnchor(for: section), duration: 0.2)
+            crossSectionGizmo.recenter(to: crossSectionGizmoAnchor(for: section))
         }
         sceneView.setNeedsRedraw()
     }
@@ -80,18 +80,22 @@ extension ViewportController {
     }
 
     /// A point on the section's plane near the centre of the view — where the gizmo is anchored so it
-    /// stays reachable when zoomed in. Falls back to the stored origin if the plane is edge-on.
+    /// stays reachable when zoomed in. Falls back to the current gizmo/section point if the plane is
+    /// near edge-on, where the centre-ray intersection is too unstable to be useful.
     func crossSectionGizmoAnchor(for section: CrossSection) -> SIMD3<Double> {
         let center = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
         let ray = worldRay(at: center)
         let normal = section.normal
         let distance = simd_dot(normal, section.origin)
         let denom = simd_dot(ray.direction, normal)
-        if abs(denom) > 1e-9 {
+        if abs(denom) > CrossSectionGizmo.minimumViewAlignment {
             let t = (distance - simd_dot(ray.origin, normal)) / denom
             if t > 0 { return ray.origin + ray.direction * t }
         }
-        return section.origin
+        let current = crossSectionGizmo.root.isHidden
+            ? section.origin
+            : SIMD3<Double>(crossSectionGizmo.root.simdPosition)
+        return current - normal * (simd_dot(current, normal) - distance)
     }
 
     // MARK: - Ray math

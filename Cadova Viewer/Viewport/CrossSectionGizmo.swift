@@ -7,6 +7,8 @@ import simd
 /// plane origin along world X/Y/Z, rotating spins the plane about world X/Y/Z. Kept a constant on-screen
 /// size and drawn on top of the model.
 final class CrossSectionGizmo {
+    static let minimumViewAlignment = 0.08
+
     enum Handle: Equatable {
         case translate(CrossSection.Axis)
         case rotate(CrossSection.Axis)
@@ -25,10 +27,6 @@ final class CrossSectionGizmo {
     private var followNormal = SIMD3<Double>(0, 0, 1)
     private var followDistance = 0.0
     private var following = false
-    /// While set in the future, `followView` stands down so an in-flight `settle` animation can play
-    /// (used to ease the gizmo back to the view centre after a drag instead of snapping).
-    private var followSuspendedUntil: TimeInterval = 0
-
     init() {
         root.name = "Cross-section gizmo"
         root.isHidden = true
@@ -44,7 +42,10 @@ final class CrossSectionGizmo {
         root.addChildNode(arrow)
         let cube = SCNNode(geometry: SCNBox(width: 0.13, height: 0.13, length: 0.13, chamferRadius: 0.02))
         cube.geometry?.firstMaterial = material(color: NSColor(white: 0.85, alpha: 1))
-        cube.name = "cs.gizmo.center"
+        let centerName = "cs.gizmo.center"
+        cube.name = centerName
+        handleForName[centerName] = .translate(.z)
+        handleTopNodes.append((.translate(.z), cube))
         root.addChildNode(cube)
         // Draw on top of everything (incl. the opaque caps): the materials ignore the depth buffer, so
         // a high rendering order keeps the gizmo painted last.
@@ -76,34 +77,31 @@ final class CrossSectionGizmo {
     /// presentation transform while the model transform (what `unprojectPoint` reads) lags, so using the
     /// presentation makes the gizmo track the camera live instead of only catching up on the next click.
     func followView(presentationCamera: SCNNode?, isDragging: Bool) {
-        guard following, !isDragging, !root.isHidden, let camera = presentationCamera,
-              CACurrentMediaTime() >= followSuspendedUntil else { return }
+        guard following, !isDragging, !root.isHidden, let camera = presentationCamera else { return }
         if let anchor = anchorOnPlane(camera: camera) {
             root.simdPosition = SIMD3<Float>(anchor)
         }
     }
 
-    /// Eases the gizmo to `anchor` over `duration`, suspending `followView` meanwhile so the re-centre
-    /// after a drag glides in rather than snapping.
-    func settle(to anchor: SIMD3<Double>, duration: TimeInterval) {
+    /// Re-centres the gizmo after a drag without animation.
+    func recenter(to anchor: SIMD3<Double>) {
         guard following, !root.isHidden else { return }
-        SCNTransaction.begin()
-        SCNTransaction.animationDuration = duration
         root.simdPosition = SIMD3<Float>(anchor)
-        SCNTransaction.commit()
-        followSuspendedUntil = CACurrentMediaTime() + duration
     }
 
     /// The point where the camera's optical axis (the ray through the view centre) meets the cached
-    /// plane, or nil if the plane is edge-on (ray parallel) or behind the camera.
+    /// plane. Near edge-on, keep the current anchor on the plane instead of chasing a far-away,
+    /// numerically unstable intersection.
     private func anchorOnPlane(camera: SCNNode) -> SIMD3<Double>? {
         let origin = SIMD3<Double>(camera.simdWorldPosition)
         let direction = SIMD3<Double>(simd_normalize(camera.simdWorldFront)) // camera's -Z, the view centre
         let denom = simd_dot(direction, followNormal)
-        guard abs(denom) > 1e-9 else { return nil }
-        let t = (followDistance - simd_dot(origin, followNormal)) / denom
-        guard t > 0 else { return nil }
-        return origin + direction * t
+        if abs(denom) > Self.minimumViewAlignment {
+            let t = (followDistance - simd_dot(origin, followNormal)) / denom
+            if t > 0 { return origin + direction * t }
+        }
+        let current = SIMD3<Double>(root.simdPosition)
+        return current - followNormal * (simd_dot(current, followNormal) - followDistance)
     }
 
     /// Dims every handle except `active` (so a drag highlights what's being manipulated). Pass nil to

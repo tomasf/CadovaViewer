@@ -123,9 +123,9 @@ extension ViewportController {
     /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one.
     func updateCrossSectionOverlays() {
         if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
-            // While dragging, hold the gizmo on the section's current point; otherwise anchor it at the
-            // view centre (the per-frame `followView` keeps it there as the camera moves).
-            let anchor = crossSectionDrag != nil ? section.origin : crossSectionGizmoAnchor(for: section)
+            // While dragging, keep the gizmo fixed at the grab pivot; otherwise anchor it at the view
+            // centre (the per-frame `followView` keeps it there as the camera moves).
+            let anchor = crossSectionDrag?.pivot ?? crossSectionGizmoAnchor(for: section)
             crossSectionGizmo.update(for: section, anchor: anchor)
         } else {
             crossSectionGizmo.hide()
@@ -165,9 +165,14 @@ extension ViewportController {
         plane.width = CGFloat(diagonal)
         plane.height = CGFloat(diagonal)
 
-        let normal = SIMD3<Float>(section.normal)
+        let normal = section.normal
+        let modelCenter = (bounds.min + bounds.max) / 2
+        let planeDistance = simd_dot(normal, section.origin)
+        let centeredOnModel = modelCenter + normal * (planeDistance - simd_dot(modelCenter, normal))
+
+        let normalFloat = SIMD3<Float>(normal)
         // Kept side is -normal; nudge slightly that way so the cap (exactly on the plane) wins.
-        let center = SIMD3<Float>(section.origin) - normal * Float(diagonal) * 0.001
+        let center = SIMD3<Float>(centeredOnModel) - normalFloat * Float(diagonal) * 0.001
         node.simdPosition = center
         // Orient straight from the section's quaternion (a centered square doesn't care about ±normal),
         // which avoids the NaN `simd_quatf(from:to:)` produces for an exactly-antiparallel normal.
