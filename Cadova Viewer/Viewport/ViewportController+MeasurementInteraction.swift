@@ -77,7 +77,7 @@ extension ViewportController {
         }
 
         return nearby.sorted { $0.distance < $1.distance }
-            .first { isVertexVisible($0.vertex) }?
+            .first { !crossSectionHides($0.vertex) && isVertexVisible($0.vertex) }?
             .vertex
     }
 
@@ -115,14 +115,11 @@ extension ViewportController {
         let cameraPosition = cameraNode.presentation.worldPosition
         let vertexDistance = vertex.distance(from: cameraPosition)
 
-        // Closest hit only — far cheaper than the default `.all`, which searches every
-        // intersection. Edge nodes sit on the surface (nudged toward the camera by ~0.1%),
-        // so they stay within the tolerance below.
+        // Nearest *visible* hit (kept-side geometry or a cap), so clipped-away geometry in front of a
+        // cut doesn't count as an occluder. Edge nodes sit on the surface (nudged toward the camera by
+        // ~0.1%), so they stay within the tolerance below.
         let screenPoint = sceneView.projectPoint(vertex)
-        let nearestHit = sceneView.hitTest(CGPoint(x: screenPoint.x, y: screenPoint.y), options: [
-            .rootNode: modelInstance.root,
-            .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
-        ]).first
+        let nearestHit = nearestVisibleHit(at: CGPoint(x: screenPoint.x, y: screenPoint.y), in: modelInstance.root)
 
         // No surface in front of the point (e.g. a silhouette corner) → treat as visible.
         guard let nearestHit else { return true }
@@ -204,27 +201,8 @@ extension ViewportController {
     /// AppKit view coordinates (the `SCNView`'s bottom-left origin), matching
     /// SceneKit's hit-test/project/unproject APIs.
     private func surfaceWorldPoint(atViewPoint point: CGPoint) -> SCNVector3? {
-        let viewPoint = point
-        guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return nil }
-
-        // Hit test each visible part's model node. Using the model node as the root (the
-        // edge lines are siblings, not children) excludes the edges — which float slightly
-        // in front of the surface — while keeping the cheap closest-hit search per part.
-        let hidden = hiddenPartIDs
-        var best: SCNVector3?
-        var bestDistance = Double.greatestFiniteMagnitude
-        for part in sceneController.parts where !hidden.contains(part.id) {
-            guard let modelNode = modelInstance.partModelNodes[part.id] else { continue }
-            guard let hit = sceneView.hitTest(viewPoint, options: [
-                .rootNode: modelNode,
-                .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
-            ]).first else { continue }
-            let distance = hit.worldCoordinates.distance(from: cameraPosition)
-            if distance < bestDistance {
-                bestDistance = distance
-                best = hit.worldCoordinates
-            }
-        }
-        return best
+        // The nearest visible surface: kept-side geometry or a cut cap, excluding edges and
+        // clipped-away geometry. Hidden parts are skipped via their `isHidden` containers.
+        nearestVisibleHit(at: point, in: modelInstance.root)?.worldCoordinates
     }
 }

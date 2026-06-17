@@ -64,16 +64,21 @@ extension ViewportController {
     func partsUnderCursor(viewPoint: CGPoint) -> [ModelData.Part] {
         guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return [] }
 
+        // Search all intersections only when cuts are active (so a part hit solely on its clipped-away
+        // side isn't listed); otherwise the cheaper closest hit. `crossSectionHides` is false with no
+        // active cuts, so the first visible hit is just the nearest.
+        let searchMode: SCNHitTestSearchMode = activeCrossSections.isEmpty ? .closest : .all
         let samplePoints = hitTestSamplePoints(around: viewPoint)
         var hits: [(part: ModelData.Part, distance: Double)] = []
         for part in sceneController.parts {
             var best = Double.greatestFiniteMagnitude
             for samplePoint in samplePoints {
-                guard let hit = sceneView.hitTest(samplePoint, options: [
+                let results = sceneView.hitTest(samplePoint, options: [
                     .rootNode: part.nodes.model,
-                    .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber,
+                    .searchMode: searchMode.rawValue as NSNumber,
                     .ignoreHiddenNodes: false
-                ]).first else { continue }
+                ])
+                guard let hit = results.first(where: { !crossSectionHides($0.worldCoordinates) }) else { continue }
                 best = min(best, hit.worldCoordinates.distance(from: cameraPosition))
             }
             if best < .greatestFiniteMagnitude {

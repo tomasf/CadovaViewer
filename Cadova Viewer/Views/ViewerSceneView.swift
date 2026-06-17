@@ -142,12 +142,8 @@ class CustomSceneView: SCNView {
         guard let viewportController, allowsCameraControl else { return }
 
         super.mouseDown(with: event)
-        let edgeNodes = viewportController.edgeNodes
 
-        if let result = hitTest(localPoint, options: [
-            .searchMode: SCNHitTestSearchMode.all.rawValue as NSNumber,
-            .rootNode: viewportController.modelInstance.root
-        ]).first(where: { !edgeNodes.contains($0.node) }) {
+        if let result = viewportController.nearestVisibleHit(at: localPoint, in: viewportController.modelInstance.root) {
             defaultCameraController.target = result.worldCoordinates
         } else {
             defaultCameraController.target = xyPlanePoint(forViewPoint: localPoint)

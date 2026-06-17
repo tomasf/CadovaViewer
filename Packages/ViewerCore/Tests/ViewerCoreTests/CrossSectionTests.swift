@@ -36,6 +36,17 @@ struct CrossSectionTests {
         #expect(section.plane().w ≈ -5)
     }
 
+    @Test func `hides reports the cut-away side and keeps points on the plane`() {
+        let section = CrossSection.axisAligned(.x, origin: SIMD3(5, 0, 0)) // keeps x <= 5
+        #expect(section.hides(SIMD3(6, 0, 0)))   // past the plane → hidden
+        #expect(!section.hides(SIMD3(4, 0, 0)))  // kept side → visible
+        #expect(!section.hides(SIMD3(5, 9, -9))) // exactly on the plane → visible (tolerance)
+        var flipped = section
+        flipped.flip()
+        #expect(flipped.hides(SIMD3(4, 0, 0)))
+        #expect(!flipped.hides(SIMD3(6, 0, 0)))
+    }
+
     @Test func `a tilted section has a unit normal and passes through its origin`() {
         let origin = SIMD3<Double>(3, -2, 7)
         let tilt = simd_quatd(angle: .pi / 4, axis: simd_normalize(SIMD3(1, 1, 0)))

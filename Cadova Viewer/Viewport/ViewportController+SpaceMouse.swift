@@ -88,6 +88,12 @@ extension ViewportController: NavLibStateProvider {
             z: origin.z + direction.z * length
         )
 
+        // When cuts are active, pivot only on visible geometry (kept side or a cap), never clipped-away
+        // surfaces. Uses all-intersections + filtering, so it's reserved for when a cut is present.
+        if !activeCrossSections.isEmpty {
+            return nearestVisibleHit(segmentFrom: origin, to: end, in: modelInstance.root)?.worldCoordinates
+        }
+
         // Hit test each visible part's model node with the closest-hit search mode rather
         // than running the default all-intersections search over the whole container. NavLib
         // calls this on the main thread (single-threaded session) every navigation frame, so

@@ -70,6 +70,14 @@ public struct CrossSection: Identifiable, Equatable, Sendable {
         return SIMD4(n.x, n.y, n.z, simd_dot(n, origin))
     }
 
+    /// Whether `point` is on the cut-away (hidden) side, beyond the plane by more than `tolerance`.
+    /// Mirrors the clip shader so hit-testing matches what's visible. The small tolerance keeps a cap
+    /// — which sits exactly on its own plane (`dot == distance`) — from being rejected by that plane,
+    /// while other planes still clip it.
+    public func hides(_ point: SIMD3<Double>, tolerance: Double = 1e-4) -> Bool {
+        simd_dot(point, normal) > simd_dot(normal, origin) + tolerance
+    }
+
     /// The orientation whose +Z maps onto the given world axis (for the X/Y/Z reset shortcuts).
     public static func orientation(for axis: Axis) -> simd_quatd {
         simd_quatd(from: SIMD3(0, 0, 1), to: axis.unit)
