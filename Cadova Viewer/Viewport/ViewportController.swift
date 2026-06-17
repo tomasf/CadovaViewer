@@ -353,7 +353,6 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
         measurementRenderer.updateScreenSizes(renderer: sceneView)
-        crossSectionGizmo.updateScreenScale(renderer: sceneView)
 
         // Track the active point-of-view node (SceneKit can swap it in). The headlight follows the
         // camera independently, in willRenderScene.
@@ -434,6 +433,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         )
 
         coordinateIndicatorValueStream.send(indicatorValues)
+
+        // Per frame: slide the gizmo to the view centre on its plane (using the live presentation
+        // camera, `pov`, so it tracks during an orbit) and keep it a constant on-screen size.
+        crossSectionGizmo.followView(presentationCamera: pov, isDragging: crossSectionDrag != nil)
+        crossSectionGizmo.updateScreenScale(renderer: renderer)
 
         sceneView.applyEdgeDepthOffset(
             edgeNodes: modelInstance.edgeGeometryNodes,

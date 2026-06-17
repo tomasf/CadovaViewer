@@ -9,12 +9,14 @@ struct CrossSectionCapKey: Hashable {
     let part: ModelData.Part.ID
 }
 
-/// An in-progress gizmo drag: the grabbed handle, the section as it was when the drag began, and the
-/// grab reference value (axis parameter for translate, angle for rotate).
+/// An in-progress gizmo drag: the grabbed handle, the section as it was when the drag began, the grab
+/// reference value (axis parameter for translate, angle for rotate), and the pivot — the gizmo's
+/// on-plane anchor at drag start, around which the drag operates (so it tracks where you were looking).
 struct CrossSectionDragState {
     let handle: CrossSectionGizmo.Handle
     let startSection: CrossSection
     let grab: Double
+    let pivot: SIMD3<Double>
 }
 
 extension ViewportController {
@@ -121,7 +123,10 @@ extension ViewportController {
     /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one.
     func updateCrossSectionOverlays() {
         if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
-            crossSectionGizmo.update(for: section)
+            // While dragging, hold the gizmo on the section's current point; otherwise anchor it at the
+            // view centre (the per-frame `followView` keeps it there as the camera moves).
+            let anchor = crossSectionDrag != nil ? section.origin : crossSectionGizmoAnchor(for: section)
+            crossSectionGizmo.update(for: section, anchor: anchor)
         } else {
             crossSectionGizmo.hide()
         }

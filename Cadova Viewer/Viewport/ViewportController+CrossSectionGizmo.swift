@@ -18,14 +18,15 @@ extension ViewportController {
         guard let hit = hits.first, let handle = crossSectionGizmo.handle(for: hit.node) else { return false }
 
         let ray = worldRay(at: point)
+        let pivot = crossSectionGizmoAnchor(for: section) // the gizmo's on-plane anchor, near the view
         let grab: Double
         switch handle {
         case .translate(let axis):
-            grab = closestAxisParameter(axisPoint: section.origin, axisDirection: worldAxis(axis, of: section), ray: ray)
+            grab = closestAxisParameter(axisPoint: pivot, axisDirection: worldAxis(axis, of: section), ray: ray)
         case .rotate(let axis):
-            grab = rotationAngle(origin: section.origin, axis: worldAxis(axis, of: section), ray: ray) ?? 0
+            grab = rotationAngle(origin: pivot, axis: worldAxis(axis, of: section), ray: ray) ?? 0
         }
-        crossSectionDrag = CrossSectionDragState(handle: handle, startSection: section, grab: grab)
+        crossSectionDrag = CrossSectionDragState(handle: handle, startSection: section, grab: grab, pivot: pivot)
         crossSectionDragUndoSnapshot = crossSections // for one undo step covering the whole drag
         crossSectionGizmo.setActiveHandle(handle) // dim the other handles
         sceneView.setNeedsRedraw()
@@ -41,12 +42,13 @@ extension ViewportController {
         switch drag.handle {
         case .translate(let axis):
             let direction = worldAxis(axis, of: drag.startSection)
-            let now = closestAxisParameter(axisPoint: drag.startSection.origin, axisDirection: direction, ray: ray)
-            section.origin = drag.startSection.origin + direction * (now - drag.grab)
+            let now = closestAxisParameter(axisPoint: drag.pivot, axisDirection: direction, ray: ray)
+            section.origin = drag.pivot + direction * (now - drag.grab)
         case .rotate(let axis):
             let world = worldAxis(axis, of: drag.startSection)
-            guard let now = rotationAngle(origin: drag.startSection.origin, axis: world, ray: ray) else { return }
+            guard let now = rotationAngle(origin: drag.pivot, axis: world, ray: ray) else { return }
             section.orientation = simd_quatd(angle: now - drag.grab, axis: world) * drag.startSection.orientation
+            section.origin = drag.pivot // tilt the plane around the pivot (where you were looking)
         }
         crossSections[index] = section // drives the live overlay + coalesced cap rebuild
     }
@@ -64,6 +66,10 @@ extension ViewportController {
         crossSectionDragUndoSnapshot = nil
         crossSectionDrag = nil
         crossSectionGizmo.setActiveHandle(nil) // restore all handles
+        // Ease the gizmo back to the view centre on its (possibly moved) plane instead of snapping.
+        if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
+            crossSectionGizmo.settle(to: crossSectionGizmoAnchor(for: section), duration: 0.2)
+        }
         sceneView.setNeedsRedraw()
     }
 
@@ -71,6 +77,21 @@ extension ViewportController {
     /// along the plane's rotated axes.
     private func worldAxis(_ axis: CrossSection.Axis, of section: CrossSection) -> SIMD3<Double> {
         simd_normalize(section.orientation.act(axis.unit))
+    }
+
+    /// A point on the section's plane near the centre of the view — where the gizmo is anchored so it
+    /// stays reachable when zoomed in. Falls back to the stored origin if the plane is edge-on.
+    func crossSectionGizmoAnchor(for section: CrossSection) -> SIMD3<Double> {
+        let center = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
+        let ray = worldRay(at: center)
+        let normal = section.normal
+        let distance = simd_dot(normal, section.origin)
+        let denom = simd_dot(ray.direction, normal)
+        if abs(denom) > 1e-9 {
+            let t = (distance - simd_dot(ray.origin, normal)) / denom
+            if t > 0 { return ray.origin + ray.direction * t }
+        }
+        return section.origin
     }
 
     // MARK: - Ray math
