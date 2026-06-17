@@ -10,7 +10,7 @@ import simd
 /// is just negating the normal, i.e. rotating the orientation 180° (`flip()`) — there's no separate
 /// flag. A viewport holds an array of these; each is positioned/oriented with the interactive gizmo,
 /// or snapped to an axis with the X/Y/Z reset buttons.
-public struct CrossSection: Identifiable, Equatable, Sendable {
+public struct CrossSection: Identifiable, Equatable, Sendable, Codable {
     public let id: UUID
     /// A point the plane passes through, in world millimetres.
     public var origin: SIMD3<Double>
@@ -86,6 +86,32 @@ public struct CrossSection: Identifiable, Equatable, Sendable {
     /// A new section flat along `axis` (normal = that axis) through `origin`.
     public static func axisAligned(_ axis: Axis, origin: SIMD3<Double>, colorIndex: Int = 0) -> CrossSection {
         CrossSection(origin: origin, orientation: orientation(for: axis), colorIndex: colorIndex)
+    }
+
+    // simd_quatd isn't Codable, so encode the orientation as its vector (x, y, z, w).
+    private enum CodingKeys: String, CodingKey {
+        case id, origin, orientation, enabled, colorIndex
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let vector = try container.decode(SIMD4<Double>.self, forKey: .orientation)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            origin: try container.decode(SIMD3<Double>.self, forKey: .origin),
+            orientation: simd_quatd(vector: vector),
+            enabled: try container.decode(Bool.self, forKey: .enabled),
+            colorIndex: try container.decode(Int.self, forKey: .colorIndex)
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(origin, forKey: .origin)
+        try container.encode(orientation.vector, forKey: .orientation)
+        try container.encode(enabled, forKey: .enabled)
+        try container.encode(colorIndex, forKey: .colorIndex)
     }
 
     public static func == (lhs: CrossSection, rhs: CrossSection) -> Bool {

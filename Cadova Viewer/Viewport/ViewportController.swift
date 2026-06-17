@@ -142,7 +142,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// This viewport's cutting planes. Per-viewport (cuts in one split pane leave others intact),
     /// applied to this viewport's own materials. See `ViewportController+CrossSection`.
     @Published var crossSections: [CrossSection] = [] {
-        didSet { if crossSections != oldValue { applyCrossSection() } }
+        didSet {
+            guard crossSections != oldValue else { return }
+            applyCrossSection()
+            scheduleRestorableStateInvalidation() // coalesced — safe to hit per frame during a drag
+        }
     }
     /// The cross-section being edited: shows its plane + gizmo and is the target of the popover.
     @Published var selectedCrossSectionID: UUID? {
@@ -458,6 +462,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         crossSectionCapNodesByKey.removeAll()
         crossSectionCapMaterialsByKey.removeAll()
         installCrossSectionShader()
+        applyModelClipUniforms() // clip in the first frame so a reload doesn't flash the whole model
         applyCrossSection()
 
         if !hasSetInitialView {

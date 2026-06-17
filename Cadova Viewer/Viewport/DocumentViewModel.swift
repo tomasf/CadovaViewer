@@ -234,7 +234,8 @@ final class DocumentViewModel: ObservableObject {
             focusedViewportID: focusedViewportID,
             viewOptions: viewports.mapValues(\.viewOptionsForStateRestoration),
             documentOptions: sceneController.documentOptions,
-            sidebarVisible: sidebarVisibility != .detailOnly
+            sidebarVisible: sidebarVisibility != .detailOnly,
+            crossSections: viewports.mapValues(\.crossSections)
         )
     }
 
@@ -254,6 +255,10 @@ final class DocumentViewModel: ObservableObject {
             if let options = state.viewOptions[id] {
                 viewport.setViewOptions(options)
             }
+            let restoredCrossSections = state.crossSections?[id] ?? []
+            viewport.crossSections = restoredCrossSections
+            // Keep new cuts' colours from colliding with restored ones.
+            viewport.nextCrossSectionColorIndex = (restoredCrossSections.map(\.colorIndex).max() ?? -1) + 1
             if !sceneController.parts.isEmpty {
                 viewport.applyLoadedModel()
             }
@@ -279,4 +284,6 @@ struct DocumentLayoutState: Codable {
     var documentOptions: DocumentViewOptions
     /// Optional so documents saved before the sidebar existed still decode (treated as closed).
     var sidebarVisible: Bool?
+    /// Per-viewport cross-section planes. Optional so documents saved before cross-sections decode.
+    var crossSections: [UUID: [CrossSection]]?
 }

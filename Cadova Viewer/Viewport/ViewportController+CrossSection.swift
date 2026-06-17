@@ -107,6 +107,17 @@ extension ViewportController {
         updateCrossSectionCap()
     }
 
+    /// Pushes the current clip planes to the model materials immediately (no async cap wait). Used on
+    /// model (re)load so the geometry is clipped in the first rendered frame — otherwise the whole
+    /// model flashes uncut until the background cap slice finishes and applies the uniforms.
+    func applyModelClipUniforms() {
+        let packed = packedClipPlanes(activeCrossSections)
+        for material in modelInstance.clipMaterials {
+            setClipUniforms(on: material, packed: packed, skip: -1)
+            material.isDoubleSided = packed.count > 0
+        }
+    }
+
     /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one.
     func updateCrossSectionOverlays() {
         if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {

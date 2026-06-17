@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 import simd
 @testable import ViewerCore
 
@@ -45,6 +46,15 @@ struct CrossSectionTests {
         flipped.flip()
         #expect(flipped.hides(SIMD3(4, 0, 0)))
         #expect(!flipped.hides(SIMD3(6, 0, 0)))
+    }
+
+    @Test func `a section survives a Codable round-trip`() throws {
+        let tilt = simd_quatd(angle: .pi / 3, axis: simd_normalize(SIMD3(0.2, 1, -0.5)))
+        let original = CrossSection(origin: SIMD3(3, -2, 7), orientation: tilt, enabled: false, colorIndex: 4)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CrossSection.self, from: data)
+        #expect(decoded == original)
+        #expect(close(decoded.normal, original.normal))
     }
 
     @Test func `a tilted section has a unit normal and passes through its origin`() {
