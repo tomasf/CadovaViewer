@@ -60,7 +60,7 @@ extension ViewportController {
         let viewPoint = point
         ensureSnapGrid()
 
-        let threshold = 14.0 // view points
+        let threshold = 40.0 // view points (must be <= snapGridCellSize; see nearestSnapVertex's 3x3 search)
         let cellX = Int((Double(viewPoint.x) / snapGridCellSize).rounded(.down))
         let cellY = Int((Double(viewPoint.y) / snapGridCellSize).rounded(.down))
 

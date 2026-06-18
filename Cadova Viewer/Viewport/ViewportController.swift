@@ -198,7 +198,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// Screen-space bucket of `snapVertices` so hover lookups don't re-project every corner.
     /// Rebuilt only when the camera/viewport changes.
     var snapGridCells: [SIMD2<Int>: [(vertex: SCNVector3, screen: CGPoint)]] = [:]
-    let snapGridCellSize = 16.0
+    /// Must stay >= the snap threshold in `nearestSnapVertex`: the 3x3 cell search only finds
+    /// vertices within one cell of the cursor.
+    let snapGridCellSize = 44.0
     var snapGridWorldTransform = SCNMatrix4Identity
     var snapGridProjection = SCNMatrix4Identity
     var snapGridViewSize = CGSize.zero
