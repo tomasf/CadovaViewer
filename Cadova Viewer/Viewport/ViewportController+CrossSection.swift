@@ -1,5 +1,6 @@
 import SceneKit
 import ViewerCore
+import AppKit
 import simd
 
 /// Identifies one cap mesh: a (cross-section, part) pair. Caps are kept per pair so a drag only swaps
@@ -17,6 +18,8 @@ struct CrossSectionDragState {
     let startSection: CrossSection
     let grab: Double
     let pivot: SIMD3<Double>
+    /// The gizmo space the drag began in (plane- or world-relative), fixed for the whole drag.
+    let space: CrossSectionGizmo.Space
 }
 
 extension ViewportController {
@@ -145,10 +148,12 @@ extension ViewportController {
     /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one.
     func updateCrossSectionOverlays() {
         if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
-            // While dragging, keep the gizmo fixed at the grab pivot; otherwise anchor it at the view
-            // centre (the per-frame `followView` keeps it there as the camera moves).
+            // While dragging, keep the gizmo fixed at the grab pivot and in the drag's space; otherwise
+            // anchor it at the view centre (the per-frame `followView` keeps it there as the camera
+            // moves) and let Shift pick world vs. plane space live.
             let anchor = crossSectionDrag?.pivot ?? crossSectionGizmoAnchor(for: section)
-            crossSectionGizmo.update(for: section, anchor: anchor)
+            let space = crossSectionDrag?.space ?? crossSectionGizmoSpaceForModifiers
+            crossSectionGizmo.update(for: section, anchor: anchor, space: space)
         } else {
             crossSectionGizmo.hide()
         }
@@ -201,13 +206,25 @@ extension ViewportController {
         plane.firstMaterial?.setValue(NSNumber(value: spacing), forKey: "gridSpacing")
 
         let normal = section.normal
+        let normalFloat = SIMD3<Float>(normal)
+
         let modelCenter = (bounds.min + bounds.max) / 2
         let planeDistance = simd_dot(normal, section.origin)
-        let centeredOnModel = modelCenter + normal * (planeDistance - simd_dot(modelCenter, normal))
+        var anchorPoint = modelCenter + normal * (planeDistance - simd_dot(modelCenter, normal))
 
-        let normalFloat = SIMD3<Float>(normal)
+        // While translating, slide the locator by the drag's *in-plane* displacement so it visibly
+        // follows the gizmo arrow — including world-axis drags whose in-plane component leaves the cut
+        // unchanged. The perpendicular part is already in `planeDistance`; the in-plane part is zero at
+        // drag start (no jump) and snaps back when the drag ends.
+        if let drag = crossSectionDrag, case .translate = drag.handle {
+            // Measure from `drag.pivot` (the on-plane grab anchor), since the drag sets
+            // `origin = pivot + axis·Δ` — so this is zero at the start. `pivot` lies on the plane, so
+            // its perpendicular offset already matches `planeDistance`; only the in-plane part remains.
+            let displacement = section.origin - drag.pivot
+            anchorPoint += displacement - normal * simd_dot(normal, displacement)
+        }
         // Kept side is -normal; nudge slightly that way so the cap (exactly on the plane) wins.
-        let center = SIMD3<Float>(centeredOnModel) - normalFloat * Float(diagonal) * 0.001
+        let center = SIMD3<Float>(anchorPoint) - normalFloat * Float(diagonal) * 0.001
         node.simdPosition = center
         // Orient straight from the section's quaternion (a centered square doesn't care about ±normal),
         // which avoids the NaN `simd_quatf(from:to:)` produces for an exactly-antiparallel normal.

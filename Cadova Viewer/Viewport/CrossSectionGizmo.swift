@@ -2,10 +2,10 @@ import SceneKit
 import ViewerCore
 import simd
 
-/// The interactive transform handle for the selected cross-section: a centre cube, three world-axis
-/// translate arrows (R/G/B = X/Y/Z) and three rotate rings. World-axis aligned — translating moves the
-/// plane origin along world X/Y/Z, rotating spins the plane about world X/Y/Z. Kept a constant on-screen
-/// size and drawn on top of the model.
+/// The interactive transform handle for the selected cross-section. By default it's plane-relative —
+/// two rings aim the cut's normal and one arrow slides the plane along it. Holding Shift switches to a
+/// world-aligned set with all three translate arrows and rotate rings (R/G/B = X/Y/Z). Kept a constant
+/// on-screen size and drawn on top of the model.
 final class CrossSectionGizmo {
     static let minimumViewAlignment = 0.08
 
@@ -14,7 +14,14 @@ final class CrossSectionGizmo {
         case rotate(CrossSection.Axis)
     }
 
+    /// Whether the gizmo's axes follow the cut plane (the default — rings aim the normal, the arrow
+    /// slides along it) or world space (all three arrows and rings, world-aligned; engaged with Shift).
+    enum Space { case plane, world }
+    private(set) var space: Space = .plane
+
     let root = SCNNode()
+    private let planeContainer = SCNNode()
+    private let worldContainer = SCNNode()
     /// Maps a hit node name back to the handle it represents.
     private var handleForName: [String: Handle] = [:]
     /// Each handle's top node, for dimming the others during a drag.
@@ -30,34 +37,53 @@ final class CrossSectionGizmo {
     init() {
         root.name = "Cross-section gizmo"
         root.isHidden = true
-        // A plane has three meaningful DOF: rotate about X and Y aim the normal, the local-Z arrow
-        // moves it along that normal. Rotating about the normal (Z) and translating within the plane
-        // (X/Y) do nothing on an infinite, normal-symmetric cut, so those handles are omitted.
-        root.addChildNode(makeRing(axis: .x))
-        root.addChildNode(makeRing(axis: .y))
-        // The translate arrow points along the kept (active) half — local −Z. Flipping the section
-        // rotates the whole gizmo, so the arrow then points the other way automatically.
-        let arrow = makeArrow(axis: .z)
-        arrow.simdOrientation = simd_quatf(angle: -.pi / 2, axis: SIMD3(1, 0, 0)) // +Y → −Z
-        root.addChildNode(arrow)
-        let cube = SCNNode(geometry: SCNBox(width: 0.13, height: 0.13, length: 0.13, chamferRadius: 0.02))
-        cube.geometry?.firstMaterial = material(color: NSColor(white: 0.85, alpha: 1))
-        let centerName = "cs.gizmo.center"
-        cube.name = centerName
-        handleForName[centerName] = .translate(.z)
-        handleTopNodes.append((.translate(.z), cube))
-        root.addChildNode(cube)
+        buildPlaneHandles(into: planeContainer)
+        buildWorldHandles(into: worldContainer)
+        root.addChildNode(planeContainer)
+        root.addChildNode(worldContainer)
+        worldContainer.isHidden = true
         // Draw on top of everything (incl. the opaque caps): the materials ignore the depth buffer, so
         // a high rendering order keeps the gizmo painted last.
         root.enumerateChildNodes { node, _ in node.renderingOrder = 100 }
     }
 
+    /// The plane-relative handle set: rotate about local X and Y aim the normal, and the local−Z arrow
+    /// moves the plane along that normal. Rotating about the normal (Z) and translating within the plane
+    /// (X/Y) do nothing on an infinite, normal-symmetric cut, so those handles are omitted.
+    private func buildPlaneHandles(into container: SCNNode) {
+        container.addChildNode(makeRing(axis: .x, space: .plane))
+        container.addChildNode(makeRing(axis: .y, space: .plane))
+        // The translate arrow points along the kept (active) half — local −Z. Flipping the section
+        // rotates the whole gizmo, so the arrow then points the other way automatically.
+        let arrow = makeArrow(axis: .z, space: .plane)
+        arrow.simdOrientation = simd_quatf(angle: -.pi / 2, axis: SIMD3(1, 0, 0)) // +Y → −Z
+        container.addChildNode(arrow)
+        container.addChildNode(makeCenterCube(handle: .translate(.z), space: .plane))
+    }
+
+    /// The world-relative handle set (engaged with Shift): all three translate arrows and rotate rings,
+    /// world-aligned, so the plane can be moved and spun about world X/Y/Z directly.
+    private func buildWorldHandles(into container: SCNNode) {
+        for axis in CrossSection.Axis.allCases {
+            container.addChildNode(makeRing(axis: axis, space: .world))
+            container.addChildNode(makeArrow(axis: axis, space: .world))
+        }
+        container.addChildNode(makeCenterCube(handle: nil, space: .world))
+    }
+
     /// Positions the gizmo at `anchor` (a point on the plane — see `followView`, which slides it to the
     /// view centre), orients it to the section, and shows it.
-    func update(for section: CrossSection, anchor: SIMD3<Double>) {
+    func update(for section: CrossSection, anchor: SIMD3<Double>, space: Space) {
+        self.space = space
         root.simdPosition = SIMD3<Float>(anchor)
-        let q = section.orientation
-        root.simdOrientation = simd_quatf(vector: SIMD4<Float>(Float(q.vector.x), Float(q.vector.y), Float(q.vector.z), Float(q.vector.w)))
+        if space == .world {
+            root.simdOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 0, 1)) // world-aligned
+        } else {
+            let q = section.orientation
+            root.simdOrientation = simd_quatf(vector: SIMD4<Float>(Float(q.vector.x), Float(q.vector.y), Float(q.vector.z), Float(q.vector.w)))
+        }
+        planeContainer.isHidden = space != .plane
+        worldContainer.isHidden = space != .world
         followNormal = section.normal
         followDistance = simd_dot(section.normal, section.origin)
         following = true
@@ -83,12 +109,6 @@ final class CrossSectionGizmo {
         }
     }
 
-    /// Re-centres the gizmo after a drag without animation.
-    func recenter(to anchor: SIMD3<Double>) {
-        guard following, !root.isHidden else { return }
-        root.simdPosition = SIMD3<Float>(anchor)
-    }
-
     /// The point where the camera's optical axis (the ray through the view centre) meets the cached
     /// plane. Near edge-on, keep the current anchor on the plane instead of chasing a far-away,
     /// numerically unstable intersection.
@@ -108,7 +128,7 @@ final class CrossSectionGizmo {
     /// restore all handles to full opacity.
     func setActiveHandle(_ active: Handle?) {
         for entry in handleTopNodes {
-            entry.node.opacity = (active == nil || entry.handle == active) ? 1 : 0.18
+            entry.node.opacity = (active == nil || entry.handle == active) ? 1 : 0.10
         }
     }
 
@@ -131,10 +151,34 @@ final class CrossSectionGizmo {
 
     // MARK: - Geometry
 
-    private func makeArrow(axis: CrossSection.Axis) -> SCNNode {
+    /// A unique node name encoding the space and handle, so the two handle sets don't collide and a hit
+    /// resolves back to the right handle.
+    private func handleName(space: Space, handle: Handle) -> String {
+        let s = space == .world ? "world" : "plane"
+        switch handle {
+        case .translate(let axis): return "cs.gizmo.\(s).translate.\(axis.displayName)"
+        case .rotate(let axis): return "cs.gizmo.\(s).rotate.\(axis.displayName)"
+        }
+    }
+
+    /// The centre cube. In plane space it's the translate-along-normal handle; in world space it's a
+    /// purely visual anchor (the three arrows cover translation), so `handle` is nil.
+    private func makeCenterCube(handle: Handle?, space: Space) -> SCNNode {
+        let cube = SCNNode(geometry: SCNBox(width: 0.13, height: 0.13, length: 0.13, chamferRadius: 0.02))
+        cube.geometry?.firstMaterial = material(color: NSColor(white: 0.85, alpha: 1))
+        let name = "cs.gizmo.\(space == .world ? "world" : "plane").center"
+        cube.name = name
+        if let handle {
+            handleForName[name] = handle
+            handleTopNodes.append((handle, cube))
+        }
+        return cube
+    }
+
+    private func makeArrow(axis: CrossSection.Axis, space: Space) -> SCNNode {
         let node = SCNNode()
         node.simdOrientation = Self.localYToAxis(axis)
-        let name = "cs.gizmo.translate.\(axis.displayName)"
+        let name = handleName(space: space, handle: .translate(axis))
         handleForName[name] = .translate(axis)
 
         let shaft = SCNNode(geometry: SCNCylinder(radius: 0.011, height: 0.72))
@@ -159,11 +203,11 @@ final class CrossSectionGizmo {
         return node
     }
 
-    private func makeRing(axis: CrossSection.Axis) -> SCNNode {
+    private func makeRing(axis: CrossSection.Axis, space: Space) -> SCNNode {
         let node = SCNNode(geometry: SCNTorus(ringRadius: 0.58, pipeRadius: 0.011))
         node.simdOrientation = Self.localYToAxis(axis)
         node.geometry?.firstMaterial = material(color: Self.color(axis))
-        let name = "cs.gizmo.rotate.\(axis.displayName)"
+        let name = handleName(space: space, handle: .rotate(axis))
         node.name = name
         // A fat invisible torus widens the thin ring's hit target.
         let proxy = SCNNode(geometry: SCNTorus(ringRadius: 0.58, pipeRadius: 0.06))

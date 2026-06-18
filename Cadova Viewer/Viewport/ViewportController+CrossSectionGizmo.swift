@@ -1,5 +1,6 @@
 import SceneKit
 import ViewerCore
+import AppKit
 import simd
 
 /// Interactive manipulation of the selected cross-section via the gizmo. The scene view calls these
@@ -19,14 +20,15 @@ extension ViewportController {
 
         let ray = worldRay(at: point)
         let pivot = crossSectionGizmoAnchor(for: section) // the gizmo's on-plane anchor, near the view
+        let space = crossSectionGizmo.space // whichever handle set is shown is what was hit
         let grab: Double
         switch handle {
         case .translate(let axis):
-            grab = closestAxisParameter(axisPoint: pivot, axisDirection: worldAxis(axis, of: section), ray: ray)
+            grab = closestAxisParameter(axisPoint: pivot, axisDirection: worldAxis(axis, of: section, space: space), ray: ray)
         case .rotate(let axis):
-            grab = rotationAngle(origin: pivot, axis: worldAxis(axis, of: section), ray: ray) ?? 0
+            grab = rotationAngle(origin: pivot, axis: worldAxis(axis, of: section, space: space), ray: ray) ?? 0
         }
-        crossSectionDrag = CrossSectionDragState(handle: handle, startSection: section, grab: grab, pivot: pivot)
+        crossSectionDrag = CrossSectionDragState(handle: handle, startSection: section, grab: grab, pivot: pivot, space: space)
         crossSectionDragUndoSnapshot = crossSections // for one undo step covering the whole drag
         crossSectionGizmo.setActiveHandle(handle) // dim the other handles
         sceneView.setNeedsRedraw()
@@ -41,13 +43,19 @@ extension ViewportController {
         var section = drag.startSection
         switch drag.handle {
         case .translate(let axis):
-            let direction = worldAxis(axis, of: drag.startSection)
+            let direction = worldAxis(axis, of: drag.startSection, space: drag.space)
             let now = closestAxisParameter(axisPoint: drag.pivot, axisDirection: direction, ray: ray)
             section.origin = drag.pivot + direction * (now - drag.grab)
         case .rotate(let axis):
-            let world = worldAxis(axis, of: drag.startSection)
+            let world = worldAxis(axis, of: drag.startSection, space: drag.space)
             guard let now = rotationAngle(origin: drag.pivot, axis: world, ray: ray) else { return }
-            section.orientation = simd_quatd(angle: now - drag.grab, axis: world) * drag.startSection.orientation
+            var delta = now - drag.grab
+            // Snap to fixed steps while Option is held; free rotation otherwise.
+            if NSEvent.modifierFlags.contains(.option) {
+                let step = Double.pi / 8 // 22.5°
+                delta = (delta / step).rounded() * step
+            }
+            section.orientation = simd_quatd(angle: delta, axis: world) * drag.startSection.orientation
             section.origin = drag.pivot // tilt the plane around the pivot (where you were looking)
         }
         crossSections[index] = section // drives the live overlay + coalesced cap rebuild
@@ -66,17 +74,21 @@ extension ViewportController {
         crossSectionDragUndoSnapshot = nil
         crossSectionDrag = nil
         crossSectionGizmo.setActiveHandle(nil) // restore all handles
-        // Re-centre the gizmo immediately; animating this can create a visible bump on release.
-        if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
-            crossSectionGizmo.recenter(to: crossSectionGizmoAnchor(for: section))
-        }
-        sceneView.setNeedsRedraw()
+        // Drag over: snap the gizmo and locator back to their resting, model-centred positions (a
+        // translate drag may have slid them along the dragged axis). Updated directly, no animation.
+        updateCrossSectionOverlays()
     }
 
-    /// A handle's local axis expressed in world space — the gizmo is plane-relative, so handles point
-    /// along the plane's rotated axes.
-    private func worldAxis(_ axis: CrossSection.Axis, of section: CrossSection) -> SIMD3<Double> {
-        simd_normalize(section.orientation.act(axis.unit))
+    /// A handle's axis in world space. In world space it's the bare world axis; in plane space the
+    /// gizmo is plane-relative, so handles point along the plane's rotated axes.
+    private func worldAxis(_ axis: CrossSection.Axis, of section: CrossSection, space: CrossSectionGizmo.Space) -> SIMD3<Double> {
+        space == .world ? axis.unit : simd_normalize(section.orientation.act(axis.unit))
+    }
+
+    /// World-space gizmo while Shift is held, otherwise plane-relative. Read live so the gizmo swaps as
+    /// Shift is pressed/released during editing.
+    var crossSectionGizmoSpaceForModifiers: CrossSectionGizmo.Space {
+        NSEvent.modifierFlags.contains(.shift) ? .world : .plane
     }
 
     /// A point on the section's plane near the centre of the view — where the gizmo is anchored so it

@@ -188,6 +188,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     var observers: Set<AnyCancellable> = []
 
+    /// Local monitor for modifier-key (Shift) changes, so the cross-section gizmo can switch plane/world
+    /// space regardless of which view has focus. Removed in `tearDown`.
+    private var modifierFlagsMonitor: Any?
+
     // Backing storage for the measurement snap grid; the logic lives in
     // ViewportController+MeasurementInteraction (extensions can't hold stored properties).
 
@@ -267,6 +271,13 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         }
         sceneView.endGizmoDrag = { [weak self] in
             self?.endCrossSectionGizmoDrag()
+        }
+        // Shift swaps the cross-section gizmo between plane- and world-relative. Watch modifier changes
+        // app-wide (a local monitor, not the scene view's `flagsChanged`) so it works even when the
+        // canvas isn't the first responder.
+        modifierFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.updateCrossSectionOverlays()
+            return event
         }
         measurementRenderer.onVisualChange = { [weak self] in
             // The redraw drives updateAtTime → updateScreenSizes, which does the sizing.
@@ -552,6 +563,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     func tearDown() {
         setNavLibSuspended(true)
         observers.removeAll()
+        if let modifierFlagsMonitor { NSEvent.removeMonitor(modifierFlagsMonitor) }
+        modifierFlagsMonitor = nil
         // Undo actions strong-reference this controller as their target; drop a closed viewport's so
         // it isn't kept alive (and stale cross-section undos for it can't fire).
         document?.interactionUndoManager.removeAllActions(withTarget: self)
