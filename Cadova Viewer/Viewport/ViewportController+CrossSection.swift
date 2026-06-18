@@ -69,8 +69,30 @@ extension ViewportController {
     _surface.diffuse = capColor;
     float hatchCoordinate = dot(csWorld, hatchDirection) / hatchSpacing;
     if (fract(hatchCoordinate) < 0.5) {
-        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, 0.45);
+        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, 0.30);
     }
+    """
+
+    /// Surface modifier for the translucent locator plane: draws a subtle world-anchored grid so the
+    /// plane's orientation reads clearly (a flat gray fill gives no parallax cue, especially zoomed
+    /// in). `gridAxisU`/`gridAxisV` are the plane's in-plane basis in world space; lines fall every
+    /// `gridSpacing` mm and are kept ~1px wide via `fwidth` so they stay crisp at any zoom.
+    static let planeGridShaderModifier = """
+    #pragma arguments
+    float3 gridAxisU;
+    float3 gridAxisV;
+    float gridSpacing;
+    float4 gridLineColor;
+    #pragma body
+    float3 pgWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
+    float cu = dot(pgWorld, gridAxisU) / gridSpacing;
+    float cv = dot(pgWorld, gridAxisV) / gridSpacing;
+    float du = fwidth(cu);
+    float dv = fwidth(cv);
+    float lu = 1.0 - smoothstep(0.0, du, abs(fract(cu - 0.5) - 0.5));
+    float lv = 1.0 - smoothstep(0.0, dv, abs(fract(cv - 0.5) - 0.5));
+    float line = max(lu, lv);
+    _surface.diffuse = mix(_surface.diffuse, gridLineColor, line * gridLineColor.a);
     """
 
     /// Attaches the clip modifier to this viewport's model materials. Called once per loaded model.
@@ -137,6 +159,9 @@ extension ViewportController {
         } else {
             crossSectionPlaneNode.isHidden = true
         }
+        // Hide the floor grid whenever the plane locator is on screen — the two grids overlapping
+        // looks messy. Independent of the user's Show Grid setting, which is restored on hide.
+        grid.suppressedForCrossSection = !crossSectionPlaneNode.isHidden
         sceneView.setNeedsRedraw()
     }
 
@@ -159,11 +184,21 @@ extension ViewportController {
             material.isDoubleSided = true
             material.writesToDepthBuffer = false
             material.blendMode = .alpha
+            material.shaderModifiers = [.surface: Self.planeGridShaderModifier]
+            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.3)), forKey: "gridLineColor")
             plane.firstMaterial = material
             node.geometry = plane
         }
         plane.width = CGFloat(diagonal)
         plane.height = CGFloat(diagonal)
+
+        // Fixed, round-number grid spacing (~1/20 of the model, snapped to a power of ten).
+        let spacing = max(pow(10, (log10(Double(diagonal) / 20)).rounded()), 1)
+        let u = section.orientation.act(SIMD3(1, 0, 0))
+        let v = section.orientation.act(SIMD3(0, 1, 0))
+        plane.firstMaterial?.setValue(NSValue(scnVector3: SCNVector3(u.x, u.y, u.z)), forKey: "gridAxisU")
+        plane.firstMaterial?.setValue(NSValue(scnVector3: SCNVector3(v.x, v.y, v.z)), forKey: "gridAxisV")
+        plane.firstMaterial?.setValue(NSNumber(value: spacing), forKey: "gridSpacing")
 
         let normal = section.normal
         let modelCenter = (bounds.min + bounds.max) / 2
