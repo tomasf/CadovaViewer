@@ -205,10 +205,12 @@ extension ViewportController {
         let canSplitTall = sceneViewSize.height >= ViewportLayoutMetrics.minPaneHeight * 2 + ViewportLayoutMetrics.dividerThickness
 
         builder.addItem(label: "Viewports", submenu: { submenu in
-            submenu.addItem(label: "Split Horizontally", enabled: canSplitWide) {
+            submenu.addItem(label: "Split Horizontally", enabled: canSplitWide,
+                            keyEquivalent: "h", modifiers: [.command, .control]) {
                 viewModel.split(self.viewportID, axis: .horizontal)
             }
-            submenu.addItem(label: "Split Vertically", enabled: canSplitTall) {
+            submenu.addItem(label: "Split Vertically", enabled: canSplitTall,
+                            keyEquivalent: "v", modifiers: [.command, .control]) {
                 viewModel.split(self.viewportID, axis: .vertical)
             }
             // Always present, disabled when there's a single viewport (per the HIG).
