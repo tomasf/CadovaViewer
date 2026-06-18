@@ -30,17 +30,14 @@ struct ViewportContentView: View {
                 viewportController.sceneViewSize = $0
                 paneSize = $0
             }
-            .overlay(alignment: .bottomTrailing) {
-                if viewportController.viewOptions.showCoordinateSystemIndicator {
-                    CoordinateSystemIndicator(stream: viewportController.coordinateIndicatorValues)
-                        .padding()
-                }
-            }
             .overlay(alignment: .topTrailing) {
                 ViewportControlsOverlay(viewModel: viewModel, viewportID: viewportID, size: paneSize)
             }
             .overlay(alignment: .topLeading) {
                 CrossSectionButtonsOverlay(viewport: viewportController)
+            }
+            .overlay(alignment: .bottom) {
+                ViewportBottomOverlay(viewport: viewportController)
             }
             .overlay {
                 if viewModel.hasMultipleViewports {
