@@ -119,8 +119,10 @@ struct ViewportBottomOverlay: View {
                     HStack(spacing: 6) {
                         ForEach(CrossSection.Axis.allCases, id: \.self) { axis in
                             Button(axis.displayName) { viewport.alignSelectedCrossSection(to: axis) }
+                                .disabled(section.isAligned(to: axis))
                         }
                         Button("Nearest") { viewport.snapSelectedCrossSectionToNearestAxis() }
+                            .disabled(section.isAxisAligned)
                     }
                 }
             }

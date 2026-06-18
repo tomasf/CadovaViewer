@@ -83,6 +83,18 @@ public struct CrossSection: Identifiable, Equatable, Sendable, Codable {
         simd_quatd(from: SIMD3(0, 0, 1), to: axis.unit)
     }
 
+    /// Whether the cut's normal already points along this axis's positive direction (so aligning to it
+    /// would do nothing).
+    public func isAligned(to axis: Axis) -> Bool {
+        simd_dot(normal, axis.unit) > 0.9999
+    }
+
+    /// Whether the cut's normal already lies on a signed world axis (so snapping to the nearest axis
+    /// would do nothing).
+    public var isAxisAligned: Bool {
+        Axis.allCases.contains { abs(simd_dot(normal, $0.unit)) > 0.9999 }
+    }
+
     /// Snaps the plane's normal to the nearest signed world axis (±X/±Y/±Z), keeping `origin` and the
     /// half that's currently kept. Useful after free rotation with the gizmo to get a clean
     /// axis-aligned cut.
