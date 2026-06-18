@@ -106,10 +106,10 @@ final class MeasurementRenderer {
     private func reconcile() {
         var desired: [(id: UUID, color: NSColor, start: SCNVector3, end: SCNVector3?)] = []
         for measurement in controller.measurements {
-            desired.append((measurement.id, MeasurementPalette.nsColor(forIndex: measurement.colorIndex), measurement.start, measurement.end))
+            desired.append((measurement.id, ColorPalette.nsColor(forIndex: measurement.colorIndex), measurement.start, measurement.end))
         }
         if let preview = controller.hoverPreview {
-            desired.append((hoverPreviewKey, MeasurementPalette.nsColor(forIndex: preview.colorIndex), preview.start, preview.end))
+            desired.append((hoverPreviewKey, ColorPalette.nsColor(forIndex: preview.colorIndex), preview.start, preview.end))
         }
         let desiredIDs = Set(desired.map(\.id))
 

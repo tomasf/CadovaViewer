@@ -16,6 +16,9 @@ public final class ViewportGrid {
 
     public var showGrid = true { didSet { updateVisibility() }}
     public var showOrigin = true { didSet { updateVisibility() }}
+    /// Temporarily hides the grid lines while a cross-section plane is on screen (the two grids
+    /// overlapping looks messy). Independent of `showGrid` so the user's setting is preserved.
+    public var suppressedForCrossSection = false { didSet { updateVisibility() }}
     private var cameraHidesGrid = false
 
     private let maxGridOpacity = 0.15
@@ -76,7 +79,7 @@ public final class ViewportGrid {
     }
 
     private func updateVisibility() {
-        gridContainer.isHidden = cameraHidesGrid || !showGrid
+        gridContainer.isHidden = cameraHidesGrid || !showGrid || suppressedForCrossSection
         originCross.isHidden = !showOrigin
     }
 

@@ -73,7 +73,7 @@ extension ViewportController {
 
         let point = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
         let target: SCNVector3
-        if let match = sceneView.hitTest(point, options: [.rootNode: modelInstance.root, .searchMode: NSNumber(value: SCNHitTestSearchMode.any.rawValue)]).first {
+        if let match = nearestVisibleHit(at: point, in: modelInstance.root) {
             target = match.worldCoordinates
         } else {
             target = sceneView.xyPlanePoint(forViewPoint: point)

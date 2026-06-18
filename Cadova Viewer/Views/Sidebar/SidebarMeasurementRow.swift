@@ -6,7 +6,7 @@ struct SidebarMeasurementRow: View {
     let measurement: Measurement
     let onDelete: () -> Void
 
-    private var color: Color { MeasurementPalette.color(forIndex: measurement.colorIndex) }
+    private var color: Color { ColorPalette.color(forIndex: measurement.colorIndex) }
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {

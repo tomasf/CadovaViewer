@@ -88,7 +88,7 @@ struct DocumentSidebar: View {
                                     .fill(.regularMaterial)
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 9)
-                                            .strokeBorder(MeasurementPalette.color(forIndex: measurement.colorIndex), lineWidth: 2)
+                                            .strokeBorder(ColorPalette.color(forIndex: measurement.colorIndex), lineWidth: 2)
                                     }
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 4)

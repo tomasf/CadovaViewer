@@ -61,7 +61,7 @@ final class DocumentViewModel: ObservableObject {
         let id = UUID()
         layout = .leaf(id)
         focusedViewportID = id
-        measurements.undoManager = document.measurementUndoManager
+        measurements.undoManager = document.interactionUndoManager
         viewports[id] = makeViewport(id: id, document: document)
         focusDidChange()
 
@@ -135,6 +135,11 @@ final class DocumentViewModel: ObservableObject {
         // Mirror the source viewport's options (camera, grid, hidden parts) so the split starts out
         // identical to it. This is cheap; the model clone is built afterwards.
         viewport.setViewOptions(source.viewOptionsForStateRestoration)
+        // Cross-sections live outside ViewOptions, so copy them too — the split is a duplicate of the
+        // view. They're applied when the new viewport's model clone loads (applyLoadedModel). Carry the
+        // colour counter so sections added later in the new pane keep distinct colours.
+        viewport.crossSections = source.crossSections
+        viewport.nextCrossSectionColorIndex = source.nextCrossSectionColorIndex
 
         let splitID = UUID()
         viewports[newID] = viewport
@@ -234,7 +239,8 @@ final class DocumentViewModel: ObservableObject {
             focusedViewportID: focusedViewportID,
             viewOptions: viewports.mapValues(\.viewOptionsForStateRestoration),
             documentOptions: sceneController.documentOptions,
-            sidebarVisible: sidebarVisibility != .detailOnly
+            sidebarVisible: sidebarVisibility != .detailOnly,
+            crossSections: viewports.mapValues(\.crossSections)
         )
     }
 
@@ -254,6 +260,10 @@ final class DocumentViewModel: ObservableObject {
             if let options = state.viewOptions[id] {
                 viewport.setViewOptions(options)
             }
+            let restoredCrossSections = state.crossSections?[id] ?? []
+            viewport.crossSections = restoredCrossSections
+            // Keep new cuts' colours from colliding with restored ones.
+            viewport.nextCrossSectionColorIndex = (restoredCrossSections.map(\.colorIndex).max() ?? -1) + 1
             if !sceneController.parts.isEmpty {
                 viewport.applyLoadedModel()
             }
@@ -279,4 +289,6 @@ struct DocumentLayoutState: Codable {
     var documentOptions: DocumentViewOptions
     /// Optional so documents saved before the sidebar existed still decode (treated as closed).
     var sidebarVisible: Bool?
+    /// Per-viewport cross-section planes. Optional so documents saved before cross-sections decode.
+    var crossSections: [UUID: [CrossSection]]?
 }

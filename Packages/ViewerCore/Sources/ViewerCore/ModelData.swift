@@ -43,7 +43,16 @@ public struct ModelData: Sendable {
         /// lazily-built smooth-shaded variant. Empty when smooth shading isn't applicable.
         public let modelGeometryVariants: [ModelGeometryVariant]
 
-        public init(nodes: Nodes, itemIndex: Int, name: String, id: ID?, semantic: PartSemantic, stats: Statistics, modelGeometryVariants: [ModelGeometryVariant] = []) {
+        /// A representative colour for the part (the colour of its largest material group), as
+        /// linear RGBA. Used to fill the cross-section cap so a cut surface looks like the part's
+        /// material. `nil` when the part has no drawable geometry.
+        public let dominantColor: SIMD4<Float>?
+
+        /// The part's solid geometry (world-space, millimetres) for computing the cross-section cap.
+        /// `nil` when the part has no drawable geometry. See `PartSolid`.
+        public let capSolid: PartSolid?
+
+        public init(nodes: Nodes, itemIndex: Int, name: String, id: ID?, semantic: PartSemantic, stats: Statistics, modelGeometryVariants: [ModelGeometryVariant] = [], dominantColor: SIMD4<Float>? = nil, capSolid: PartSolid? = nil) {
             self.nodes = nodes
             self.itemIndex = itemIndex
             self.name = name
@@ -51,6 +60,8 @@ public struct ModelData: Sendable {
             self.semantic = semantic
             self.statistics = stats
             self.modelGeometryVariants = modelGeometryVariants
+            self.dominantColor = dominantColor
+            self.capSolid = capSolid
         }
 
         public struct Nodes: Sendable {

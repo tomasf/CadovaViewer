@@ -48,6 +48,34 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// so it can be hidden when copying a no-background snapshot.
     let privateRoot = SCNNode()
 
+    /// The translucent locator quad drawn at the cross-section plane. See
+    /// `ViewportController+CrossSection`.
+    let crossSectionPlaneNode = SCNNode()
+
+    /// Holds the filled cap geometry drawn where each cut plane slices each part. Rebuilt off the main
+    /// thread whenever a plane moves; see `ViewportController+CrossSection`.
+    let crossSectionCapNode = SCNNode()
+    /// The interactive transform handle for the selected cross-section.
+    let crossSectionGizmo = CrossSectionGizmo()
+    /// Whether a cap computation is currently running. Only one runs at a time; new requests during a
+    /// drag set `crossSectionCapNeedsRebuild` instead of piling up a backlog of stale full scans.
+    var crossSectionCapInFlight = false
+    /// Set when a plane moved while a cap computation was in flight, so the latest is rebuilt once the
+    /// current one finishes (a trailing update).
+    var crossSectionCapNeedsRebuild = false
+    /// Serialises the (potentially heavy) cap geometry computation off the main thread.
+    let crossSectionCapQueue = DispatchQueue(label: "cross-section-cap", qos: .userInitiated)
+    /// Persistent cap nodes and materials, keyed by section + part, reused across rebuilds so a drag
+    /// only swaps geometry — avoiding per-frame material/shader-modifier recreation (which stutters).
+    var crossSectionCapNodesByKey: [CrossSectionCapKey: SCNNode] = [:]
+    var crossSectionCapMaterialsByKey: [CrossSectionCapKey: SCNMaterial] = [:]
+    /// In-progress gizmo drag (handle grabbed + the section state when the drag began).
+    var crossSectionDrag: CrossSectionDragState?
+    /// Cross-sections as they were when a gizmo drag began, so the whole drag is one undo step.
+    var crossSectionDragUndoSnapshot: [CrossSection]?
+    /// Next palette colour index for a newly-added cross-section (mirrors measurement colouring).
+    var nextCrossSectionColorIndex = 0
+
     /// The model's edge-line geometry nodes in this viewport's scene (depth offset + hit exclusion).
     var edgeNodes: [SCNNode] { modelInstance.edgeGeometryNodes }
 
@@ -85,6 +113,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
                 applyHighlight()
                 sceneView.setNeedsRedraw()
             }
+            // Caps cover only visible parts, so rebuild when visibility changes. Done here (didSet)
+            // and not the $viewOptions sink for the same willSet reason: the sink would still see the
+            // old `hiddenPartIDs`, building caps for exactly the wrong set of parts.
+            if viewOptions.hiddenPartIDs != oldValue.hiddenPartIDs, !activeCrossSections.isEmpty {
+                updateCrossSectionCap()
+            }
         }
     }
     var hasSetInitialView = false
@@ -105,6 +139,32 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     @Published var highlightedPartID: ModelData.Part.ID? {
         didSet { updateHighlightedPart(oldID: oldValue, newID: highlightedPartID) }
+    }
+
+    /// This viewport's cutting planes. Per-viewport (cuts in one split pane leave others intact),
+    /// applied to this viewport's own materials. See `ViewportController+CrossSection`.
+    @Published var crossSections: [CrossSection] = [] {
+        didSet {
+            guard crossSections != oldValue else { return }
+            // Undo/redo (or delete) can drop the selected/hovered section — forget it so the gizmo and
+            // plane don't reference a section that no longer exists.
+            if let id = selectedCrossSectionID, !crossSections.contains(where: { $0.id == id }) {
+                selectedCrossSectionID = nil
+            }
+            if let id = hoveredCrossSectionID, !crossSections.contains(where: { $0.id == id }) {
+                hoveredCrossSectionID = nil
+            }
+            applyCrossSection()
+            scheduleRestorableStateInvalidation() // coalesced — safe to hit per frame during a drag
+        }
+    }
+    /// The cross-section being edited: shows its plane + gizmo and is the target of the popover.
+    @Published var selectedCrossSectionID: UUID? {
+        didSet { if selectedCrossSectionID != oldValue { updateCrossSectionOverlays() } }
+    }
+    /// A cross-section being hovered in the button row: previews its plane (no gizmo).
+    @Published var hoveredCrossSectionID: UUID? {
+        didSet { if hoveredCrossSectionID != oldValue { updateCrossSectionOverlays() } }
     }
 
     @Published private(set) var canResetCameraRoll: Bool = false
@@ -138,7 +198,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// Screen-space bucket of `snapVertices` so hover lookups don't re-project every corner.
     /// Rebuilt only when the camera/viewport changes.
     var snapGridCells: [SIMD2<Int>: [(vertex: SCNVector3, screen: CGPoint)]] = [:]
-    let snapGridCellSize = 16.0
+    /// Must stay >= the snap threshold in `nearestSnapVertex`: the 3x3 cell search only finds
+    /// vertices within one cell of the cursor.
+    let snapGridCellSize = 44.0
     var snapGridWorldTransform = SCNMatrix4Identity
     var snapGridProjection = SCNMatrix4Identity
     var snapGridViewSize = CGSize.zero
@@ -166,6 +228,12 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         scene.rootNode.addChildNode(privateRoot)
         privateRoot.addChildNode(grid.node)
         privateRoot.addChildNode(measurementParent)
+        crossSectionPlaneNode.name = "Cross-section plane"
+        crossSectionPlaneNode.isHidden = true
+        privateRoot.addChildNode(crossSectionPlaneNode)
+        crossSectionCapNode.name = "Cross-section caps"
+        privateRoot.addChildNode(crossSectionCapNode)
+        privateRoot.addChildNode(crossSectionGizmo.root)
 
         let ambientLight = SCNLight()
         ambientLight.type = .ambient
@@ -176,13 +244,29 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         scene.rootNode.addChildNode(ambientLightNode)
 
         sceneView.onClick = { [weak self] point in
-            self?.handleMeasurementClick(at: point)
+            guard let self else { return }
+            // A click off the gizmo (gizmo presses are intercepted earlier) exits cross-section edit
+            // mode rather than placing a measurement.
+            if selectedCrossSectionID != nil {
+                selectedCrossSectionID = nil
+                return
+            }
+            handleMeasurementClick(at: point)
         }
         sceneView.onHover = { [weak self] point in
             self?.hoverPoint = point
         }
         sceneView.onCancel = { [weak self] in
             self?.measurementController.cancelInProgress()
+        }
+        sceneView.beginGizmoDrag = { [weak self] point in
+            self?.beginCrossSectionGizmoDrag(at: point) ?? false
+        }
+        sceneView.updateGizmoDrag = { [weak self] point in
+            self?.updateCrossSectionGizmoDrag(at: point)
+        }
+        sceneView.endGizmoDrag = { [weak self] in
+            self?.endCrossSectionGizmoDrag()
         }
         measurementRenderer.onVisualChange = { [weak self] in
             // The redraw drives updateAtTime → updateScreenSizes, which does the sizing.
@@ -352,6 +436,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
         coordinateIndicatorValueStream.send(indicatorValues)
 
+        // Per frame: slide the gizmo to the view centre on its plane (using the live presentation
+        // camera, `pov`, so it tracks during an orbit) and keep it a constant on-screen size.
+        crossSectionGizmo.followView(presentationCamera: pov, isDragging: crossSectionDrag != nil)
+        crossSectionGizmo.updateScreenScale(renderer: renderer)
+
         sceneView.applyEdgeDepthOffset(
             edgeNodes: modelInstance.edgeGeometryNodes,
             cameraNode: cameraNode,
@@ -384,6 +473,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         applyDocumentOptions()
         updatePartNodeVisibility(viewOptions.hiddenPartIDs)
 
+        // Drop any cap nodes/materials from a previously-loaded model before rebuilding.
+        crossSectionCapNode.childNodes.forEach { $0.removeFromParentNode() }
+        crossSectionCapNodesByKey.removeAll()
+        crossSectionCapMaterialsByKey.removeAll()
+        installCrossSectionShader()
+        applyModelClipUniforms() // clip in the first frame so a reload doesn't flash the whole model
+        applyCrossSection()
+
         if !hasSetInitialView {
             showViewPreset(.isometric, animated: false)
             hasSetInitialView = true
@@ -406,8 +503,8 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         for container in modelInstance.smoothEdgeContainers {
             container.isHidden = options.edgeVisibility != .all
         }
-        for (node, variant) in modelInstance.variantSwaps {
-            node.geometry = options.smoothShading ? (variant.smoothIfAvailable ?? variant.flat) : variant.flat
+        for variant in modelInstance.variantSwaps {
+            variant.apply(smoothShading: options.smoothShading)
         }
     }
 
@@ -455,6 +552,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     func tearDown() {
         setNavLibSuspended(true)
         observers.removeAll()
+        // Undo actions strong-reference this controller as their target; drop a closed viewport's so
+        // it isn't kept alive (and stale cross-section undos for it can't fire).
+        document?.interactionUndoManager.removeAllActions(withTarget: self)
     }
 
     func showSceneKitRenderingOptions() {

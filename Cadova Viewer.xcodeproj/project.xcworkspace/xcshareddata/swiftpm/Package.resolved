@@ -1,10 +1,19 @@
 {
-  "originHash" : "81d614f2e018112d4623de92ef118fcd607231359453f60010c50275caaeb7e5",
+  "originHash" : "50a3072d61953eb9596735fe3d5c9b8a6e8589cfaff195acc8574ea9aa7fedc4",
   "pins" : [
+    {
+      "identity" : "manifold-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/manifold-swift.git",
+      "state" : {
+        "revision" : "94a4f7bbfef3a7f23207f9d8a1d8ca2172fe0b61",
+        "version" : "1.1.0"
+      }
+    },
     {
       "identity" : "navlibswift",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tomasf/NavLibSwift.git",
+      "location" : "https://github.com/tomasf/NavLibSwift",
       "state" : {
         "revision" : "37eeaced91ce18427f5d39a9f16457b373cf09f2",
         "version" : "3.0.0"
