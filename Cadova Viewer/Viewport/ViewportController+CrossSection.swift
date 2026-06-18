@@ -72,7 +72,7 @@ extension ViewportController {
     _surface.diffuse = capColor;
     float hatchCoordinate = dot(csWorld, hatchDirection) / hatchSpacing;
     if (fract(hatchCoordinate) < 0.5) {
-        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, 0.30);
+        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, 0.2);
     }
     """
 
@@ -185,12 +185,12 @@ extension ViewportController {
             plane = SCNPlane()
             let material = SCNMaterial()
             material.lightingModel = .constant
-            material.diffuse.contents = NSColor(white: 0.9, alpha: 0.12)
+            material.diffuse.contents = NSColor(white: 0.9, alpha: 0.05)
             material.isDoubleSided = true
             material.writesToDepthBuffer = false
             material.blendMode = .alpha
             material.shaderModifiers = [.surface: Self.planeGridShaderModifier]
-            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.3)), forKey: "gridLineColor")
+            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.6)), forKey: "gridLineColor")
             plane.firstMaterial = material
             node.geometry = plane
         }
@@ -398,6 +398,14 @@ extension ViewportController {
             crossSectionCapMaterialsByKey[key] = nil
         }
         updateCrossSections(crossSections.filter { $0.id != id }, actionName: "Delete Cross-Section")
+    }
+
+    func deleteAllCrossSections() {
+        guard !crossSections.isEmpty else { return }
+        clearCrossSectionCaps()
+        updateCrossSections([], actionName: "Delete All Cross-Sections")
+        selectedCrossSectionID = nil
+        hoveredCrossSectionID = nil
     }
 
     func flipSelectedCrossSection() {
