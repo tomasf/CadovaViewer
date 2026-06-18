@@ -53,14 +53,13 @@ struct CrossSectionButtonsOverlay: View {
             } label: {
                 Text("Delete")
             }
-            .keyboardShortcut(.delete, modifiers: [])
-
-            Button(role: .destructive) {
-                viewport.deleteAllCrossSections()
-            } label: {
-                Text("Delete All")
+            .modifierKeyAlternate(.option) {
+                Button(role: .destructive) {
+                    viewport.deleteAllCrossSections()
+                } label: {
+                    Text("Delete All")
+                }
             }
-            .keyboardShortcut(.delete, modifiers: .option)
         }
     }
 
