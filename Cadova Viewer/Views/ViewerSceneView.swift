@@ -199,6 +199,14 @@ class CustomSceneView: SCNView {
         switch Int(event.keyCode) {
         case kVK_Escape:
             onCancel?()
+        case kVK_Return, kVK_ANSI_KeypadEnter:
+            // Return commits cross-section editing (the bar's "Done"); the SwiftUI overlay's default
+            // action never fires because this NSView is first responder.
+            if viewportController?.selectedCrossSectionID != nil {
+                viewportController?.selectedCrossSectionID = nil
+            } else {
+                super.keyDown(with: event)
+            }
         default:
             super.keyDown(with: event)
         }
