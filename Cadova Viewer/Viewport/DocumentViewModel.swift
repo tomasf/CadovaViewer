@@ -135,6 +135,11 @@ final class DocumentViewModel: ObservableObject {
         // Mirror the source viewport's options (camera, grid, hidden parts) so the split starts out
         // identical to it. This is cheap; the model clone is built afterwards.
         viewport.setViewOptions(source.viewOptionsForStateRestoration)
+        // Cross-sections live outside ViewOptions, so copy them too — the split is a duplicate of the
+        // view. They're applied when the new viewport's model clone loads (applyLoadedModel). Carry the
+        // colour counter so sections added later in the new pane keep distinct colours.
+        viewport.crossSections = source.crossSections
+        viewport.nextCrossSectionColorIndex = source.nextCrossSectionColorIndex
 
         let splitID = UUID()
         viewports[newID] = viewport
