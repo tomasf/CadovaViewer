@@ -211,6 +211,7 @@ final class DocumentViewModel: ObservableObject {
             case .always: true
             case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
             case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
+            case .allExceptSpecificApplications: !Preferences().navLibExcludedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
             }
             navLibSession.applicationHasFocus = active
         }.store(in: &cancellables)

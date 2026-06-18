@@ -5,6 +5,7 @@ import Combine
 class Preferences: ObservableObject {
     static let navLibActivationBehaviorKey = "navLibActivationBehavior"
     static let navLibWhitelistedAppsDataKey = "navLibWhitelistedApps"
+    static let navLibExcludedAppsDataKey = "navLibExcludedApps"
     static let viewOptionsDataKey = "viewOptions"
     static let documentViewOptionsDataKey = "documentViewOptions"
     static let slicerBundleIdentifierKey = "slicerBundleIdentifier"
@@ -14,6 +15,12 @@ class Preferences: ObservableObject {
         case foregroundOnly
         case always
         case specificApplicationsInForeground
+        case allExceptSpecificApplications
+
+        /// Whether this mode is driven by an editable application list (allow- or block-list).
+        var usesApplicationList: Bool {
+            self == .specificApplicationsInForeground || self == .allExceptSpecificApplications
+        }
     }
 
     struct NavLibForegroundApplication: Codable, Hashable {
@@ -37,9 +44,17 @@ class Preferences: ObservableObject {
         }
     }
 
+    /// Apps the SpaceMouse is claimed *for* in `.specificApplicationsInForeground` mode.
     var navLibWhitelistedApps: [NavLibForegroundApplication] {
         get { self[Self.navLibWhitelistedAppsDataKey] ?? [] }
         set { self[Self.navLibWhitelistedAppsDataKey] = newValue }
+    }
+
+    /// Apps the SpaceMouse is *not* claimed for in `.allExceptSpecificApplications` mode (claimed
+    /// everywhere else). Kept separate from the allow-list so the two modes don't share state.
+    var navLibExcludedApps: [NavLibForegroundApplication] {
+        get { self[Self.navLibExcludedAppsDataKey] ?? [] }
+        set { self[Self.navLibExcludedAppsDataKey] = newValue }
     }
 
     var viewOptions: ViewOptions {

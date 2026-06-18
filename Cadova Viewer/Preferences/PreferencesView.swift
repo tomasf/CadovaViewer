@@ -30,14 +30,16 @@ struct PreferencesView: View {
             Picker("Activate SpaceMouse", selection: $preferences.navLibActivationBehavior) {
                 Text("In Foreground Only")
                     .tag(Preferences.NavLibAppActivationBehavior.foregroundOnly)
-                Text("Regardless of Frostmost Application")
+                Text("Regardless of Foremost Application")
                     .tag(Preferences.NavLibAppActivationBehavior.always)
                 Text("When Specific Applications are in the Foreground:")
                     .tag(Preferences.NavLibAppActivationBehavior.specificApplicationsInForeground)
+                Text("Except When Specific Applications are in the Foreground:")
+                    .tag(Preferences.NavLibAppActivationBehavior.allExceptSpecificApplications)
             }
             .pickerStyle(.radioGroup)
 
-            List($preferences.navLibWhitelistedApps, id: \.bundleIdentifier, selection: $selectedAppBundleIDs) { app in
+            List(activeAppList, id: \.bundleIdentifier, selection: $selectedAppBundleIDs) { app in
                 HStack {
                     let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.wrappedValue.bundleIdentifier)
                     let icon: NSImage = if let appURL {
@@ -49,22 +51,22 @@ struct PreferencesView: View {
                     Image(nsImage: icon)
                     Text(app.wrappedValue.displayName)
                 }
-                .opacity(preferences.navLibActivationBehavior == .specificApplicationsInForeground ? 1 : 0.5)
-                .disabled(preferences.navLibActivationBehavior != .specificApplicationsInForeground)
-                .focusable(preferences.navLibActivationBehavior == .specificApplicationsInForeground)
+                .opacity(usesAppList ? 1 : 0.5)
+                .disabled(!usesAppList)
+                .focusable(usesAppList)
             }
-            .disabled(preferences.navLibActivationBehavior != .specificApplicationsInForeground)
-            .scrollDisabled(preferences.navLibActivationBehavior != .specificApplicationsInForeground)
+            .disabled(!usesAppList)
+            .scrollDisabled(!usesAppList)
             .listStyle(.bordered)
             .onDeleteCommand { deleteSelection() }
             HStack {
                 Button("Add Application…") {
                     addingApp = true
                 }
-                .disabled(preferences.navLibActivationBehavior != .specificApplicationsInForeground)
+                .disabled(!usesAppList)
 
                 Button("Remove", action: deleteSelection)
-                    .disabled(selectedAppBundleIDs.isEmpty || preferences.navLibActivationBehavior != .specificApplicationsInForeground)
+                    .disabled(selectedAppBundleIDs.isEmpty || !usesAppList)
             }
         }
         .padding()
@@ -73,10 +75,11 @@ struct PreferencesView: View {
         .fileImporter(isPresented: $addingApp, allowedContentTypes: [.application], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
 
+            let existing = activeAppList.wrappedValue
             let newApps = urls.compactMap { url -> Preferences.NavLibForegroundApplication? in
                 guard let bundle = Bundle(url: url),
                       let bundleIdentifier = bundle.bundleIdentifier,
-                      !preferences.navLibWhitelistedApps.contains(where: { $0.bundleIdentifier == bundleIdentifier }),
+                      !existing.contains(where: { $0.bundleIdentifier == bundleIdentifier }),
                       let displayName = bundle.infoDictionary?["CFBundleDisplayName"] as? String
                         ?? bundle.infoDictionary?[kCFBundleNameKey as String] as? String
                 else {
@@ -85,18 +88,31 @@ struct PreferencesView: View {
 
                 return .init(bundleIdentifier: bundleIdentifier, displayName: displayName)
             }
-            preferences.navLibWhitelistedApps.append(contentsOf: newApps)
+            activeAppList.wrappedValue.append(contentsOf: newApps)
         }
-        .onChange(of: preferences.navLibActivationBehavior) { oldValue, newValue in
-            if oldValue == .specificApplicationsInForeground {
-                selectedAppBundleIDs = []
-            }
+        // The two list modes have independent lists, so a selection from one is meaningless in the
+        // other — clear it whenever the mode changes.
+        .onChange(of: preferences.navLibActivationBehavior) { _, _ in
+            selectedAppBundleIDs = []
         }
         .onChange(of: selectedAppBundleIDs) { _, newValue in
-            if preferences.navLibActivationBehavior != .specificApplicationsInForeground && !newValue.isEmpty {
+            if !usesAppList && !newValue.isEmpty {
                 selectedAppBundleIDs = []
             }
         }
+    }
+
+    /// Whether the currently selected behavior is driven by an editable application list.
+    private var usesAppList: Bool {
+        preferences.navLibActivationBehavior.usesApplicationList
+    }
+
+    /// The application list the UI edits for the current mode: the block-list in
+    /// `.allExceptSpecificApplications`, otherwise the allow-list.
+    private var activeAppList: Binding<[Preferences.NavLibForegroundApplication]> {
+        preferences.navLibActivationBehavior == .allExceptSpecificApplications
+            ? $preferences.navLibExcludedApps
+            : $preferences.navLibWhitelistedApps
     }
 
     /// Apps registered to open 3MF files, used to populate the slicer picker.
@@ -105,8 +121,8 @@ struct PreferencesView: View {
     }
 
     private func deleteSelection() {
-        guard preferences.navLibActivationBehavior == .specificApplicationsInForeground else { return }
-        preferences.navLibWhitelistedApps.removeAll {
+        guard usesAppList else { return }
+        activeAppList.wrappedValue.removeAll {
             selectedAppBundleIDs.contains($0.bundleIdentifier)
         }
         selectedAppBundleIDs = []
