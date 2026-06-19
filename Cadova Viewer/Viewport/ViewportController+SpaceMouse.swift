@@ -128,14 +128,16 @@ extension ViewportController: NavLibStateProvider {
             // A new gesture started: drop any pending "navigation settled" refresh so the toolbar
             // state isn't updated mid-motion.
             cancelNavigationSettledUpdate()
-            sceneView.defaultCameraController.stopInertia()
+            stopCameraInertia() // grabbing the SpaceMouse cancels a mouse glide
             // Hide the cursor while navigating, the same way the system hides it
             // while typing: it reappears automatically as soon as the mouse moves.
             NSCursor.setHiddenUntilMouseMoves(true)
         } else {
             viewDidChange()
         }
-        sceneView.allowsCameraControl = !active
+        // Suspend mouse/trackpad camera navigation while a SpaceMouse motion is active so the two
+        // don't fight (replaces toggling SceneKit's now-disabled allowsCameraControl).
+        sceneView.cameraControlEnabled = !active
     }
 }
 

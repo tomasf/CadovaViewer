@@ -102,6 +102,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     private let headlightNode = SCNNode()
 
     let grid: ViewportGrid
+    /// The fixed world up axis for camera navigation (+Z). Used by the custom camera controller and
+    /// by roll clearing.
+    let worldUp = SCNVector3(0, 0, 1)
     @Published var viewOptions = Preferences().viewOptions {
         didSet {
             document?.invalidateRestorableState()
@@ -174,9 +177,31 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
 
     var hoverPoint: CGPoint? {
-        didSet { scheduleHoverPointUpdate() }
+        didSet {
+            scheduleHoverPointUpdate()
+            // The cursor moved, so the cached zoom-toward-cursor pivot is stale. (Scroll/pinch don't
+            // move the cursor, so a zoom burst keeps reusing the one hit-test.)
+            zoomPivot = nil
+        }
     }
     var hoverPointUpdateScheduled = false
+
+    /// Cached world pivot for zoom-toward-cursor, hit-tested once per cursor resting spot rather than
+    /// every scroll/pinch event (which would re-scan the scene and drop the framerate). Cleared when
+    /// the cursor moves. See `zoomCamera(factor:towardViewPoint:)`.
+    var zoomPivot: SCNVector3?
+
+    // Camera glide (post-release momentum). A high-frequency timer integrates `inertiaVelocity` into
+    // `inertiaDelta` and re-applies the drag from its captured start. It ticks faster than the
+    // display refreshes so every rendered frame samples a fresh pose (matching an active drag, which
+    // updates at mouse-event rate) — a vsync-rate updater beats against SceneKit's render loop and
+    // looks choppy. See `ViewportController+CameraInteraction`.
+    var inertiaTimer: Timer?
+    var inertiaDragState: CameraDragState?
+    var inertiaDelta: SIMD2<Float> = .zero
+    var inertiaVelocity: SIMD2<Float> = .zero
+    var inertiaIsOrbit = false
+    var inertiaLastTime: CFTimeInterval = 0
     
     /// The geometry node currently named as the outline target, so its name can be cleared when
     /// the highlight moves. See `ViewportController+Highlight`.
@@ -324,10 +349,9 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         self.cameraNode = initialCameraNode
 
         sceneView.backgroundColor = NSColor(white: 0.05, alpha: 1)
-        sceneView.allowsCameraControl = true
-        sceneView.defaultCameraController.worldUp = SCNVector3(0, 0, 1)
-        sceneView.defaultCameraController.automaticTarget = true
-        sceneView.defaultCameraController.interactionMode = .orbitTurntable
+        // Camera navigation is fully custom (see ViewportController+CameraInteraction and
+        // CustomSceneView); SceneKit's built-in controller stays off.
+        sceneView.allowsCameraControl = false
 
         // A real directional headlight on its own node (oriented to the camera in willRenderScene).
         // This viewport renders its own scene, so the light affects only this viewport.
@@ -562,6 +586,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// document view model. The controller then deallocates with its scene view and NavLib session.
     func tearDown() {
         setNavLibSuspended(true)
+        stopCameraInertia()
         observers.removeAll()
         if let modifierFlagsMonitor { NSEvent.removeMonitor(modifierFlagsMonitor) }
         modifierFlagsMonitor = nil

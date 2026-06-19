@@ -36,6 +36,12 @@ class CustomSceneView: SCNView {
     var mouseRotationPivot: AnyPublisher<SCNVector3?, Never> { mouseRotationPivotSubject.eraseToAnyPublisher() }
     var showContextMenu: AnyPublisher<NSEvent, Never> { contextMenuSubject.eraseToAnyPublisher() }
     weak var viewportController: ViewportController?
+    /// Whether mouse/trackpad camera navigation is accepted. Turned off while a SpaceMouse motion is
+    /// active (see `motionActiveChanged`) so the two don't fight. Replaces SceneKit's
+    /// `allowsCameraControl`, which is now off — we drive the camera ourselves.
+    var cameraControlEnabled = true
+
+    private enum CameraDragMode { case orbit, pan }
 
     private let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     private let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
@@ -51,19 +57,16 @@ class CustomSceneView: SCNView {
     }
     
     override func rightMouseDown(with event: NSEvent) {
-        super.rightMouseDown(with: event)
-        NSEvent.overriddenModifierFlags = .option
-        mouseDown(with: event)
-        NSEvent.overriddenModifierFlags = nil
+        viewportController?.requestFocus()
+        runCameraDrag(with: event, mode: .pan)
     }
 
-    override func rightMouseDragged(with event: NSEvent) {
-        mouseDragged(with: event)
-    }
-
-    override func rightMouseUp(with event: NSEvent) {
-        mouseUp(with: event)
-    }
+    // Camera drags read raw deltas through MouseTracker, so the drag/up events delivered by AppKit
+    // are unused; swallow them rather than letting SCNView act on them.
+    override func rightMouseDragged(with event: NSEvent) {}
+    override func rightMouseUp(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
 
     override func layout() {
         super.layout()
@@ -103,13 +106,38 @@ class CustomSceneView: SCNView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        if !event.hasPreciseScrollingDeltas {
-            NSEvent.overriddenModifierFlags = .option
-            super.scrollWheel(with: event)
-            NSEvent.overriddenModifierFlags = nil
+        guard let viewportController, cameraControlEnabled else { return }
+
+        let point = convert(event.locationInWindow, from: nil)
+
+        if event.hasPreciseScrollingDeltas {
+            if event.modifierFlags.contains(.shift) {
+                // Shift+scroll zooms. No zoom inertia, so ignore the trackpad momentum tail. macOS
+                // reports the wheel on whichever axis dominates; deltas are points → gentle per-point.
+                guard event.momentumPhase == [] else { return }
+                let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
+                viewportController.zoomCamera(factor: zoomFactor(forScrollDelta: delta, sensitivity: 0.01), towardViewPoint: point)
+            } else {
+                // Two-finger pan. Momentum events are *not* filtered here — letting them through is
+                // what gives the pan its glide (the system computes the deceleration for us).
+                viewportController.panByScroll(dx: Float(event.scrollingDeltaX), dy: Float(event.scrollingDeltaY))
+            }
         } else {
-            super.scrollWheel(with: event)
+            // Classic mouse wheel: zoom toward the cursor. Deltas are ~1 per detent, so each detent
+            // needs a much larger step than a trackpad point.
+            viewportController.zoomCamera(factor: zoomFactor(forScrollDelta: event.scrollingDeltaY, sensitivity: 0.1), towardViewPoint: point)
         }
+    }
+
+    override func magnify(with event: NSEvent) {
+        guard let viewportController, cameraControlEnabled else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        viewportController.zoomCamera(factor: 1 + Double(event.magnification), towardViewPoint: point)
+    }
+
+    private func zoomFactor(forScrollDelta delta: CGFloat, sensitivity: Double) -> Double {
+        // Scrolling up (positive delta) zooms in. Exponential so each step is a constant ratio.
+        return exp(Double(delta) * sensitivity)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -119,74 +147,106 @@ class CustomSceneView: SCNView {
         let localPoint = convert(event.locationInWindow, from: nil)
 
         // A left-press on a cross-section gizmo handle starts a manipulation, ahead of camera control.
-        if event.type == .leftMouseDown, beginGizmoDrag?(localPoint) == true {
-            // Disable camera control for the whole drag, or SCNView also rotates the view from it.
-            let wasCameraControl = allowsCameraControl
-            allowsCameraControl = false
-            mouseInteractionActiveSubject.send(true)
-            NSCursor.hide()
-            _ = MouseTracker.track(with: event) { [weak self] location in
-                guard let self else { return }
-                updateGizmoDrag?(convert(location, from: nil))
-            }
-            NSCursor.unhide()
-            endGizmoDrag?()
-            // MouseTracker reads raw deltas and leaves the drag events in the queue; flush them so
-            // they don't reach the camera and jump the view once control is restored.
-            while NSApp.nextEvent(matching: .leftMouseDragged, until: .distantPast, inMode: .default, dequeue: true) != nil {}
-            mouseInteractionActiveSubject.send(false)
-            allowsCameraControl = wasCameraControl
+        if beginGizmoDrag?(localPoint) == true {
+            runGizmoDrag(with: event)
             return
         }
 
-        guard let viewportController, allowsCameraControl else { return }
+        // Option turns a left-drag into a pan; otherwise it orbits (Shift then locks to one axis).
+        let mode: CameraDragMode = event.modifierFlags.contains(.option) ? .pan : .orbit
+        runCameraDrag(with: event, mode: mode)
+    }
 
-        super.mouseDown(with: event)
-
-        if let result = viewportController.nearestVisibleHit(at: localPoint, in: viewportController.modelInstance.root) {
-            defaultCameraController.target = result.worldCoordinates
-        } else {
-            defaultCameraController.target = xyPlanePoint(forViewPoint: localPoint)
+    private func runGizmoDrag(with event: NSEvent) {
+        mouseInteractionActiveSubject.send(true)
+        NSCursor.hide()
+        _ = MouseTracker.track(with: event) { [weak self] location in
+            guard let self else { return }
+            updateGizmoDrag?(convert(location, from: nil))
         }
+        NSCursor.unhide()
+        endGizmoDrag?()
+        mouseInteractionActiveSubject.send(false)
+    }
+
+    /// Runs a camera orbit or pan, driven by raw deltas from `MouseTracker` (cursor locked). The
+    /// drag mode and modifiers are fixed at the moment the button goes down. A press with no
+    /// movement falls through to a click (left) or context menu (right).
+    private func runCameraDrag(with event: NSEvent, mode: CameraDragMode) {
+        guard let viewportController, cameraControlEnabled else { return }
+
+        let localPoint = convert(event.locationInWindow, from: nil)
+        let start = event.locationInWindow
+        let dragState = viewportController.beginCameraDrag(atViewPoint: localPoint)
+        let axisLockEnabled = mode == .orbit && event.modifierFlags.contains(.shift)
 
         mouseInteractionActiveSubject.send(true)
 
+        // Locked drags freeze and hide the cursor and read raw deltas, so they can go forever without
+        // the cursor hitting a screen edge: orbiting, and right-button panning. Option+left panning
+        // stays unlocked, tracking the real cursor so the grabbed point sticks to it 1:1.
+        let lockCursor = mode == .orbit || event.type == .rightMouseDown
+
         var didMove = false
-        let endEvent = MouseTracker.track(with: event) { location in
+        var axisLock: ViewportController.CameraAxisLock?
+        // Release-velocity tracking, for the post-drag glide.
+        var lastLocation = start
+        var lastMoveTime = CACurrentMediaTime()
+        var velocity = SIMD2<Float>.zero
+        var lastDelta = SIMD2<Float>.zero
+        let endEvent = MouseTracker.track(with: event, lockCursor: lockCursor) { [weak self] location in
+            guard let self else { return }
+            var dx = Float(location.x - start.x)
+            var dy = Float(location.y - start.y)
+
             if !didMove {
                 didMove = true
-                // Defer the rotation pivot indicator and cursor hiding until an actual
-                // drag begins, so a plain click doesn't flash the pivot dot.
-                NSCursor.hide()
-                if NSEvent.modifierFlags.intersection([.shift, .option]) == [] {
-                    mouseRotationPivotSubject.send(defaultCameraController.target)
+                // Defer the pivot indicator and cursor hiding until a real drag begins, so a plain
+                // click doesn't flash the pivot dot.
+                if lockCursor {
+                    NSCursor.hide()
+                }
+                if mode == .orbit {
+                    mouseRotationPivotSubject.send(SCNVector3(dragState.pivot))
+                }
+                if axisLockEnabled {
+                    axisLock = abs(dx) >= abs(dy) ? .horizontal : .vertical
                 }
             }
 
-            if let dragEvent = NSEvent.mouseEvent(
-                with: .leftMouseDragged,
-                location: location,
-                modifierFlags: [],
-                timestamp: event.timestamp,
-                windowNumber: event.windowNumber,
-                context: nil,
-                eventNumber: event.eventNumber,
-                clickCount: 1,
-                pressure: 0
-            ) {
-                mouseDragged(with: dragEvent)
+            switch axisLock {
+            case .horizontal: dy = 0
+            case .vertical: dx = 0
+            case nil: break
+            }
+
+            // Track speed from each move (dt floored to avoid a tiny interval inflating it), lightly
+            // smoothed. A pause shows up as low speed, so releasing after stopping won't fling.
+            let now = CACurrentMediaTime()
+            let dt = max(now - lastMoveTime, 1.0 / 60.0)
+            let instant = SIMD2<Float>(Float(location.x - lastLocation.x), Float(location.y - lastLocation.y)) / Float(dt)
+            velocity = instant * 0.6 + velocity * 0.4
+            lastLocation = location
+            lastMoveTime = now
+            lastDelta = SIMD2(dx, dy)
+
+            switch mode {
+            case .orbit: viewportController.orbitCamera(dragState, dx: dx, dy: dy)
+            case .pan: viewportController.panCamera(dragState, dx: dx, dy: dy)
             }
         }
 
-        if didMove {
-            NSCursor.unhide()
-        }
-        super.mouseUp(with: endEvent)
-
+        if didMove && lockCursor { NSCursor.unhide() }
         mouseRotationPivotSubject.send(nil)
         mouseInteractionActiveSubject.send(false)
 
-        if !didMove {
+        if didMove {
+            // Coast on release — unless the drag had already stopped (a held, settled cursor).
+            if CACurrentMediaTime() - lastMoveTime > 0.06 { velocity = .zero }
+            if axisLock == .horizontal { velocity.y = 0 }
+            if axisLock == .vertical { velocity.x = 0 }
+            viewportController.startCameraInertia(dragState: dragState, delta: lastDelta, velocity: velocity, isOrbit: mode == .orbit)
+        } else {
             switch endEvent.type {
             case .rightMouseUp: contextMenuSubject.send(endEvent)
             case .leftMouseUp: onClick?(localPoint)

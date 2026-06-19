@@ -13,6 +13,7 @@ extension ViewportController {
     }
 
     func setCameraView(_ view: CameraView, movement: MovementType) {
+        stopCameraInertia()
         setNavLibSuspended(true)
 
         SCNTransaction.begin()
@@ -50,7 +51,7 @@ extension ViewportController {
 
     func clearRollView() -> CameraView {
         let forward = simd_normalize(cameraNode.presentation.simdWorldFront)
-        let worldUp = simd_float3(sceneView.defaultCameraController.worldUp)
+        let worldUp = simd_float3(self.worldUp)
 
         var right = simd_cross(forward, worldUp)
         if simd_length_squared(right) < 1.0e-6 {
