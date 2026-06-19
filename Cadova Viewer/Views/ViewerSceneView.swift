@@ -42,6 +42,10 @@ class CustomSceneView: SCNView {
     var cameraControlEnabled = true
 
     private enum CameraDragMode { case orbit, pan }
+    /// Latched pan-vs-zoom decision for the current precise-scroll gesture. Momentum events (after
+    /// lift-off) may no longer carry the modifier keys, so the mode is fixed during the fingers-down
+    /// portion and reused through the inertial tail.
+    private var scrollGestureZooms = false
 
     private let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     private let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
@@ -111,15 +115,18 @@ class CustomSceneView: SCNView {
         let point = convert(event.locationInWindow, from: nil)
 
         if event.hasPreciseScrollingDeltas {
-            if event.modifierFlags.contains(.shift) {
-                // Shift+scroll zooms. No zoom inertia, so ignore the trackpad momentum tail. macOS
-                // reports the wheel on whichever axis dominates; deltas are points → gentle per-point.
-                guard event.momentumPhase == [] else { return }
+            // While the fingers are down (no momentum) the modifiers are current, so (re)latch the
+            // mode; the momentum tail then keeps it. Shift or Option zooms (toward the cursor),
+            // otherwise pan. Momentum events flow through to both, which is what gives the glide.
+            if event.momentumPhase == [] {
+                scrollGestureZooms = event.modifierFlags.contains(.shift) || event.modifierFlags.contains(.option)
+            }
+            if scrollGestureZooms {
+                // macOS reports the wheel on whichever axis dominates (Shift swaps Y→X); deltas are
+                // points, so a gentle per-point sensitivity.
                 let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
                 viewportController.zoomCamera(factor: zoomFactor(forScrollDelta: delta, sensitivity: 0.01), towardViewPoint: point)
             } else {
-                // Two-finger pan. Momentum events are *not* filtered here — letting them through is
-                // what gives the pan its glide (the system computes the deceleration for us).
                 viewportController.panByScroll(dx: Float(event.scrollingDeltaX), dy: Float(event.scrollingDeltaY))
             }
         } else {
