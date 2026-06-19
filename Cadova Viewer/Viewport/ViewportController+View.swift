@@ -69,6 +69,10 @@ extension ViewportController {
         return (SCNMatrix4(transform), cameraNode.camera!.orthographicScale)
     }
 
+    func clearRoll() {
+        setCameraView(clearRollView(), movement: .small)
+    }
+
     func viewForZoom(amount: Double) -> CameraView {
         guard let pointOfView = sceneView.pointOfView, let camera = pointOfView.camera else { fatalError() }
 

@@ -7,7 +7,7 @@ import simd
 import ViewerCore
 import Synchronization
 
-class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
+class ViewportController: NSObject, ObservableObject {
     let sceneView = CustomSceneView(frame: .zero)
     let sceneController: SceneController
     /// This viewport's own scene. Each viewport renders an independent scene (its own real
@@ -107,7 +107,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// point-of-view node — re-parenting a single light as SceneKit swaps point-of-view nodes could
     /// briefly leave it on two nodes, doubling the light and blowing out the model.
     let cameraLight = SCNLight()
-    private let headlightNode = SCNNode()
+    let headlightNode = SCNNode()
 
     let grid: ViewportGrid
     /// The fixed world up axis for camera navigation (+Z). Used by the custom camera controller and
@@ -138,6 +138,11 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     /// mouse drag or an animated fly-to). The document's NavLib session checks this on the focused
     /// viewport before applying motion.
     var navLibIsSuspended = false
+    /// How long the camera must stay quiet after the last `viewDidChange` before the navigation-
+    /// dependent toolbar state (`canResetCameraRoll`, `canShowPresets`) is refreshed.
+    static let navigationSettleDelay: TimeInterval = 0.25
+    var navigationSettleWorkItem: DispatchWorkItem?
+    var restorableStateInvalidationScheduled = false
 
     @Published var projection: CameraProjection = .perspective {
         didSet {
@@ -178,10 +183,10 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         didSet { if hoveredCrossSectionID != oldValue { updateCrossSectionOverlays() } }
     }
 
-    @Published private(set) var canResetCameraRoll: Bool = false
+    @Published var canResetCameraRoll: Bool = false
     @Published var canShowPresets: [ViewPreset: Bool] = [:]
 
-    private let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
+    let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
 
     var hoverPoint: CGPoint? {
@@ -223,7 +228,7 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
 
     /// Local monitor for modifier-key (Shift) changes, so the cross-section gizmo can switch plane/world
     /// space regardless of which view has focus. Removed in `tearDown`.
-    private var modifierFlagsMonitor: Any?
+    var modifierFlagsMonitor: Any?
 
     // Backing storage for the measurement snap grid; the logic lives in
     // ViewportController+MeasurementInteraction (extensions can't hold stored properties).
@@ -257,368 +262,16 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         self.document = document
         super.init()
 
-        // Assemble this viewport's own scene: shared image-based lighting, its chrome (grid +
-        // measurements) under one hideable node, and an ambient fill. The model and the camera
-        // headlight are added later (on load / below).
-        scene.lightingEnvironment.contents = sceneController.skyboxImages
-        privateRoot.name = "Viewport chrome"
-        scene.rootNode.addChildNode(privateRoot)
-        privateRoot.addChildNode(grid.node)
-        privateRoot.addChildNode(measurementParent)
-        crossSectionPlaneNode.name = "Cross-section plane"
-        crossSectionPlaneNode.isHidden = true
-        privateRoot.addChildNode(crossSectionPlaneNode)
-        crossSectionCapNode.name = "Cross-section caps"
-        privateRoot.addChildNode(crossSectionCapNode)
-        privateRoot.addChildNode(crossSectionGizmo.root)
-
-        let ambientLight = SCNLight()
-        ambientLight.type = .ambient
-        ambientLight.intensity = 30
-        let ambientLightNode = SCNNode()
-        ambientLightNode.name = "Ambient light"
-        ambientLightNode.light = ambientLight
-        scene.rootNode.addChildNode(ambientLightNode)
-
-        sceneView.onClick = { [weak self] point in
-            guard let self else { return }
-            // A click off the gizmo (gizmo presses are intercepted earlier) exits cross-section edit
-            // mode rather than placing a measurement.
-            if selectedCrossSectionID != nil {
-                selectedCrossSectionID = nil
-                return
-            }
-            handleMeasurementClick(at: point)
-        }
-        sceneView.onHover = { [weak self] point in
-            self?.hoverPoint = point
-        }
-        sceneView.onCancel = { [weak self] in
-            self?.measurementController.cancelInProgress()
-        }
-        sceneView.beginGizmoDrag = { [weak self] point in
-            self?.beginCrossSectionGizmoDrag(at: point) ?? false
-        }
-        sceneView.updateGizmoDrag = { [weak self] point in
-            self?.updateCrossSectionGizmoDrag(at: point)
-        }
-        sceneView.endGizmoDrag = { [weak self] in
-            self?.endCrossSectionGizmoDrag()
-        }
-        // Shift swaps the cross-section gizmo between plane- and world-relative. Watch modifier changes
-        // app-wide (a local monitor, not the scene view's `flagsChanged`) so it works even when the
-        // canvas isn't the first responder.
-        modifierFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.updateCrossSectionOverlays()
-            return event
-        }
-        measurementRenderer.onVisualChange = { [weak self] in
-            // The redraw drives updateAtTime → updateScreenSizes, which does the sizing.
-            self?.sceneView.setNeedsRedraw()
-        }
-
-        overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
-        sceneView.overlaySKScene = overlayScene
-        sceneView.viewportController = self
-
-        sceneView.scene = scene
-        sceneView.showsStatistics = false
-
-        sceneView.mouseInteractionActive.sink { [weak self] active in
-            guard let self else { return }
-            setNavLibSuspended(active)
-
-            if !active {
-                viewDidChange()
-            }
-        }.store(in: &observers)
-
-
-        sceneView.mouseRotationPivot.sink { [weak self] pivot in
-            guard let self else { return }
-            if let pivot {
-                self.overlayScene.pivotPointLocation = pivot
-            }
-            self.overlayScene.pivotPointVisibility = pivot != nil
-        }.store(in: &observers)
-
-        sceneView.showContextMenu.receive(on: DispatchQueue.main).sink { [weak self] event in
-            guard let self else { return }
-            let viewPoint = sceneView.convert(event.locationInWindow, from: nil)
-            NSMenu.popUpContextMenu(contextMenu(at: viewPoint), with: event, for: sceneView)
-        }.store(in: &observers)
-
-        let initialCamera = SCNCamera()
-        let initialCameraNode = SCNNode()
-        initialCameraNode.name = "Initial camera node"
-        initialCameraNode.camera = initialCamera
-        scene.rootNode.addChildNode(initialCameraNode)
-        sceneView.pointOfView = initialCameraNode
-        self.cameraNode = initialCameraNode
-
-        sceneView.backgroundColor = NSColor(white: 0.05, alpha: 1)
-        // Camera navigation is fully custom (see ViewportController+CameraInteraction and
-        // CustomSceneView); SceneKit's built-in controller stays off.
-        sceneView.allowsCameraControl = false
-
-        // A real directional headlight on its own node (oriented to the camera in willRenderScene).
-        // This viewport renders its own scene, so the light affects only this viewport.
-        sceneView.autoenablesDefaultLighting = false
-        cameraLight.type = .directional
-        cameraLight.intensity = 800
-        headlightNode.name = "Headlight"
-        headlightNode.light = cameraLight
-        scene.rootNode.addChildNode(headlightNode)
-
-        sceneView.delegate = self
-
+        configureScene(measurementParent: measurementParent)
+        configureSceneViewCallbacks()
+        configureOverlayScene()
+        configureSceneView()
+        configureInitialCamera()
+        configureHeadlight()
+        bindSceneViewSignals()
         updateCameraProjection()
-
-        sceneController.modelWasLoaded.sink { [weak self] in
-            self?.applyLoadedModel()
-        }.store(in: &observers)
-
-        sceneController.documentGeometryChanged.sink { [weak self] in
-            self?.applyDocumentOptions()
-        }.store(in: &observers)
-
-        $viewOptions.sink { [weak self] viewOptions in
-            guard let self else { return }
-            grid.showGrid = viewOptions.showGrid
-            grid.showOrigin = viewOptions.showOrigin
-            updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-            // Persist as the default for newly opened documents. Menu toggles only mutate
-            // viewOptions (+ restorable state), which isn't reapplied on a manual reopen; this
-            // keeps display options like smooth shading remembered. (setViewOptions does the
-            // same on the restore path.)
-            Preferences().viewOptions = viewOptions
-        }.store(in: &observers)
-    }
-
-    func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
-        // Apply the latest SpaceMouse-commanded transform here (render thread), so NavLib's setter
-        // stays lock-free and never stalls the run loop on the scene lock.
-        if let pending = pendingNavLibTransform.withLock({ value -> SCNMatrix4? in
-            let latest = value
-            value = nil
-            return latest
-        }) {
-            cameraNode.transform = pending
-        }
-
-        grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
-        measurementRenderer.updateScreenSizes(renderer: sceneView)
-
-        // Track the active point-of-view node (SceneKit can swap it in). The headlight follows the
-        // camera independently, in willRenderScene.
-        if let currentCameraNode = sceneView.pointOfView, currentCameraNode != cameraNode {
-            cameraNode = currentCameraNode
-        }
-    }
-
-    func viewDidChange() {
-        if cameraNode.camera == nil {
-            return
-        }
-        // The camera transform is persisted only for state restoration; nothing reads the live
-        // value. It's captured lazily from the camera node at save time (see
-        // `viewOptionsForStateRestoration`) rather than written into the @Published `viewOptions`
-        // here. Publishing it every navigation frame fired `objectWillChange` each frame — which the
-        // view model re-broadcasts to the whole document UI — making per-frame SwiftUI re-evaluation
-        // dominate main-thread time and stutter SpaceMouse navigation. So just flag the document
-        // dirty (coalesced to one deferred call) so the new camera position is saved once motion
-        // settles.
-        scheduleRestorableStateInvalidation()
-
-        // The toolbar's roll/preset enabled state isn't needed until navigation finishes, and
-        // recomputing + publishing it every motion frame is wasteful (each publish repaints the
-        // toolbar, and `canShowViewPreset` walks the model bounds). `viewDidChange` fires on each
-        // `motionActiveChanged(false)`, which recurs throughout a continuous gesture, so debounce:
-        // (re)arm a settle timer here and only refresh once motion has been quiet for a beat.
-        scheduleNavigationSettledUpdate()
-    }
-
-    /// How long the camera must stay quiet after the last `viewDidChange` before the navigation-
-    /// dependent toolbar state (`canResetCameraRoll`, `canShowPresets`) is refreshed.
-    private static let navigationSettleDelay: TimeInterval = 0.25
-    private var navigationSettleWorkItem: DispatchWorkItem?
-
-    /// (Re)arms the settle timer. Each `viewDidChange` pushes it back, so the refresh lands only
-    /// after motion stops; `motionActiveChanged(true)` cancels it when a new gesture begins.
-    func scheduleNavigationSettledUpdate() {
-        navigationSettleWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.updateNavigationDependentState() }
-        navigationSettleWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.navigationSettleDelay, execute: work)
-    }
-
-    /// Cancels a pending settle refresh because navigation has resumed.
-    func cancelNavigationSettledUpdate() {
-        navigationSettleWorkItem?.cancel()
-        navigationSettleWorkItem = nil
-    }
-
-    private func updateNavigationDependentState() {
-        let canReset = canResetRoll()
-        if canReset != canResetCameraRoll {
-            canResetCameraRoll = canReset
-        }
-
-        let presetFlags = Dictionary(uniqueKeysWithValues: ViewPreset.allCases.map {
-            ($0, canShowViewPreset($0))
-        })
-        if canShowPresets != presetFlags {
-            canShowPresets = presetFlags
-        }
-    }
-
-    func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
-        grid.updateVisibility(cameraNode: cameraNode)
-
-        guard let pov = renderer.pointOfView?.presentation else { return }
-
-        // Aim the headlight along the camera's view direction (both shine/look along their node's
-        // -Z), so it reads as a light coming from the viewer.
-        headlightNode.simdWorldOrientation = pov.simdWorldOrientation
-
-        let indicatorValues = OrientationIndicatorValues(
-            x: pov.convertVector(SCNVector3(1, 0, 0), from: nil),
-            y: pov.convertVector(SCNVector3(0, 1, 0), from: nil),
-            z: pov.convertVector(SCNVector3(0, 0, 1), from: nil)
-        )
-
-        coordinateIndicatorValueStream.send(indicatorValues)
-
-        // Per frame: slide the gizmo to the view centre on its plane (using the live presentation
-        // camera, `pov`, so it tracks during an orbit) and keep it a constant on-screen size.
-        crossSectionGizmo.followView(presentationCamera: pov, isDragging: crossSectionDrag != nil)
-        crossSectionGizmo.updateScreenScale(renderer: renderer)
-
-        sceneView.applyEdgeDepthOffset(
-            edgeNodes: modelInstance.edgeGeometryNodes,
-            cameraNode: cameraNode,
-            modelNode: modelInstance.root,
-            viewSize: sceneViewSize
-        )
-
-        // Keep edge lines ~1pt wide regardless of the drawable's backing scale.
-        let lineWidthInPoints = 1.0
-        let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
-        if scale.isFinite {
-            renderer.currentRenderCommandEncoder?.setLineWidthPrivate(Float(lineWidthInPoints * scale))
-        }
-    }
-
-    func clearRoll() {
-        setCameraView(clearRollView(), movement: .small)
-    }
-
-    /// (Re)builds this viewport's clone of the now-loaded model and runs the per-viewport setup
-    /// that depends on it: swaps the clone into the scene, applies the document-global geometry
-    /// options and this viewport's part visibility, fits the camera (first time only), sizes the
-    /// grid, and gathers snap vertices. Called when the model loads and when a viewport is created
-    /// by a split after the model is already loaded.
-    func applyLoadedModel() {
-        modelInstance.root.removeFromParentNode()
-        modelInstance = ViewportModelInstance(modelData: sceneController.modelData)
-        scene.rootNode.addChildNode(modelInstance.root)
-
-        applyDocumentOptions()
-        updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-
-        // Drop any cap nodes/materials from a previously-loaded model before rebuilding.
-        crossSectionCapNode.childNodes.forEach { $0.removeFromParentNode() }
-        crossSectionCapNodesByKey.removeAll()
-        crossSectionCapMaterialsByKey.removeAll()
-        installCrossSectionShader()
-        applyModelClipUniforms() // clip in the first frame so a reload doesn't flash the whole model
-        applyCrossSection()
-
-        if !hasSetInitialView {
-            showViewPreset(.isometric, animated: false)
-            hasSetInitialView = true
-        }
-
-        grid.updateBounds(geometry: modelInstance.root)
-        snapVertices = gatherSnapVertices()
-        objectWillChange.send()
-    }
-
-    /// Applies the document-global geometry options (edge visibility, smooth shading) to this
-    /// viewport's clone nodes. Smooth geometry is shared and built off the main thread by
-    /// `SceneController`; until it's ready this falls back to flat and re-applies on the
-    /// `documentGeometryChanged` signal.
-    func applyDocumentOptions() {
-        let options = sceneController.documentOptions
-        for container in modelInstance.sharpEdgeContainers {
-            container.isHidden = options.edgeVisibility == .none
-        }
-        for container in modelInstance.smoothEdgeContainers {
-            container.isHidden = options.edgeVisibility != .all
-        }
-        for variant in modelInstance.variantSwaps {
-            variant.apply(smoothShading: options.smoothShading)
-        }
-    }
-
-    /// `viewOptions` with the live camera transform folded in, for state capture. The transform is
-    /// deliberately kept out of the per-frame `@Published` path (see `viewDidChange`), so it's read
-    /// straight from the camera node whenever the layout is actually snapshotted.
-    var viewOptionsForStateRestoration: ViewOptions {
-        var options = viewOptions
-        options.cameraTransform = cameraNode.transform
-        return options
-    }
-
-    /// Marks the document's restorable state dirty, coalescing the many per-frame requests during
-    /// navigation into a single deferred call. Main-thread only (all `viewDidChange` callers are).
-    private var restorableStateInvalidationScheduled = false
-    private func scheduleRestorableStateInvalidation() {
-        if restorableStateInvalidationScheduled { return }
-        restorableStateInvalidationScheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            restorableStateInvalidationScheduled = false
-            document?.invalidateRestorableState()
-        }
-    }
-
-    func setViewOptions(_ viewOptions: ViewOptions) {
-        self.viewOptions = viewOptions
-        grid.showGrid = viewOptions.showGrid
-        grid.showOrigin = viewOptions.showOrigin
-        cameraNode.transform = viewOptions.cameraTransform
-        updatePartNodeVisibility(viewOptions.hiddenPartIDs)
-        hasSetInitialView = true
-        Preferences().viewOptions = viewOptions
-    }
-
-    /// Makes this the document's focused viewport (menu/toolbar/NavLib commands act on it). Called
-    /// when the scene view is clicked.
-    func requestFocus() {
-        documentViewModel?.focus(viewportID)
-    }
-
-    /// Releases the viewport before it's discarded (on close): stop NavLib motion and drop the
-    /// notification/Combine subscriptions. The shared scene's private node is removed by the
-    /// document view model. The controller then deallocates with its scene view and NavLib session.
-    func tearDown() {
-        setNavLibSuspended(true)
-        stopCameraInertia()
-        observers.removeAll()
-        if let modifierFlagsMonitor { NSEvent.removeMonitor(modifierFlagsMonitor) }
-        modifierFlagsMonitor = nil
-        // Undo actions strong-reference this controller as their target; drop a closed viewport's so
-        // it isn't kept alive (and stale cross-section undos for it can't fire).
-        document?.interactionUndoManager.removeAllActions(withTarget: self)
-    }
-
-    func showSceneKitRenderingOptions() {
-        let panelClass: AnyObject? = NSClassFromString("SCNRendererOptionsPanel")
-        let panel = panelClass?.perform(NSSelectorFromString("rendererOptionsPanelForView:"), with: sceneView).takeUnretainedValue() as? NSPanel
-        panel?.hidesOnDeactivate = true
-        panel?.isFloatingPanel = true
-        panel?.makeKeyAndOrderFront(nil)
+        bindModelSignals()
+        bindViewOptions()
     }
 
 }
