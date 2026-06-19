@@ -116,8 +116,17 @@ extension ViewportController {
     }
 
     func cameraView(for preset: ViewPreset) -> CameraView {
-        let (min, max) = sceneController.modelBoundingBox
-        let center = SIMD3<Double>(sceneController.modelBoundingSphere.center)
+        var (min, max) = sceneController.modelBoundingBox
+        var sphere = sceneController.modelBoundingSphere
+
+        if min == max {
+            (min, max) = modelInstance.root.boundingBox
+        }
+        if sphere.radius <= 0 || !sphere.radius.isFinite {
+            sphere = modelInstance.root.boundingSphere
+        }
+
+        let center = SIMD3<Double>(sphere.center)
         return cameraView(axis: Self.viewAxis(for: preset),
                           boundingBox: (SIMD3<Double>(min), SIMD3<Double>(max)),
                           center: center)
@@ -143,8 +152,9 @@ extension ViewportController {
     /// the same margin the standard presets use. Shared by the preset views and by centering on a
     /// subset of parts.
     func cameraView(axis: SIMD3<Double>, boundingBox: (min: SIMD3<Double>, max: SIMD3<Double>), center: SIMD3<Double>) -> CameraView {
-        guard let cameraNode = sceneView.pointOfView,
-              let camera = cameraNode.camera else { return (CATransform3DIdentity, 1) }
+        guard let camera = cameraNode.camera else {
+            return (cameraNode.transform, 1)
+        }
 
         let (min, max) = boundingBox
 
@@ -175,14 +185,26 @@ extension ViewportController {
             minV = Swift.min(minV, v); maxV = Swift.max(maxV, v)
         }
 
-        let width = maxU - minU
-        let height = maxV - minV
+        var width = maxU - minU
+        var height = maxV - minV
+
+        if width <= 0 || height <= 0 || !width.isFinite || !height.isFinite {
+            let boxExtent = simd_reduce_max(max - min)
+            let fallbackExtent = boxExtent > 0 && boxExtent.isFinite ? boxExtent : 1
+            width = fallbackExtent
+            height = fallbackExtent
+        }
 
         // The scene view spans the whole detail area, but part of it is hidden under the floating
         // sidebar (and the title bar). Fit and centre the model in the *visible* sub-rectangle so it
         // isn't undersized or shoved under the sidebar. `safeAreaInsets` reports exactly how much of
         // each edge is obscured.
-        let full = sceneViewSize
+        let storedSize = sceneViewSize
+        let boundsSize = sceneView.bounds.size
+        let full = CGSize(
+            width: storedSize.width > 0 ? storedSize.width : Swift.max(boundsSize.width, 1),
+            height: storedSize.height > 0 ? storedSize.height : Swift.max(boundsSize.height, 1)
+        )
         let insets = sceneView.safeAreaInsets
         let visibleWidth = Swift.max(full.width - insets.left - insets.right, 1)
         let visibleHeight = Swift.max(full.height - insets.top - insets.bottom, 1)
@@ -191,14 +213,18 @@ extension ViewportController {
         // full/visible to make the model fit the smaller visible rectangle instead.
         let fitWidthScale = width / 2 * full.height / visibleWidth
         let fitHeightScale = height / 2 * full.height / visibleHeight
-        let orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
+        var orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
+        if orthoScale <= 0 || !orthoScale.isFinite {
+            orthoScale = 1
+        }
 
         // Place the camera at the distance that makes calculateOrthographicScale()
         // (distance * tan(fov/2), the value SceneKit actually uses for the ortho
         // projection) reproduce exactly orthoScale, so the framing isn't overridden.
         // The same distance frames the model with matching margin in perspective mode.
         let fovRadians = camera.fieldOfView * (.pi / 180.0)
-        let distance = orthoScale / tan(fovRadians / 2)
+        let tanHalfFov = tan(fovRadians / 2)
+        let distance = tanHalfFov > 0 && orthoScale > 0 ? orthoScale / tanHalfFov : 1
 
         // Pan the camera so the model centre lands at the centre of the visible rectangle rather than
         // the full view. The visible centre is offset from the full centre by half the difference of
