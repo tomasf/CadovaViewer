@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showPreferences(_ sender: AnyObject) {
         if preferencesWindow == nil {
             preferencesWindow = NSWindow(contentViewController: NSHostingController(rootView: PreferencesView()))
+            preferencesWindow?.contentMinSize = NSSize(width: 650, height: 420)
             preferencesWindow?.setFrameAutosaveName("preferences")
             preferencesWindow?.title = "Settings"
         }

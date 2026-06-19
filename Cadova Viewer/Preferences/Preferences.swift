@@ -10,6 +10,7 @@ class Preferences: ObservableObject {
     static let documentViewOptionsDataKey = "documentViewOptions"
     static let slicerBundleIdentifierKey = "slicerBundleIdentifier"
     static let removeNonSolidPartsWhenSlicingKey = "removeNonSolidPartsWhenSlicing"
+    static let preciseScrollActionKey = "preciseScrollAction"
 
     enum NavLibAppActivationBehavior: String, RawRepresentable {
         case foregroundOnly
@@ -21,6 +22,11 @@ class Preferences: ObservableObject {
         var usesApplicationList: Bool {
             self == .specificApplicationsInForeground || self == .allExceptSpecificApplications
         }
+    }
+
+    enum PreciseScrollAction: String, RawRepresentable {
+        case pan
+        case zoom
     }
 
     struct NavLibForegroundApplication: Codable, Hashable {
@@ -80,6 +86,16 @@ class Preferences: ObservableObject {
     var removeNonSolidPartsWhenSlicing: Bool {
         get { defaults.object(forKey: Self.removeNonSolidPartsWhenSlicingKey) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Self.removeNonSolidPartsWhenSlicingKey) }
+    }
+
+    var preciseScrollAction: PreciseScrollAction {
+        get {
+            let string = defaults.string(forKey: Self.preciseScrollActionKey) ?? "pan"
+            return PreciseScrollAction(rawValue: string) ?? .pan
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Self.preciseScrollActionKey)
+        }
     }
 
     var navLibActivationBehavior: NavLibAppActivationBehavior {

@@ -116,10 +116,13 @@ class CustomSceneView: SCNView {
 
         if event.hasPreciseScrollingDeltas {
             // While the fingers are down (no momentum) the modifiers are current, so (re)latch the
-            // mode; the momentum tail then keeps it. Shift or Option zooms (toward the cursor),
-            // otherwise pan. Momentum events flow through to both, which is what gives the glide.
+            // mode; the momentum tail then keeps it. The preference chooses the default precise
+            // scroll behavior, and Shift or Option always zooms toward the cursor.
             if event.momentumPhase == [] {
-                scrollGestureZooms = event.modifierFlags.contains(.shift) || event.modifierFlags.contains(.option)
+                scrollGestureZooms =
+                    Preferences().preciseScrollAction == .zoom ||
+                    event.modifierFlags.contains(.shift) ||
+                    event.modifierFlags.contains(.option)
             }
             if scrollGestureZooms {
                 // macOS reports the wheel on whichever axis dominates (Shift swaps Y→X); deltas are

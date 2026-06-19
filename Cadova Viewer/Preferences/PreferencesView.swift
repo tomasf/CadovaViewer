@@ -27,6 +27,27 @@ struct PreferencesView: View {
             Divider()
                 .padding(.vertical, 12)
 
+            Picker("Precise Scrolling", selection: $preferences.preciseScrollAction) {
+                VStack(alignment: .leading) {
+                    Text("Pan")
+                    Text("Best for trackpads")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                    .tag(Preferences.PreciseScrollAction.pan)
+                VStack(alignment: .leading) {
+                    Text("Zoom")
+                    Text("Best for Magic Mouse")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                    .tag(Preferences.PreciseScrollAction.zoom)
+            }
+            .pickerStyle(.radioGroup)
+
+            Divider()
+                .padding(.vertical, 12)
+
             Picker("Activate SpaceMouse", selection: $preferences.navLibActivationBehavior) {
                 Text("In Foreground Only")
                     .tag(Preferences.NavLibAppActivationBehavior.foregroundOnly)
@@ -71,7 +92,7 @@ struct PreferencesView: View {
         }
         .padding()
         .frame(width: 650)
-        .frame(minHeight: 200)
+        .frame(minHeight: 420)
         .fileImporter(isPresented: $addingApp, allowedContentTypes: [.application], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
 
