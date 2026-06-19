@@ -19,6 +19,13 @@ extension ViewportController {
     /// End the glide once it decays below this speed.
     private static let inertiaStopSpeed: Float = 4
 
+    // Zoom limits, in multiples of the model's bounding radius — a distance-to-pivot for perspective,
+    // a view half-height (orthographicScale) for orthographic. The zoom-in floor matters: a
+    // multiplicative dolly can otherwise reach a near-zero distance, from which zooming back out
+    // crawls imperceptibly.
+    private static let zoomOutLimitFactor: Float = 40
+    private static let zoomInLimitFactor: Float = 0.05
+
     enum CameraAxisLock {
         case horizontal // yaw only
         case vertical   // pitch only
@@ -149,14 +156,26 @@ extension ViewportController {
             zoomPivot = target
         }
 
-        SCNTransaction.begin()
-        SCNTransaction.disableActions = true
+        // nil while no model is loaded → zoom stays unclamped.
+        let limits = zoomLimits()
+
         if camera.usesOrthographicProjection {
-            camera.orthographicScale = max(camera.orthographicScale / factor, 0.001)
+            var newScale = camera.orthographicScale / factor
+            if let limits {
+                newScale = min(max(newScale, Double(limits.min)), Double(limits.max))
+            } else {
+                newScale = max(newScale, 0.001)
+            }
+            guard newScale != camera.orthographicScale else { return } // already at a limit
+
+            SCNTransaction.begin()
+            SCNTransaction.disableActions = true
+            camera.orthographicScale = newScale
+            // Re-pan so the target lands back under the cursor.
             let projected = sceneView.projectPoint(target)
             let screenDX = Float(point.x) - Float(projected.x)
             let screenDY = Float(point.y) - Float(projected.y)
-            let wpp = Float(2 * camera.orthographicScale) / Float(max(sceneView.bounds.height, 1))
+            let wpp = Float(2 * newScale) / Float(max(sceneView.bounds.height, 1))
             let m = cameraNode.simdTransform
             let right = simd_normalize(m.columns.0.xyz)
             let up = simd_normalize(m.columns.1.xyz)
@@ -164,16 +183,38 @@ extension ViewportController {
             var nm = m
             nm.columns.3 = SIMD4<Float>(m.columns.3.xyz + translation, 1)
             cameraNode.simdTransform = nm
+            SCNTransaction.commit()
         } else {
-            let pos = cameraNode.simdWorldPosition
-            let t = simd_float3(target)
-            let newPos = pos + (t - pos) * Float(1 - 1 / factor)
-            var m = cameraNode.simdTransform
-            m.columns.3 = SIMD4<Float>(newPos, 1)
-            cameraNode.simdTransform = m
+            // Perspective dolly along the camera→pivot ray (keeps the pivot fixed on screen). The
+            // distance to the pivot scales by 1/factor; clamp it so it can't collapse to ~0 (which
+            // would make zooming back out crawl) or run off to infinity.
+            let m = cameraNode.simdTransform
+            let pos = m.columns.3.xyz
+            let offset = pos - simd_float3(target)
+            let distance = simd_length(offset)
+            guard distance > 1e-5 else { return }
+            var newDistance = distance / Float(factor)
+            if let limits {
+                newDistance = min(max(newDistance, limits.min), limits.max)
+            }
+            guard abs(newDistance - distance) > 1e-6 else { return } // already at a limit
+
+            SCNTransaction.begin()
+            SCNTransaction.disableActions = true
+            var nm = m
+            nm.columns.3 = SIMD4<Float>(simd_float3(target) + offset * (newDistance / distance), 1)
+            cameraNode.simdTransform = nm
+            SCNTransaction.commit()
         }
-        SCNTransaction.commit()
         viewDidChange()
+    }
+
+    /// Min/max zoom extent from the model's bounding radius: a distance-to-pivot for perspective, a
+    /// view half-height (orthographicScale) for orthographic. `nil` when no model is loaded.
+    private func zoomLimits() -> (min: Float, max: Float)? {
+        let radius = Float(sceneController.modelBoundingSphere.radius)
+        guard radius > 1e-4 else { return nil }
+        return (radius * Self.zoomInLimitFactor, radius * Self.zoomOutLimitFactor)
     }
 
     // MARK: - Helpers
