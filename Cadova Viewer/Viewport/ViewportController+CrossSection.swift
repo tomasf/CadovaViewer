@@ -190,7 +190,7 @@ extension ViewportController {
             material.writesToDepthBuffer = false
             material.blendMode = .alpha
             material.shaderModifiers = [.surface: Self.planeGridShaderModifier]
-            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.6)), forKey: "gridLineColor")
+            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.8)), forKey: "gridLineColor")
             plane.firstMaterial = material
             node.geometry = plane
         }
