@@ -16,6 +16,34 @@ struct ViewportBottomOverlay: View {
     private static let indicatorReserved: CGFloat = 142
     private static let edgeMargin: CGFloat = 16
 
+    /// The bar's fit ladder while the indicator is visible, widest first: shift left to clear the
+    /// indicator, then shed the label and the Align group, and finally drop the indicator to take the
+    /// full pane width. `ViewThatFits` renders the first rung that fits.
+    private static let indicatorStages: [Layout] = [
+        Layout(alignment: .centered,    components: [.text, .align, .flip, .indicator]),
+        Layout(alignment: .shiftedLeft, components: [.text, .align, .flip, .indicator]),
+        Layout(alignment: .shiftedLeft, components: [.align, .flip, .indicator]),
+        Layout(alignment: .centered,    components: [.align, .flip]),
+        Layout(alignment: .centered,    components: [.flip]),
+        Layout(alignment: .centered,    components: []),
+    ]
+
+    /// The ladder when the indicator is already off: just shed features, always centred.
+    private static let plainStages: [Layout] = [
+        Layout(alignment: .centered, components: [.text, .align, .flip, .indicator]),
+        Layout(alignment: .centered, components: [.align, .flip, .indicator]),
+        Layout(alignment: .centered, components: [.flip, .indicator]),
+        Layout(alignment: .centered, components: [.indicator]),
+    ]
+
+    /// One rung of the fit ladder: how to place the bar and which parts it carries.
+    private struct Layout {
+        enum Alignment { case centered, shiftedLeft }
+        enum Component { case text, align, flip, indicator }
+        var alignment: Alignment
+        var components: Set<Component>
+    }
+
     /// Set by the bar's tightest layout, which drops the indicator to make room.
     @State private var hideIndicator = false
 
@@ -41,24 +69,33 @@ struct ViewportBottomOverlay: View {
         .onPreferenceChange(CoordinateIndicatorHiddenKey.self) { hideIndicator = $0 }
     }
 
-    /// The fitting bar layouts, widest first. With the indicator shown the final layout hides it.
-    @ViewBuilder
+    /// Picks the widest bar rung that fits the current indicator state.
     private func barLayouts(_ section: CrossSection) -> some View {
-        if showIndicator {
-            ViewThatFits(in: .horizontal) {
-                centered(Self.indicatorReserved) { bar(section, showText: true, showAlign: true) }.coordinateIndicatorHidden(false)
-                shiftedLeft(Self.indicatorReserved) { bar(section, showText: true, showAlign: true) }.coordinateIndicatorHidden(false)
-                shiftedLeft(Self.indicatorReserved) { bar(section, showText: false, showAlign: true) }.coordinateIndicatorHidden(false)
-                shiftedLeft(Self.indicatorReserved) { bar(section, showText: false, showAlign: false) }.coordinateIndicatorHidden(false)
-                centered(Self.edgeMargin) { bar(section, showText: false, showAlign: false) }.coordinateIndicatorHidden(true)
-            }
-        } else {
-            ViewThatFits(in: .horizontal) {
-                centered(Self.edgeMargin) { bar(section, showText: true, showAlign: true) }
-                centered(Self.edgeMargin) { bar(section, showText: false, showAlign: true) }
-                centered(Self.edgeMargin) { bar(section, showText: false, showAlign: false) }
+        let stages = showIndicator ? Self.indicatorStages : Self.plainStages
+        return ViewThatFits(in: .horizontal) {
+            ForEach(stages.indices, id: \.self) { index in
+                stageView(stages[index], section)
             }
         }
+    }
+
+    @ViewBuilder
+    private func stageView(_ stage: Layout, _ section: CrossSection) -> some View {
+        let keepsIndicator = stage.components.contains(.indicator)
+        let reserve = showIndicator && keepsIndicator ? Self.indicatorReserved : Self.edgeMargin
+        let content = bar(
+            section,
+            showText: stage.components.contains(.text),
+            showAlign: stage.components.contains(.align),
+            showFlip: stage.components.contains(.flip)
+        )
+        Group {
+            switch stage.alignment {
+            case .centered:    centered(reserve) { content }
+            case .shiftedLeft: shiftedLeft(reserve) { content }
+            }
+        }
+        .coordinateIndicatorHidden(!keepsIndicator)
     }
 
     // MARK: - Layout rows
@@ -92,7 +129,7 @@ struct ViewportBottomOverlay: View {
 
     // MARK: - Editing bar
 
-    private func bar(_ section: CrossSection, showText: Bool, showAlign: Bool) -> some View {
+    private func bar(_ section: CrossSection, showText: Bool, showAlign: Bool, showFlip: Bool) -> some View {
         HStack(spacing: 14) {
             HStack(spacing: 8) {
                 Toggle("", isOn: enabledBinding(section))
@@ -105,9 +142,10 @@ struct ViewportBottomOverlay: View {
                 }
             }
 
-            Divider().frame(height: 26)
-
-            Button("Flip") { viewport.flipSelectedCrossSection() }
+            if showFlip {
+                Divider().frame(height: 26)
+                Button("Flip") { viewport.flipSelectedCrossSection() }
+            }
 
             if showAlign {
                 Divider().frame(height: 26)
@@ -141,7 +179,7 @@ struct ViewportBottomOverlay: View {
                 .keyboardShortcut(.defaultAction)
         }
         .buttonStyle(.bordered)
-        .controlSize(.small)
+        .controlSize(.regular)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
