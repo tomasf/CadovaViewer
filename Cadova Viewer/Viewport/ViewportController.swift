@@ -94,6 +94,14 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
         set { _cameraNode.withLock { $0 = newValue } }
     }
     private let _cameraNode = Mutex<SCNNode>(SCNNode())
+
+    /// The latest SpaceMouse-commanded camera transform, handed from NavLib's setter (main thread,
+    /// lock-free) to the render loop, which applies it. This keeps the setter from running an
+    /// `SCNTransaction` commit — and taking the SceneKit scene lock — on every motion frame; that
+    /// contention stalled the run loop and backed NavLib's frames up, so the model kept gliding after
+    /// release. Applied in `renderer(_:updateAtTime:)`. See `ViewportController+SpaceMouse`.
+    let pendingNavLibTransform = Mutex<SCNMatrix4?>(nil)
+
     /// A directional "headlight" kept aimed along the camera's view direction. It lives on its own
     /// scene node (oriented each frame in `willRenderScene`) rather than being parented onto the
     /// point-of-view node — re-parenting a single light as SceneKit swaps point-of-view nodes could
@@ -388,6 +396,16 @@ class ViewportController: NSObject, ObservableObject, SCNSceneRendererDelegate {
     }
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        // Apply the latest SpaceMouse-commanded transform here (render thread), so NavLib's setter
+        // stays lock-free and never stalls the run loop on the scene lock.
+        if let pending = pendingNavLibTransform.withLock({ value -> SCNMatrix4? in
+            let latest = value
+            value = nil
+            return latest
+        }) {
+            cameraNode.transform = pending
+        }
+
         grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
         measurementRenderer.updateScreenSizes(renderer: sceneView)
 

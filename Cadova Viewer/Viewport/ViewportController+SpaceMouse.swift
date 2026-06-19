@@ -3,6 +3,7 @@ import AppKit
 import Combine
 import SceneKit
 import NavLib
+import Synchronization
 
 extension ViewportController {
     // The document owns one NavLib session whose state provider is this viewport while it's focused
@@ -21,6 +22,8 @@ extension ViewportController {
 
     func setNavLibSuspended(_ suspend: Bool) {
         navLibIsSuspended = suspend
+        // Drop any unapplied SpaceMouse transform so it can't fight a mouse drag or fly-to.
+        if suspend { pendingNavLibTransform.withLock { $0 = nil } }
         documentViewModel?.navLibSession.cancelMotion()
     }
 }
@@ -32,18 +35,22 @@ extension ViewportController: NavLibStateProvider {
 
     var cameraTransform: NavLib.Transform {
         get {
-            // Read the model transform, not `presentation.transform`: NavLib drives motion
-            // with actions disabled (so the two are identical), and reading the presentation
-            // tree synchronizes with the render thread on the scene lock, stalling the main
-            // thread every motion frame. Preset fly-tos animate, but suspend NavLib first.
-            (sceneView.pointOfView?.transform ?? SCNMatrix4Identity).navLibTransform
+            // Prefer the last commanded transform that the render loop hasn't applied yet, so NavLib
+            // reads back a consistent state. Otherwise the node's model transform — never the
+            // presentation tree, whose read takes the scene lock and stalls the main thread.
+            if let pending = pendingNavLibTransform.withLock({ $0 }) {
+                return pending.navLibTransform
+            }
+            return (sceneView.pointOfView?.transform ?? SCNMatrix4Identity).navLibTransform
         }
         set {
-            guard let pov = sceneView.pointOfView, !navLibIsSuspended else { return }
-            SCNTransaction.begin()
-            SCNTransaction.disableActions = true
-            pov.transform = newValue.scnMatrix
-            SCNTransaction.commit()
+            guard !navLibIsSuspended else { return }
+            // Hand the transform to the render loop instead of committing it here: an SCNTransaction
+            // commit on the main thread takes the scene lock every motion frame, contending with the
+            // render thread, stalling the run loop, and backing NavLib's frames up (the model kept
+            // moving for a while after release). `updateAtTime` applies it on the render thread.
+            pendingNavLibTransform.withLock { $0 = newValue.scnMatrix }
+            sceneView.setNeedsRedraw()
         }
     }
 
@@ -138,6 +145,11 @@ extension ViewportController: NavLibStateProvider {
         // Suspend mouse/trackpad camera navigation while a SpaceMouse motion is active so the two
         // don't fight (replaces toggling SceneKit's now-disabled allowsCameraControl).
         sceneView.cameraControlEnabled = !active
+        // NavLib writes the camera transform with actions disabled, which doesn't spin up SceneKit's
+        // render loop — so without this the view only repaints on demand and motion lags behind the
+        // data. Render vsync-paced for the duration of the motion (SceneKit's own camera control used
+        // to keep this alive via allowsCameraControl).
+        sceneView.rendersContinuously = active
     }
 }
 
