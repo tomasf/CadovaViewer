@@ -30,11 +30,14 @@ struct ViewportContentView: View {
                 viewportController.sceneViewSize = $0
                 paneSize = $0
             }
-            .overlay(alignment: .topTrailing) {
-                ViewportControlsOverlay(viewModel: viewModel, viewportID: viewportID, size: paneSize)
-            }
-            .overlay(alignment: .topLeading) {
-                CrossSectionButtonsOverlay(viewport: viewportController)
+            // Both top overlays share one row so layout keeps them apart: the cross-section buttons
+            // take the width left of the controls and wrap within it instead of sliding under them.
+            .overlay(alignment: .top) {
+                HStack(alignment: .top, spacing: 0) {
+                    CrossSectionButtonsOverlay(viewport: viewportController)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ViewportControlsOverlay(viewModel: viewModel, viewportID: viewportID, size: paneSize)
+                }
             }
             .overlay(alignment: .bottom) {
                 ViewportBottomOverlay(viewport: viewportController)
