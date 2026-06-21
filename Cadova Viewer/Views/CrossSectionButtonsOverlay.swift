@@ -68,7 +68,8 @@ struct CrossSectionButtonsOverlay: View {
         Button {
             viewport.addCrossSection()
         } label: {
-            chip(Image(systemName: "scissors"), foreground: .secondary, background: .ultraThinMaterial)
+            chip(Image("scissors.badge.plus"), foreground: .secondary, background: .ultraThinMaterial)
+                .symbolRenderingMode(.multicolor)
         }
         .buttonStyle(.plain)
         .help("Add a cross-section")
