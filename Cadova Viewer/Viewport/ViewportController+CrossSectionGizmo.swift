@@ -10,6 +10,7 @@ extension ViewportController {
     func beginCrossSectionGizmoDrag(at point: CGPoint) -> Bool {
         guard let id = selectedCrossSectionID,
               let section = crossSections.first(where: { $0.id == id }),
+              section.enabled, // an inactive cut still shows its (dimmed) gizmo, but can't be dragged
               !crossSectionGizmo.root.isHidden else { return false }
 
         let hits = sceneView.hitTest(point, options: [

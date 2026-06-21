@@ -2,9 +2,8 @@ import SwiftUI
 import ViewerCore
 
 /// Top-left cluster of scissor buttons: one per cross-section, each tinted its section colour (the
-/// selected one is a filled chip and shows its gizmo + bottom editing bar; hovering previews its
-/// plane), plus a button to add another. Wraps to further rows when the pane is too narrow to fit
-/// them all in one.
+/// selected one is a filled chip and shows its gizmo + bottom editing bar), plus a button to add
+/// another. Wraps to further rows when the pane is too narrow to fit them all in one.
 struct CrossSectionButtonsOverlay: View {
     @ObservedObject var viewport: ViewportController
 
@@ -23,26 +22,44 @@ struct CrossSectionButtonsOverlay: View {
     private func sectionButton(_ section: CrossSection) -> some View {
         let isSelected = viewport.selectedCrossSectionID == section.id
         let color = ColorPalette.color(forIndex: section.colorIndex)
-        return Button {
-            // Toggle: clicking the selected section again exits edit mode (closing the bottom bar).
-            viewport.selectedCrossSectionID = isSelected ? nil : section.id
-        } label: {
-            if isSelected {
-                chip(Image(systemName: "scissors"), foreground: .black, background: color)
-            } else {
-                chip(Image(systemName: "scissors"), foreground: color, background: .ultraThinMaterial)
+        let foreground: Color = isSelected ? .black : color
+        let background = isSelected ? AnyShapeStyle(color) : AnyShapeStyle(.ultraThinMaterial)
+        // The two zones fill the chip with no gap: each button carries its own padding so its hit area
+        // (the whole left/right half, full height) is far bigger than the glyph it shows.
+        return HStack(spacing: 0) {
+            // Left zone: a checkbox toggling the cut's active state.
+            Button {
+                viewport.setCrossSectionEnabled(section.id, !section.enabled)
+            } label: {
+                Image(systemName: section.enabled ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(foreground)
+                    .frame(maxHeight: .infinity)
+                    .padding(.leading, 6)
+                    .padding(.trailing, 4)
+                    .contentShape(Rectangle())
             }
-        }
-        .buttonStyle(.plain)
-        .opacity(section.enabled ? 1 : 0.4) // dim a disabled cut's button
-        .help("Cross-section (click to edit)")
-        .onHover { hovering in
-            if hovering {
-                viewport.hoveredCrossSectionID = section.id
-            } else if viewport.hoveredCrossSectionID == section.id {
-                viewport.hoveredCrossSectionID = nil
+            .buttonStyle(.plain)
+            .help(section.enabled ? "Active (click to deactivate)" : "Inactive (click to activate)")
+
+            // Right zone: the scissors enters/exits edit mode (clicking the selected one exits).
+            Button {
+                viewport.selectedCrossSectionID = isSelected ? nil : section.id
+            } label: {
+                Image(systemName: "scissors")
+                    .font(.system(size: 16))
+                    .foregroundStyle(foreground)
+                    .frame(maxHeight: .infinity)
+                    .padding(.leading, 4)
+                    .padding(.trailing, 6)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help("Cross-section (click to edit)")
         }
+        .frame(height: 28) // match chipContainer's height (16 content + 6 padding top/bottom)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)))
         .contextMenu {
             Toggle("Active", isOn: Binding(
                 get: { section.enabled },
@@ -68,19 +85,27 @@ struct CrossSectionButtonsOverlay: View {
         Button {
             viewport.addCrossSection()
         } label: {
-            chip(Image("scissors.badge.plus"), foreground: .secondary, background: .ultraThinMaterial)
-                .symbolRenderingMode(.multicolor)
+            chipContainer(background: AnyShapeStyle(.ultraThinMaterial)) {
+                HStack(spacing: 0) {
+                    Image(systemName: "scissors")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "plus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .buttonStyle(.plain)
+        .padding(.leading, 4) // a little breathing room from the section buttons
         .help("Add a cross-section")
     }
 
-    /// A button label styled like the viewport chrome buttons: an icon over a rounded background.
-    private func chip(_ icon: Image, foreground: Color, background: some ShapeStyle) -> some View {
-        icon
-            .font(.system(size: 16))
+    /// Wraps chip content in the shared rounded background used across the viewport chrome.
+    private func chipContainer<Content: View>(background: some ShapeStyle,
+                                              @ViewBuilder content: () -> Content) -> some View {
+        content()
             .frame(height: 16)
-            .foregroundStyle(foreground)
             .padding(6)
             .background(background)
             .clipShape(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)))

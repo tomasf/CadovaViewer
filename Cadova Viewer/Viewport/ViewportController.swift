@@ -162,13 +162,10 @@ class ViewportController: NSObject, ObservableObject {
     @Published var crossSections: [CrossSection] = [] {
         didSet {
             guard crossSections != oldValue else { return }
-            // Undo/redo (or delete) can drop the selected/hovered section — forget it so the gizmo and
-            // plane don't reference a section that no longer exists.
+            // Undo/redo (or delete) can drop the selected section — forget it so the gizmo and plane
+            // don't reference a section that no longer exists.
             if let id = selectedCrossSectionID, !crossSections.contains(where: { $0.id == id }) {
                 selectedCrossSectionID = nil
-            }
-            if let id = hoveredCrossSectionID, !crossSections.contains(where: { $0.id == id }) {
-                hoveredCrossSectionID = nil
             }
             applyCrossSection()
             scheduleRestorableStateInvalidation() // coalesced — safe to hit per frame during a drag
@@ -177,10 +174,6 @@ class ViewportController: NSObject, ObservableObject {
     /// The cross-section being edited: shows its plane + gizmo and is the target of the popover.
     @Published var selectedCrossSectionID: UUID? {
         didSet { if selectedCrossSectionID != oldValue { updateCrossSectionOverlays() } }
-    }
-    /// A cross-section being hovered in the button row: previews its plane (no gizmo).
-    @Published var hoveredCrossSectionID: UUID? {
-        didSet { if hoveredCrossSectionID != oldValue { updateCrossSectionOverlays() } }
     }
 
     @Published var canResetCameraRoll: Bool = false

@@ -145,6 +145,7 @@ struct ViewportBottomOverlay: View {
             if showFlip {
                 Divider().frame(height: 26)
                 Button("Flip") { viewport.flipSelectedCrossSection() }
+                    .disabled(!section.enabled) // an inactive cut can't be reshaped
             }
 
             if showAlign {
@@ -163,6 +164,7 @@ struct ViewportBottomOverlay: View {
                             .disabled(section.isAxisAligned)
                     }
                 }
+                .disabled(!section.enabled) // an inactive cut can't be reshaped
             }
 
             Divider().frame(height: 26)

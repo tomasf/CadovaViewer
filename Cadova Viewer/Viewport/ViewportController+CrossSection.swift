@@ -154,11 +154,12 @@ extension ViewportController {
             let anchor = crossSectionDrag?.pivot ?? crossSectionGizmoAnchor(for: section)
             let space = crossSectionDrag?.space ?? crossSectionGizmoSpaceForModifiers
             crossSectionGizmo.update(for: section, anchor: anchor, space: space)
+            crossSectionGizmo.setInteractive(section.enabled) // dim + lock the gizmo for an inactive cut
         } else {
             crossSectionGizmo.hide()
         }
 
-        if let id = selectedCrossSectionID ?? hoveredCrossSectionID,
+        if let id = selectedCrossSectionID,
            let section = crossSections.first(where: { $0.id == id }) {
             updateCrossSectionPlaneNode(for: section)
         } else {
@@ -405,7 +406,6 @@ extension ViewportController {
         clearCrossSectionCaps()
         updateCrossSections([], actionName: "Delete All Cross-Sections")
         selectedCrossSectionID = nil
-        hoveredCrossSectionID = nil
     }
 
     func flipSelectedCrossSection() {

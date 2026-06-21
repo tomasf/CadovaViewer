@@ -124,6 +124,12 @@ final class CrossSectionGizmo {
         return current - followNormal * (simd_dot(current, followNormal) - followDistance)
     }
 
+    /// Dims the whole gizmo when the cut is inactive: it still marks where the plane sits, but reads as
+    /// non-interactive (dragging is blocked while disabled).
+    func setInteractive(_ interactive: Bool) {
+        root.opacity = interactive ? 1 : 0.35
+    }
+
     /// Dims every handle except `active` (so a drag highlights what's being manipulated). Pass nil to
     /// restore all handles to full opacity.
     func setActiveHandle(_ active: Handle?) {
