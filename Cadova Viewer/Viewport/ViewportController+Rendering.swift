@@ -52,12 +52,6 @@ extension ViewportController: SCNSceneRendererDelegate {
             modelNode: modelInstance.root,
             viewSize: sceneViewSize
         )
-
-        // Keep edge lines ~1pt wide regardless of the drawable's backing scale.
-        let lineWidthInPoints = 1.0
-        let scale = max(renderer.currentViewport.width / sceneViewSize.width, 1.0)
-        if scale.isFinite {
-            renderer.currentRenderCommandEncoder?.setLineWidthPrivate(Float(lineWidthInPoints * scale))
-        }
+        // Edge lines are left at Metal's default 1-pixel line width (≈0.5pt on a 2× display).
     }
 }

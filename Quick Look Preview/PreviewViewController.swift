@@ -297,7 +297,6 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             modelNode: modelNode!,
             viewSize: sceneViewSize
         )
-
-        renderer.currentRenderCommandEncoder?.setLineWidthPrivate(1.0)
+        // Edge lines are left at Metal's default 1-pixel line width.
     }
 }
