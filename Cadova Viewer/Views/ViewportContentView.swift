@@ -42,6 +42,13 @@ struct ViewportContentView: View {
             .overlay(alignment: .bottom) {
                 ViewportBottomOverlay(viewport: viewportController)
             }
+            // The grid scale legend sits in the bottom-right corner just above the coordinate
+            // indicator, centred within the same footprint (142pt) the indicator reserves.
+            .overlay(alignment: .bottomTrailing) {
+                GridScaleLegend(stream: viewportController.gridScaleInfo)
+                    .frame(width: 142)
+                    .padding(.bottom, 132)
+            }
             .overlay {
                 if viewModel.hasMultipleViewports {
                     Rectangle()

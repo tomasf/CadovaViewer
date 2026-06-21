@@ -10,8 +10,28 @@ public final class ViewportGrid {
     private let fineGrid = SCNNode()
 
     private var currentCoarseSpacing = 0.0
+    private var currentFineFraction = 0.0
+    /// Continuous coarse-spacing exponent (coarse spacing = 10^this mm). Surfaced to the scale legend.
+    private var currentCoarseExponent = 0.0
     private var gridCenter = SCNVector3Zero
     private var gridRadius = 0.0
+
+    /// Snapshot of what the grid currently represents, for the on-screen scale legend. `coarseExponent`
+    /// is the *continuous* position on the metric ladder: the coarse spacing is 10^coarseExponent mm,
+    /// so its fractional part drives the legend's vertical scroll between units as you zoom.
+    public struct ScaleInfo: Equatable {
+        public var coarseExponent: Double
+        public var isVisible: Bool
+
+        public init(coarseExponent: Double, isVisible: Bool) {
+            self.coarseExponent = coarseExponent
+            self.isVisible = isVisible
+        }
+    }
+
+    public var scaleInfo: ScaleInfo {
+        ScaleInfo(coarseExponent: currentCoarseExponent, isVisible: !gridContainer.isHidden)
+    }
 
     /// Model footprint captured at load time. Used to seed the grid and to bound how far the
     /// view-following disk is allowed to grow at grazing angles.
@@ -155,7 +175,11 @@ public final class ViewportGrid {
         // coarse grid. The base opacity is baked into the vertex alpha (so crossing lines accumulate
         // like translucent lines should); `node.opacity` carries only this decade fade.
         let fraction = 1 - (ceil(log10(scale)) - log10(scale))
-        fineGrid.opacity = min(max(fraction, 0), 1)
+        currentFineFraction = min(max(fraction, 0), 1)
+        fineGrid.opacity = currentFineFraction
+        // Continuous ladder position: coarse spacing 10^(2 - floor(log10 scale)); the un-floored
+        // version slides smoothly so the legend can scroll between units rather than snap.
+        currentCoarseExponent = 2 - log10(scale)
 
         if lineDistance != currentCoarseSpacing || footprintChanged {
             coarseGrid.geometry = makeGridGeometry(lineDistance: lineDistance)

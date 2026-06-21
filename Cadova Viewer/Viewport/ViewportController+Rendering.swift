@@ -26,6 +26,7 @@ extension ViewportController: SCNSceneRendererDelegate {
 
     func renderer(_ renderer: any SCNSceneRenderer, willRenderScene scene: SCNScene, atTime time: TimeInterval) {
         grid.updateVisibility(cameraNode: cameraNode)
+        publishGridScaleIfNeeded()
 
         guard let pov = renderer.pointOfView?.presentation else { return }
 
@@ -53,5 +54,19 @@ extension ViewportController: SCNSceneRendererDelegate {
             viewSize: sceneViewSize
         )
         // Edge lines are left at Metal's default 1-pixel line width (≈0.5pt on a 2× display).
+    }
+
+    /// Pushes the grid's current scale to the legend, but only when it changes enough to matter:
+    /// a new spacing decade, a visibility change, or a noticeable shift in the fine-grid fade. This
+    /// keeps the (main-thread) UI update off the per-frame path while still tracking zoom.
+    private func publishGridScaleIfNeeded() {
+        let info = grid.scaleInfo
+        if let last = lastSentGridScale,
+           last.isVisible == info.isVisible,
+           abs(last.coarseExponent - info.coarseExponent) < 0.01 {
+            return
+        }
+        lastSentGridScale = info
+        gridScaleStream.send(info)
     }
 }

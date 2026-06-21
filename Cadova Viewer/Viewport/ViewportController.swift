@@ -182,6 +182,12 @@ class ViewportController: NSObject, ObservableObject {
     let coordinateIndicatorValueStream = CurrentValueSubject<OrientationIndicatorValues, Never>(.init(x: .zero, y: .zero, z: .zero))
     var coordinateIndicatorValues: AnyPublisher<OrientationIndicatorValues, Never> { coordinateIndicatorValueStream.eraseToAnyPublisher() }
 
+    /// Drives the on-screen grid scale legend. Pushed from the render delegate only when the spacing,
+    /// fade, or visibility meaningfully changes, so it doesn't churn the UI every frame.
+    let gridScaleStream = CurrentValueSubject<ViewportGrid.ScaleInfo, Never>(.init(coarseExponent: 0, isVisible: false))
+    var gridScaleInfo: AnyPublisher<ViewportGrid.ScaleInfo, Never> { gridScaleStream.eraseToAnyPublisher() }
+    var lastSentGridScale: ViewportGrid.ScaleInfo?
+
     var hoverPoint: CGPoint? {
         didSet {
             scheduleHoverPointUpdate()
