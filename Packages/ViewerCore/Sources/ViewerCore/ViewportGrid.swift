@@ -45,7 +45,7 @@ public final class ViewportGrid {
     public var suppressedForCrossSection = false { didSet { updateVisibility() }}
     private var cameraHidesGrid = false
 
-    private let maxGridOpacity = 0.15
+    private let maxGridOpacity = 0.05
     /// Grid lines render at full radial alpha out to this fraction of `gridRadius`, then smoothstep
     /// to zero at the rim so the disk dissolves instead of ending on a hard circle.
     private let fadeStartFraction = 0.6
@@ -127,13 +127,24 @@ public final class ViewportGrid {
         let clampedDistance = min(max(distance, modelBaseRadius * 0.1), modelBaseRadius * 25)
         let radius = clampedDistance * focusRadiusFactor
 
-        let centerShift = hypot(focus.x - gridCenter.x, focus.y - gridCenter.y)
+        // Once zoomed out far enough that the radius is capped, view-following degenerates into a tiny
+        // patch chasing the screen centre. Blend the centre back onto the model so it stays put under
+        // it instead of running off into a corner. (smoothstep over 12×…25× the model radius.)
+        let t = min(max((distance - modelBaseRadius * 12) / (modelBaseRadius * 13), 0), 1)
+        let farBlend = t * t * (3 - 2 * t)
+        let center = SCNVector3(
+            focus.x + (modelCenter.x - focus.x) * farBlend,
+            focus.y + (modelCenter.y - focus.y) * farBlend,
+            0
+        )
+
+        let centerShift = hypot(center.x - gridCenter.x, center.y - gridCenter.y)
         let radiusRatio = gridRadius > 0 ? radius / gridRadius : .infinity
         guard gridRadius == 0 || centerShift > gridRadius * 0.1 || radiusRatio > 1.1 || radiusRatio < 0.9 else {
             return false
         }
 
-        gridCenter = SCNVector3(focus.x, focus.y, 0)
+        gridCenter = center
         gridRadius = radius
         return true
     }
