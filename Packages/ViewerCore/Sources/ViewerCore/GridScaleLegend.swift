@@ -29,22 +29,28 @@ public struct GridScaleLegend: View {
     private static let rowHeight = 18.0
     /// How many rows from the centre a unit travels before it has fully faded out.
     private static let fadeRange = 1.25
+    /// Exponents whose spacing the grid actually draws, bounded by ViewportGrid's scale clamp:
+    /// coarse spans 1 mm…1 m (exponents 0…3) and fine reaches 0.1 mm (-1). Units outside this never
+    /// appear as real lines, so the legend doesn't label them — e.g. no faint "10 m" at the zoom-out
+    /// limit.
+    private static let drawableExponents = -1...3
 
     public var body: some View {
         let center = exponent
-        let lowest = Int((center - Self.fadeRange).rounded(.down))
-        let highest = Int((center + Self.fadeRange).rounded(.up))
+        let lowest = max(Int((center - Self.fadeRange).rounded(.down)), Self.drawableExponents.lowerBound)
+        let highest = min(Int((center + Self.fadeRange).rounded(.up)), Self.drawableExponents.upperBound)
 
         ZStack {
-            ForEach(lowest...highest, id: \.self) { unitExponent in
-                let distance = Double(unitExponent) - center
-                Text(Self.label(forExponent: unitExponent))
-                    .offset(y: distance * Self.rowHeight)
-                    .opacity(Self.rowOpacity(rowsFromCenter: abs(distance)))
+            if lowest <= highest {
+                ForEach(lowest...highest, id: \.self) { unitExponent in
+                    let distance = Double(unitExponent) - center
+                    Text(Self.label(forExponent: unitExponent))
+                        .offset(y: distance * Self.rowHeight)
+                        .opacity(Self.rowOpacity(rowsFromCenter: abs(distance)))
+                }
             }
         }
         .font(.system(size: 11, weight: .medium, design: .rounded))
-        .monospacedDigit()
         .foregroundStyle(.white)
         .shadow(color: .black, radius: 2)
         .frame(height: Self.rowHeight * Self.fadeRange * 2)
