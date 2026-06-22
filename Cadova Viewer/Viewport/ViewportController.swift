@@ -203,17 +203,21 @@ class ViewportController: NSObject, ObservableObject {
     /// the cursor moves. See `zoomCamera(factor:towardViewPoint:)`.
     var zoomPivot: SCNVector3?
 
-    // Camera glide (post-release momentum). A high-frequency timer integrates `inertiaVelocity` into
-    // `inertiaDelta` and re-applies the drag from its captured start. It ticks faster than the
-    // display refreshes so every rendered frame samples a fresh pose (matching an active drag, which
-    // updates at mouse-event rate) — a vsync-rate updater beats against SceneKit's render loop and
-    // looks choppy. See `ViewportController+CameraInteraction`.
-    var inertiaTimer: Timer?
-    var inertiaDragState: CameraDragState?
-    var inertiaDelta: SIMD2<Float> = .zero
-    var inertiaVelocity: SIMD2<Float> = .zero
-    var inertiaIsOrbit = false
-    var inertiaLastTime: CFTimeInterval = 0
+    /// Camera glide (post-release momentum). Each render-loop frame integrates `velocity` into `delta`
+    /// and re-applies the drag from its captured start. Stepping in the render loop
+    /// (`renderer(_:updateAtTime:)`) keeps it in lockstep with vsync, so every presented frame shows a
+    /// pose computed for that frame — a free-running timer instead beats against SceneKit's render loop
+    /// and looks choppy. The render loop reads/clears this while the main thread starts and cancels it,
+    /// so it's guarded by a `Mutex`. See `ViewportController+CameraInteraction`.
+    struct InertiaState {
+        var dragState: CameraDragState
+        var delta: SIMD2<Float>
+        var velocity: SIMD2<Float>
+        var isOrbit: Bool
+        /// 0 until the first render-loop step seeds it from that frame's time (so the first dt is 0).
+        var lastTime: CFTimeInterval = 0
+    }
+    let inertia = Mutex<InertiaState?>(nil)
     
     /// The geometry node currently named as the outline target, so its name can be cleared when
     /// the highlight moves. See `ViewportController+Highlight`.

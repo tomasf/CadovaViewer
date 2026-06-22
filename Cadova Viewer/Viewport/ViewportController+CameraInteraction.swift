@@ -40,6 +40,11 @@ extension ViewportController {
         let initialRight: SIMD3<Float>
         /// World units per screen point at the pivot's depth, for panning.
         let worldPerPoint: Float
+        /// The longer viewport edge (points) at drag start, captured here so `orbitCamera` can run on
+        /// the render thread during the inertia glide without touching `sceneView.bounds` (AppKit,
+        /// main-thread only). Captured from `bounds` rather than the SwiftUI-fed `sceneViewSize`, which
+        /// can briefly be zero (see the fallback in `fitModel`).
+        let maxViewportDim: Float
     }
 
     // MARK: - Pivot
@@ -83,7 +88,8 @@ extension ViewportController {
             pivot: pivot,
             initialTransform: m,
             initialRight: right,
-            worldPerPoint: worldPerPoint(atDepth: depth)
+            worldPerPoint: worldPerPoint(atDepth: depth),
+            maxViewportDim: Float(max(sceneView.bounds.width, sceneView.bounds.height, 1))
         )
     }
 
@@ -95,8 +101,9 @@ extension ViewportController {
     func orbitCamera(_ state: CameraDragState, dx: Float, dy: Float) {
         // SceneKit's turntable: angle = pixels × sensitivity × (360 / maxViewportDim) × (π / 180),
         // i.e. with the default sensitivity of 1, 2π per drag across the longer viewport edge.
-        let maxDim = Float(max(sceneView.bounds.width, sceneView.bounds.height, 1))
-        let speed = 2 * .pi / maxDim
+        // `maxViewportDim` is captured in the drag state (from `bounds`, on the main thread) so this
+        // works on the render thread during the inertia glide.
+        let speed = 2 * .pi / state.maxViewportDim
         let yaw = -dx * speed
         // Drag down (dy < 0) → look down at the top.
         let pitch = dy * speed
@@ -252,50 +259,49 @@ extension ViewportController {
     func startCameraInertia(dragState: CameraDragState, delta: SIMD2<Float>, velocity: SIMD2<Float>, isOrbit: Bool) {
         stopCameraInertia()
         guard simd_length(velocity) >= Self.inertiaMinStartSpeed else { return }
-        inertiaDragState = dragState
-        inertiaDelta = delta
-        inertiaVelocity = velocity
-        inertiaIsOrbit = isOrbit
-        inertiaLastTime = CACurrentMediaTime()
-        // Render vsync-paced for the whole glide. Otherwise SCNView only redraws on demand (via
-        // setNeedsRedraw), presenting at irregular intervals — full FPS but visibly choppy. An active
-        // drag ends up continuously rendered, which is why it looks smooth.
+        inertia.withLock { $0 = InertiaState(dragState: dragState, delta: delta, velocity: velocity, isOrbit: isOrbit) }
+        // Render vsync-paced for the whole glide, so the render loop ticks `stepCameraInertia` every
+        // frame. Otherwise SCNView only redraws on demand, presenting at irregular intervals — full FPS
+        // but visibly choppy. An active drag ends up continuously rendered, which is why it looks smooth.
         sceneView.rendersContinuously = true
-        // Tick well above the display refresh so each rendered frame samples a current pose.
-        let timer = Timer(timeInterval: 1.0 / 240.0, repeats: true) { [weak self] _ in self?.stepCameraInertia() }
-        RunLoop.main.add(timer, forMode: .common)
-        inertiaTimer = timer
     }
 
-    private func stepCameraInertia() {
-        guard let dragState = inertiaDragState else { stopCameraInertia(); return }
-
-        let now = CACurrentMediaTime()
-        let dt = Float(min(max(now - inertiaLastTime, 0), 0.1)) // guard against stalls / first frame
-        inertiaLastTime = now
-
-        // Integrate with real elapsed time, so the pose at any render is correct regardless of when
-        // ticks land — the motion stays smooth even if the timer jitters.
-        inertiaDelta += inertiaVelocity * dt
-        if inertiaIsOrbit {
-            orbitCamera(dragState, dx: inertiaDelta.x, dy: inertiaDelta.y)
-        } else {
-            panCamera(dragState, dx: inertiaDelta.x, dy: inertiaDelta.y)
+    /// Advances the glide one frame. Called from the render loop (`renderer(_:updateAtTime:)`) with that
+    /// frame's `time`, so each presented frame shows a pose computed for it — no timer-vs-vsync beat.
+    /// No-ops when no glide is active.
+    func stepCameraInertia(atTime time: TimeInterval) {
+        // Integrate under the lock; capture what to apply (and whether we just settled) for use outside.
+        let step: (dragState: CameraDragState, delta: SIMD2<Float>, isOrbit: Bool, stopped: Bool)?
+        step = inertia.withLock { state in
+            guard var s = state else { return nil }
+            // Seed the clock on the first frame so its dt is 0, then integrate with real elapsed time.
+            let dt = s.lastTime == 0 ? 0 : Float(min(max(time - s.lastTime, 0), 0.1))
+            s.lastTime = time
+            s.delta += s.velocity * dt
+            s.velocity *= pow(Self.inertiaRetentionPerFrame, dt * 60)
+            let stopped = simd_length(s.velocity) < Self.inertiaStopSpeed
+            let result = (s.dragState, s.delta, s.isOrbit, stopped)
+            state = stopped ? nil : s
+            return result
         }
-        sceneView.setNeedsRedraw()
+        guard let step else { return }
 
-        inertiaVelocity *= pow(Self.inertiaRetentionPerFrame, dt * 60)
-        if simd_length(inertiaVelocity) < Self.inertiaStopSpeed {
-            stopCameraInertia()
-            viewDidChange() // persist the resting position once the glide settles
+        if step.isOrbit {
+            orbitCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
+        } else {
+            panCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
+        }
+
+        if step.stopped {
+            DispatchQueue.main.async { [weak self] in
+                self?.sceneView.rendersContinuously = false
+                self?.viewDidChange() // persist the resting position once the glide settles
+            }
         }
     }
 
     func stopCameraInertia() {
-        inertiaTimer?.invalidate()
-        inertiaTimer = nil
-        inertiaDragState = nil
-        inertiaVelocity = .zero
+        inertia.withLock { $0 = nil }
         sceneView.rendersContinuously = false
     }
 }
