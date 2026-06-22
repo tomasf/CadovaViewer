@@ -44,6 +44,11 @@ final class DocumentViewModel: ObservableObject {
     /// Re-publishes this model whenever the focused viewport changes, so the focus-following
     /// toolbar in `DocumentView` refreshes.
     private var focusObservers: Set<AnyCancellable> = []
+    /// A viewport can publish while SwiftUI is applying a control update (for example, when a
+    /// toolbar picker writes through its binding). Forwarding that notification synchronously
+    /// re-enters the document view's update pass and triggers SwiftUI's "Publishing changes from
+    /// within view updates" diagnostic. Coalesce the forwarding onto the next run-loop turn.
+    private var focusedViewportRefreshScheduled = false
 
     /// Long-lived subscriptions (document-global options → restorable state).
     private var cancellables: Set<AnyCancellable> = []
@@ -73,7 +78,7 @@ final class DocumentViewModel: ObservableObject {
         // The toolbar's measurement mode picker follows the shared mode. (The list overlay observes
         // the controller directly, so only the mode needs to be forwarded here.)
         measurements.$interactionMode.dropFirst().sink { [weak self] _ in
-            self?.objectWillChange.send()
+            self?.scheduleFocusedViewportRefresh()
         }.store(in: &cancellables)
 
         measurements.didChange.sink { [weak self] _ in
@@ -106,7 +111,22 @@ final class DocumentViewModel: ObservableObject {
     private func observeFocusedViewport() {
         focusObservers.removeAll()
         guard let viewport = viewports[focusedViewportID] else { return }
-        viewport.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &focusObservers)
+        viewport.objectWillChange.sink { [weak self] _ in
+            self?.scheduleFocusedViewportRefresh()
+        }.store(in: &focusObservers)
+    }
+
+    /// Publishes one document-level refresh after the active SwiftUI/AppKit update has completed.
+    /// This is intentionally separate from the viewport's own notification: pane-local views still
+    /// update immediately, while the document-level toolbar/sidebar refresh is safely deferred.
+    private func scheduleFocusedViewportRefresh() {
+        guard !focusedViewportRefreshScheduled else { return }
+        focusedViewportRefreshScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            focusedViewportRefreshScheduled = false
+            objectWillChange.send()
+        }
     }
 
     private func showSidebarIfMeasurementsAreVisible() {

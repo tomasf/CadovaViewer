@@ -66,7 +66,15 @@ struct ViewportBottomOverlay: View {
             }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: viewport.selectedCrossSectionID)
-        .onPreferenceChange(CoordinateIndicatorHiddenKey.self) { hideIndicator = $0 }
+        .onPreferenceChange(CoordinateIndicatorHiddenKey.self) { hidden in
+            // Preference values are resolved during layout. Mutating `@State` synchronously here
+            // can therefore publish while SwiftUI is still updating this view hierarchy.
+            DispatchQueue.main.async {
+                if hideIndicator != hidden {
+                    hideIndicator = hidden
+                }
+            }
+        }
     }
 
     /// Picks the widest bar rung that fits the current indicator state.

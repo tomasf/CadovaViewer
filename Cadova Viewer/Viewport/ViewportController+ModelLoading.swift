@@ -30,7 +30,6 @@ extension ViewportController {
 
         grid.updateBounds(geometry: modelInstance.root)
         snapVertices = gatherSnapVertices()
-        objectWillChange.send()
     }
 
     /// Applies the document-global geometry options (edge visibility, smooth shading) to this
