@@ -2,3 +2,5 @@
 Packages/ViewerCore/.build/
 Packages/ViewerCore/build/
 Packages/ViewerCore/.swiftpm/
+.claude/
+/build/
