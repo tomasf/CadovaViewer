@@ -49,6 +49,7 @@ struct CrossSectionButtonsOverlay: View {
                 Image(systemName: "scissors")
                     .font(.system(size: 16))
                     .foregroundStyle(foreground)
+                    .opacity(section.enabled ? 1 : 0.6)
                     .frame(maxHeight: .infinity)
                     .padding(.leading, 4)
                     .padding(.trailing, 6)
@@ -85,8 +86,8 @@ struct CrossSectionButtonsOverlay: View {
         Button {
             viewport.addCrossSection()
         } label: {
-            chipContainer(background: AnyShapeStyle(.ultraThinMaterial)) {
-                HStack(spacing: 0) {
+            chipContainer(background: AnyShapeStyle(.ultraThinMaterial.opacity(0.4))) {
+                HStack(spacing: -1) {
                     Image(systemName: "scissors")
                         .font(.system(size: 13))
                         .foregroundStyle(.secondary)
@@ -94,6 +95,10 @@ struct CrossSectionButtonsOverlay: View {
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.secondary)
                 }
+            }
+            .overlay {
+                RoundedRectangle(cornerSize: CGSize(width: 8, height: 8))
+                    .strokeBorder(.secondary, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             }
         }
         .buttonStyle(.plain)
