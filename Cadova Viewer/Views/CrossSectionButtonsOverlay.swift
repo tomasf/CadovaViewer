@@ -6,6 +6,7 @@ import ViewerCore
 /// another. Wraps to further rows when the pane is too narrow to fit them all in one.
 struct CrossSectionButtonsOverlay: View {
     @ObservedObject var viewport: ViewportController
+    @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
         FlowLayout(spacing: 6) {
@@ -21,7 +22,9 @@ struct CrossSectionButtonsOverlay: View {
 
     private func sectionButton(_ section: CrossSection) -> some View {
         let isSelected = viewport.selectedCrossSectionID == section.id
-        let color = ColorPalette.color(forIndex: section.colorIndex)
+        let baseColor = ColorPalette.color(forIndex: section.colorIndex)
+        // Dim the section tint while the window is inactive, matching the measurement rows.
+        let color = appearsActive ? baseColor : baseColor.opacity(0.45)
         let foreground: Color = isSelected ? .black : color
         let background = isSelected ? AnyShapeStyle(color) : AnyShapeStyle(.ultraThinMaterial)
         // The two zones fill the chip with no gap: each button carries its own padding so its hit area
