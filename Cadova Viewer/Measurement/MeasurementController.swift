@@ -124,6 +124,30 @@ final class MeasurementController: ObservableObject {
         restore(Snapshot(measurements: [], nextColorIndex: 0), actionName: "Delete All Measurements")
     }
 
+    // MARK: - State restoration
+
+    /// The committed measurement state persisted in the document's restorable state.
+    struct RestorableState: Codable {
+        var measurements: [Measurement]
+        var nextColorIndex: Int
+    }
+
+    /// A snapshot of the *finished* measurements for restoration. The transient in-progress one (and
+    /// the hover preview) is excluded so a reopened document only restores completed measurements.
+    var restorableState: RestorableState {
+        RestorableState(measurements: measurements.filter { $0.phase == .complete }, nextColorIndex: nextColorIndex)
+    }
+
+    /// Replaces the measurement state from a restored snapshot. Not undoable (state restoration runs
+    /// before the user can act, and shouldn't seed the undo stack).
+    func loadRestorableState(_ state: RestorableState) {
+        measurements = state.measurements
+        nextColorIndex = state.nextColorIndex
+        hoverPreview = nil
+        highlightedID = nil
+        didChange.send(.structural)
+    }
+
     private var inProgressIndex: Int? {
         guard let last = measurements.indices.last, measurements[last].phase == .lengthInProgress else { return nil }
         return last

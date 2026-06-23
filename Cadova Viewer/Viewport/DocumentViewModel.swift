@@ -81,8 +81,11 @@ final class DocumentViewModel: ObservableObject {
             self?.scheduleFocusedViewportRefresh()
         }.store(in: &cancellables)
 
-        measurements.didChange.sink { [weak self] _ in
+        measurements.didChange.sink { [weak self] change in
             self?.showSidebarIfMeasurementsAreVisible()
+            // Only structural changes (add/remove/complete) alter the persisted set; live cursor
+            // moves and highlight changes don't, so don't re-encode the restorable state for those.
+            if case .structural = change { self?.document?.invalidateRestorableState() }
         }.store(in: &cancellables)
 
         // Start the document's single SpaceMouse session off the critical path (NlCreate blocks).
@@ -261,7 +264,8 @@ final class DocumentViewModel: ObservableObject {
             viewOptions: viewports.mapValues(\.viewOptionsForStateRestoration),
             documentOptions: sceneController.documentOptions,
             sidebarVisible: sidebarVisibility != .detailOnly,
-            crossSections: viewports.mapValues(\.crossSections)
+            crossSections: viewports.mapValues(\.crossSections),
+            measurements: measurements.restorableState
         )
     }
 
@@ -274,6 +278,9 @@ final class DocumentViewModel: ObservableObject {
         for viewport in viewports.values { viewport.tearDown() }
 
         sceneController.documentOptions = state.documentOptions
+        if let measurementState = state.measurements {
+            measurements.loadRestorableState(measurementState)
+        }
 
         var rebuilt: [UUID: ViewportController] = [:]
         for id in state.layout.leafIDs {
@@ -312,4 +319,6 @@ struct DocumentLayoutState: Codable {
     var sidebarVisible: Bool?
     /// Per-viewport cross-section planes. Optional so documents saved before cross-sections decode.
     var crossSections: [UUID: [CrossSection]]?
+    /// Document-global measurements. Optional so documents saved before measurements were persisted decode.
+    var measurements: MeasurementController.RestorableState?
 }
