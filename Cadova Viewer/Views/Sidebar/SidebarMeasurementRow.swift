@@ -10,6 +10,7 @@ struct SidebarMeasurementRow: View {
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
+            axisHeader
             coordinate("A", measurement.start)
             if let end = measurement.end {
                 coordinate("B", end)
@@ -66,18 +67,32 @@ struct SidebarMeasurementRow: View {
         }
     }
 
-    @ViewBuilder
-    private func keyValuePairBox(_ label: String, _ value: Double) -> some View {
-        VStack(alignment: .center, spacing: 0) {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .font(.caption)
-            Text(value.formattedDistance)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .textSelection(.enabled)
+    /// The X/Y/Z column headers, shown once above the coordinate rows. The leading spacer matches the
+    /// A/B/Δ row-label width so the headers line up over their value columns.
+    private var axisHeader: some View {
+        HStack(alignment: .center, spacing: 0) {
+            Color.clear.frame(width: 18)
+            columnHeader("X")
+            columnHeader("Y")
+            columnHeader("Z")
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func columnHeader(_ label: String) -> some View {
+        Text(label)
+            .foregroundStyle(.secondary)
+            .font(.caption)
+            .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func valueBox(_ value: Double) -> some View {
+        Text(value.formattedDistance)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -88,9 +103,9 @@ struct SidebarMeasurementRow: View {
                 .font(.headline)
                 .frame(width: 18, alignment: .leading)
 
-            keyValuePairBox("X", point.x)
-            keyValuePairBox("Y", point.y)
-            keyValuePairBox("Z", point.z)
+            valueBox(point.x)
+            valueBox(point.y)
+            valueBox(point.z)
         }
     }
 }
