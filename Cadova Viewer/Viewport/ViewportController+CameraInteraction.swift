@@ -19,6 +19,10 @@ extension ViewportController {
     /// End the glide once it decays below this speed.
     private static let inertiaStopSpeed: Float = 4
 
+    /// Roll's glide speeds are in radians/sec (not points/sec), so it needs its own thresholds.
+    private static let rollInertiaMinStartSpeed: Float = 0.25
+    private static let rollInertiaStopSpeed: Float = 0.08
+
     // Zoom limits, in multiples of the model's bounding radius — a distance-to-pivot for perspective,
     // a view half-height (orthographicScale) for orthographic. The zoom-in floor matters: a
     // multiplicative dolly can otherwise reach a near-zero distance, from which zooming back out
@@ -125,6 +129,19 @@ extension ViewportController {
         let translation = (-dx * state.worldPerPoint) * right + (-dy * state.worldPerPoint) * up
         var m = state.initialTransform
         m.columns.3 = SIMD4<Float>(state.initialTransform.columns.3.xyz + translation, 1)
+        applyCameraTransform(m)
+    }
+
+    /// Roll: rotate about the camera's view (forward) axis through the pivot, applied rigidly to the
+    /// drag-start transform so it stays drift-free and keeps the pivot world point fixed on screen.
+    /// Mirrors SceneKit's rotation-gesture roll (`rollBy:aroundScreenPoint:`). `angle` is the total
+    /// rotation from the start, in radians.
+    func rollCamera(_ state: CameraDragState, angle: Float) {
+        let forward = simd_normalize(-state.initialTransform.columns.2.xyz)
+        let rot = simd_quatf(angle: angle, axis: forward)
+        let position = state.initialTransform.columns.3.xyz
+        var m = simd_float4x4(rot) * state.initialTransform
+        m.columns.3 = SIMD4<Float>(state.pivot + rot.act(position - state.pivot), 1)
         applyCameraTransform(m)
     }
 
@@ -254,12 +271,14 @@ extension ViewportController {
     // MARK: - Inertia (post-release glide)
 
     /// Starts a glide from a finished drag. `delta` is the drag's final total delta and `velocity`
-    /// its release speed (same units/axes as `orbitCamera`/`panCamera` deltas; points/sec for pan,
-    /// raw-delta/sec for orbit). A slow release (below `inertiaMinStartSpeed`) doesn't glide.
-    func startCameraInertia(dragState: CameraDragState, delta: SIMD2<Float>, velocity: SIMD2<Float>, isOrbit: Bool) {
+    /// its release speed (same units/axes as the matching `orbitCamera`/`panCamera`/`rollCamera`
+    /// deltas; points/sec for pan, raw-delta/sec for orbit, radians/sec for roll in `.x`). A slow
+    /// release (below the mode's min-start speed) doesn't glide.
+    func startCameraInertia(dragState: CameraDragState, delta: SIMD2<Float>, velocity: SIMD2<Float>, mode: CameraInertiaMode) {
         stopCameraInertia()
-        guard simd_length(velocity) >= Self.inertiaMinStartSpeed else { return }
-        inertia.withLock { $0 = InertiaState(dragState: dragState, delta: delta, velocity: velocity, isOrbit: isOrbit) }
+        let minStart = mode == .roll ? Self.rollInertiaMinStartSpeed : Self.inertiaMinStartSpeed
+        guard simd_length(velocity) >= minStart else { return }
+        inertia.withLock { $0 = InertiaState(dragState: dragState, delta: delta, velocity: velocity, mode: mode) }
         // Render vsync-paced for the whole glide, so the render loop ticks `stepCameraInertia` every
         // frame. Otherwise SCNView only redraws on demand, presenting at irregular intervals — full FPS
         // but visibly choppy. An active drag ends up continuously rendered, which is why it looks smooth.
@@ -271,7 +290,7 @@ extension ViewportController {
     /// No-ops when no glide is active.
     func stepCameraInertia(atTime time: TimeInterval) {
         // Integrate under the lock; capture what to apply (and whether we just settled) for use outside.
-        let step: (dragState: CameraDragState, delta: SIMD2<Float>, isOrbit: Bool, stopped: Bool)?
+        let step: (dragState: CameraDragState, delta: SIMD2<Float>, mode: CameraInertiaMode, stopped: Bool)?
         step = inertia.withLock { state in
             guard var s = state else { return nil }
             // Seed the clock on the first frame so its dt is 0, then integrate with real elapsed time.
@@ -279,17 +298,18 @@ extension ViewportController {
             s.lastTime = time
             s.delta += s.velocity * dt
             s.velocity *= pow(Self.inertiaRetentionPerFrame, dt * 60)
-            let stopped = simd_length(s.velocity) < Self.inertiaStopSpeed
-            let result = (s.dragState, s.delta, s.isOrbit, stopped)
+            let stopSpeed = s.mode == .roll ? Self.rollInertiaStopSpeed : Self.inertiaStopSpeed
+            let stopped = simd_length(s.velocity) < stopSpeed
+            let result = (s.dragState, s.delta, s.mode, stopped)
             state = stopped ? nil : s
             return result
         }
         guard let step else { return }
 
-        if step.isOrbit {
-            orbitCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
-        } else {
-            panCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
+        switch step.mode {
+        case .orbit: orbitCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
+        case .pan: panCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
+        case .roll: rollCamera(step.dragState, angle: step.delta.x)
         }
 
         if step.stopped {

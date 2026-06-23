@@ -83,6 +83,44 @@ extension CustomSceneView {
         viewportController.zoomCamera(factor: 1 + Double(event.magnification), towardViewPoint: point)
     }
 
+    /// Trackpad two-finger rotation gesture → roll about the screen-depth axis (like SceneKit's native
+    /// interaction). Unlike orbit/pan (a synchronous `MouseTracker` loop), this arrives as discrete
+    /// phased events, so the angle is accumulated across them and a glide is started on release.
+    override func rotate(with event: NSEvent) {
+        guard let viewportController, cameraControlEnabled else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        switch event.phase {
+        case .began:
+            viewportController.requestFocus()
+            mouseInteractionActiveSubject.send(true)
+            // beginCameraDrag cancels any ongoing glide and hit-tests the pivot under the cursor.
+            rollDragState = viewportController.beginCameraDrag(atViewPoint: point)
+            rollAngle = 0
+            rollVelocityTracker = RollVelocityTracker()
+        case .changed:
+            guard let state = rollDragState else { return }
+            // NSEvent.rotation is the per-event delta in degrees (CCW positive); accumulate a total so
+            // the view tracks the fingers, and apply in radians.
+            rollAngle += Float(event.rotation) * .pi / 180
+            rollVelocityTracker.record(angle: rollAngle)
+            viewportController.rollCamera(state, angle: rollAngle)
+        case .ended, .cancelled:
+            defer {
+                rollDragState = nil
+                mouseInteractionActiveSubject.send(false)
+            }
+            guard let state = rollDragState else { return }
+            viewportController.startCameraInertia(
+                dragState: state,
+                delta: SIMD2(rollAngle, 0),
+                velocity: SIMD2(rollVelocityTracker.release(), 0),
+                mode: .roll
+            )
+        default:
+            break
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
         // Any click (including the start of a camera drag) focuses this viewport.
         viewportController?.requestFocus()

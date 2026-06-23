@@ -43,6 +43,12 @@ class CustomSceneView: SCNView {
     /// portion and reused through the inertial tail.
     var scrollGestureZooms = false
 
+    /// In-progress trackpad rotation-gesture (roll) state, accumulated across the gesture's discrete
+    /// phased events. See `rotate(with:)`.
+    var rollDragState: ViewportController.CameraDragState?
+    var rollAngle: Float = 0
+    var rollVelocityTracker = RollVelocityTracker()
+
     let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
     let contextMenuSubject = PassthroughSubject<NSEvent, Never>()

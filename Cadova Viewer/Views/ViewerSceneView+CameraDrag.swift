@@ -115,7 +115,7 @@ extension CustomSceneView {
 
         if didMove {
             let inertia = velocityTracker.inertia(axisLock: axisLock)
-            viewportController?.startCameraInertia(dragState: dragState, delta: inertia.delta, velocity: inertia.velocity, isOrbit: mode == .orbit)
+            viewportController?.startCameraInertia(dragState: dragState, delta: inertia.delta, velocity: inertia.velocity, mode: mode == .orbit ? .orbit : .pan)
         } else {
             switch endEvent.type {
             case .rightMouseUp: contextMenuSubject.send(endEvent)
@@ -154,5 +154,28 @@ private struct CameraDragVelocityTracker {
         if axisLock == .horizontal { velocity.y = 0 }
         if axisLock == .vertical { velocity.x = 0 }
         return (delta, velocity)
+    }
+}
+
+/// Tracks angular speed (radians/sec) across the discrete events of a trackpad rotation gesture, so
+/// the post-release roll glide starts at the right speed. Mirrors `CameraDragVelocityTracker`: lightly
+/// smoothed, and zeroed if released after a pause so a deliberate stop doesn't fling.
+struct RollVelocityTracker {
+    private var lastAngle: Float = 0
+    private var lastMoveTime = CACurrentMediaTime()
+    private var velocity: Float = 0
+
+    mutating func record(angle: Float) {
+        let now = CACurrentMediaTime()
+        let dt = max(now - lastMoveTime, 1.0 / 60.0)
+        let instant = (angle - lastAngle) / Float(dt)
+        velocity = instant * 0.6 + velocity * 0.4
+        lastAngle = angle
+        lastMoveTime = now
+    }
+
+    /// Release speed (radians/sec), zero if the gesture stalled before lifting off.
+    func release() -> Float {
+        CACurrentMediaTime() - lastMoveTime > 0.06 ? 0 : velocity
     }
 }

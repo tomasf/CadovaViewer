@@ -209,11 +209,14 @@ class ViewportController: NSObject, ObservableObject {
     /// pose computed for that frame — a free-running timer instead beats against SceneKit's render loop
     /// and looks choppy. The render loop reads/clears this while the main thread starts and cancels it,
     /// so it's guarded by a `Mutex`. See `ViewportController+CameraInteraction`.
+    enum CameraInertiaMode { case orbit, pan, roll }
     struct InertiaState {
         var dragState: CameraDragState
         var delta: SIMD2<Float>
         var velocity: SIMD2<Float>
-        var isOrbit: Bool
+        /// Which gliding motion `delta`/`velocity` describe. For `.roll`, only `.x` is used (the angle
+        /// and angular speed, in radians).
+        var mode: CameraInertiaMode
         /// 0 until the first render-loop step seeds it from that frame's time (so the first dt is 0).
         var lastTime: CFTimeInterval = 0
     }
