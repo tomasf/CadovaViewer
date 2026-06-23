@@ -25,6 +25,8 @@ extension ViewportController {
             measurementController.hover(at: worldPoint, sourceViewportID: viewportID)
         }
 
+        updateCrossSectionGizmoHover(at: hoverPoint)
+
         sceneView.setNeedsRedraw()
         updateNavLibPointerPosition()
     }

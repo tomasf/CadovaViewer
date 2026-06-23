@@ -173,7 +173,12 @@ class ViewportController: NSObject, ObservableObject {
     }
     /// The cross-section being edited: shows its plane + gizmo and is the target of the popover.
     @Published var selectedCrossSectionID: UUID? {
-        didSet { if selectedCrossSectionID != oldValue { updateCrossSectionOverlays() } }
+        didSet {
+            if selectedCrossSectionID != oldValue {
+                updateCrossSectionOverlays()
+                updateCrossSectionCapHatchStrength() // bolder hatch on the edited section's cap
+            }
+        }
     }
 
     @Published var canResetCameraRoll: Bool = false

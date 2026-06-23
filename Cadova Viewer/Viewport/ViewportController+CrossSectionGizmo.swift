@@ -13,11 +13,7 @@ extension ViewportController {
               section.enabled, // an inactive cut still shows its (dimmed) gizmo, but can't be dragged
               !crossSectionGizmo.root.isHidden else { return false }
 
-        let hits = sceneView.hitTest(point, options: [
-            .rootNode: crossSectionGizmo.root,
-            .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber
-        ])
-        guard let hit = hits.first, let handle = crossSectionGizmo.handle(for: hit.node) else { return false }
+        guard let handle = crossSectionGizmoHandle(at: point) else { return false }
 
         let ray = worldRay(at: point)
         let pivot = crossSectionGizmoAnchor(for: section) // the gizmo's on-plane anchor, near the view
@@ -34,6 +30,40 @@ extension ViewportController {
         crossSectionGizmo.setActiveHandle(handle) // dim the other handles
         sceneView.setNeedsRedraw()
         return true
+    }
+
+    /// Brightens the gizmo handle under the cursor (or clears the highlight) so the gizmo feels
+    /// interactive. Driven by the hover pipeline; a no-op while dragging (the drag owns the highlight).
+    func updateCrossSectionGizmoHover(at point: CGPoint?) {
+        guard crossSectionDrag == nil,
+              let point,
+              let id = selectedCrossSectionID,
+              let section = crossSections.first(where: { $0.id == id }),
+              section.enabled, // an inactive cut's gizmo can't be dragged, so don't suggest it can
+              !crossSectionGizmo.root.isHidden else {
+            crossSectionGizmo.setHoveredHandle(nil)
+            return
+        }
+        crossSectionGizmo.setHoveredHandle(crossSectionGizmoHandle(at: point))
+    }
+
+    /// The gizmo handle under a view point, or nil. Tested in two passes so the generous hit proxies
+    /// never override an exact hit: first the visible handle geometry (an exact hit on the drawn
+    /// arrow/ring/cube wins, even when it sits inside another handle's larger proxy), then — only if
+    /// nothing visible is under the cursor — the fat invisible proxies. Within a pass, the hit nearest
+    /// the camera wins.
+    private func crossSectionGizmoHandle(at point: CGPoint) -> CrossSectionGizmo.Handle? {
+        for category in [CrossSectionGizmo.visibleHitCategory, CrossSectionGizmo.proxyHitCategory] {
+            let hits = sceneView.hitTest(point, options: [
+                .rootNode: crossSectionGizmo.root,
+                .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber,
+                .categoryBitMask: category as NSNumber
+            ])
+            if let handle = hits.first.flatMap({ crossSectionGizmo.handle(for: $0.node) }) {
+                return handle
+            }
+        }
+        return nil
     }
 
     func updateCrossSectionGizmoDrag(at point: CGPoint) {

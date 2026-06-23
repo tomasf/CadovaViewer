@@ -20,8 +20,7 @@ struct ViewportBottomOverlay: View {
     /// indicator, then shed the label and the Align group, and finally drop the indicator to take the
     /// full pane width. `ViewThatFits` renders the first rung that fits.
     private static let indicatorStages: [Layout] = [
-        Layout(alignment: .centered,    components: [.text, .align, .flip, .indicator]),
-        Layout(alignment: .shiftedLeft, components: [.text, .align, .flip, .indicator]),
+        Layout(alignment: .centered,    components: [.align, .flip, .indicator]),
         Layout(alignment: .shiftedLeft, components: [.align, .flip, .indicator]),
         Layout(alignment: .centered,    components: [.align, .flip]),
         Layout(alignment: .centered,    components: [.flip]),
@@ -30,7 +29,6 @@ struct ViewportBottomOverlay: View {
 
     /// The ladder when the indicator is already off: just shed features, always centred.
     private static let plainStages: [Layout] = [
-        Layout(alignment: .centered, components: [.text, .align, .flip, .indicator]),
         Layout(alignment: .centered, components: [.align, .flip, .indicator]),
         Layout(alignment: .centered, components: [.flip, .indicator]),
         Layout(alignment: .centered, components: [.indicator]),
@@ -39,7 +37,7 @@ struct ViewportBottomOverlay: View {
     /// One rung of the fit ladder: how to place the bar and which parts it carries.
     private struct Layout {
         enum Alignment { case centered, shiftedLeft }
-        enum Component { case text, align, flip, indicator }
+        enum Component { case align, flip, indicator }
         var alignment: Alignment
         var components: Set<Component>
     }
@@ -93,7 +91,6 @@ struct ViewportBottomOverlay: View {
         let reserve = showIndicator && keepsIndicator ? Self.indicatorReserved : Self.edgeMargin
         let content = bar(
             section,
-            showText: stage.components.contains(.text),
             showAlign: stage.components.contains(.align),
             showFlip: stage.components.contains(.flip)
         )
@@ -137,16 +134,17 @@ struct ViewportBottomOverlay: View {
 
     // MARK: - Editing bar
 
-    private func bar(_ section: CrossSection, showText: Bool, showAlign: Bool, showFlip: Bool) -> some View {
+    private func bar(_ section: CrossSection, showAlign: Bool, showFlip: Bool) -> some View {
         VStack(spacing: 12) {
             Text("Cross-Section")
 
-            HStack(spacing: 14) {
-                VStack(spacing: 3) {
-                    Toggle("", isOn: enabledBinding(section))
+            HStack(spacing: 26) {
+                VStack(spacing: 4) {
+                    Toggle("Enabled", isOn: enabledBinding(section))
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .controlSize(.mini)
+                        .frame(height: 24)
 
                     Text("Enabled")
                         .font(.caption2)
@@ -154,15 +152,17 @@ struct ViewportBottomOverlay: View {
                 }
 
                 if showFlip {
-                    Divider().frame(height: 26)
-                    Button("Flip") { viewport.flipSelectedCrossSection() }
-                        .disabled(!section.enabled) // an inactive cut can't be reshaped
+                    VStack(spacing: 4) {
+                        Button("Flip") { viewport.flipSelectedCrossSection() }
+                            .disabled(!section.enabled) // an inactive cut can't be reshaped
+                        Text("Direction")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if showAlign {
-                    Divider().frame(height: 26)
-
-                    VStack(spacing: 3) {
+                    VStack(spacing: 4) {
                         HStack(spacing: 6) {
                             ForEach(CrossSection.Axis.allCases, id: \.self) { axis in
                                 Button(axis.displayName) { viewport.alignSelectedCrossSection(to: axis) }
@@ -172,25 +172,32 @@ struct ViewportBottomOverlay: View {
                                 .disabled(section.isAxisAligned)
                         }
 
-                        Text("Align")
+                        Text("Align to axis")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                     .disabled(!section.enabled) // an inactive cut can't be reshaped
                 }
 
-                Divider().frame(height: 26)
+                VStack(spacing: 4) {
+                    HStack(spacing: 14) {
+                        Button(role: .destructive) {
+                            viewport.deleteCrossSection(section.id)
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .help("Delete this cross-section")
 
-                Button(role: .destructive) {
-                    viewport.deleteCrossSection(section.id)
-                } label: {
-                    Image(systemName: "trash")
+                        Button("Done") { viewport.selectedCrossSectionID = nil }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.defaultAction)
+                    }
+
+                    Text("")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .hidden()
                 }
-                .help("Delete this cross-section")
-
-                Button("Done") { viewport.selectedCrossSectionID = nil }
-                    .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
             }
         }
         .buttonStyle(.bordered)

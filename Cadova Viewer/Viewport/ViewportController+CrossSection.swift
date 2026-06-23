@@ -60,6 +60,7 @@ extension ViewportController {
     float4 capStripeColor;
     float3 hatchDirection;
     float hatchSpacing;
+    float hatchStrength;
     #pragma body
     float3 csWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
     int csCount = int(round(crossSectionCount));
@@ -72,7 +73,7 @@ extension ViewportController {
     _surface.diffuse = capColor;
     float hatchCoordinate = dot(csWorld, hatchDirection) / hatchSpacing;
     if (fract(hatchCoordinate) < 0.5) {
-        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, 0.2);
+        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, hatchStrength);
     }
     """
 
@@ -322,6 +323,7 @@ extension ViewportController {
             setClipUniforms(on: material, packed: packed, skip: cap.sectionIndex)
             material.setValue(NSValue(scnVector3: SCNVector3(cap.hatch.x, cap.hatch.y, cap.hatch.z)), forKey: "hatchDirection")
             material.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
+            material.setValue(NSNumber(value: hatchStrength(forSection: cap.key.section)), forKey: "hatchStrength")
             cap.geometry.materials = [material]
 
             if let node = crossSectionCapNodesByKey[cap.key] {
@@ -341,6 +343,21 @@ extension ViewportController {
 
     func clearCrossSectionCaps() {
         for (_, node) in crossSectionCapNodesByKey { node.isHidden = true }
+    }
+
+    /// How strongly the diagonal hatch is blended into a section's cap. The section being edited gets a
+    /// much bolder hatch so its cut face stands out from the others.
+    private func hatchStrength(forSection id: UUID) -> Float {
+        id == selectedCrossSectionID ? 0.75 : 0.2
+    }
+
+    /// Re-pushes the hatch strength to the existing cap materials (no geometry rebuild) so the selected
+    /// section's bolder hatch appears/disappears the instant edit mode is entered or left.
+    func updateCrossSectionCapHatchStrength() {
+        for (key, material) in crossSectionCapMaterialsByKey {
+            material.setValue(NSNumber(value: hatchStrength(forSection: key.section)), forKey: "hatchStrength")
+        }
+        sceneView.setNeedsRedraw()
     }
 
     // MARK: - Clip uniform packing

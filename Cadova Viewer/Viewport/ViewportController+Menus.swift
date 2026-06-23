@@ -147,10 +147,10 @@ extension ViewportController {
                 self.addCrossSection()
             }
             submenu.addSeparator()
-            // Single toggle so one keystroke flips them all. Shows "Deactivate All" while any section
-            // is active, otherwise "Activate All".
+            // Single toggle so one keystroke flips them all. Shows "Disable All" while any section
+            // is enabled, otherwise "Enable All".
             let anyEnabled = self.crossSections.contains { $0.enabled }
-            submenu.addItem(label: anyEnabled ? "Deactivate All" : "Activate All", enabled: !self.crossSections.isEmpty,
+            submenu.addItem(label: anyEnabled ? "Disable All" : "Enable All", enabled: !self.crossSections.isEmpty,
                             keyEquivalent: "a", modifiers: [.command, .control]) {
                 self.setAllCrossSectionsEnabled(!anyEnabled)
             }

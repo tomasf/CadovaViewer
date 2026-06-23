@@ -27,7 +27,7 @@ struct CrossSectionButtonsOverlay: View {
         // The two zones fill the chip with no gap: each button carries its own padding so its hit area
         // (the whole left/right half, full height) is far bigger than the glyph it shows.
         return HStack(spacing: 0) {
-            // Left zone: a checkbox toggling the cut's active state.
+            // Left zone: a checkbox toggling the cut's enabled state.
             Button {
                 viewport.setCrossSectionEnabled(section.id, !section.enabled)
             } label: {
@@ -40,7 +40,7 @@ struct CrossSectionButtonsOverlay: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(section.enabled ? "Active (click to deactivate)" : "Inactive (click to activate)")
+            .help(section.enabled ? "Enabled (click to disable)" : "Disabled (click to enable)")
 
             // Right zone: the scissors enters/exits edit mode (clicking the selected one exits).
             Button {
@@ -62,7 +62,7 @@ struct CrossSectionButtonsOverlay: View {
         .background(background)
         .clipShape(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)))
         .contextMenu {
-            Toggle("Active", isOn: Binding(
+            Toggle("Enabled", isOn: Binding(
                 get: { section.enabled },
                 set: { viewport.setCrossSectionEnabled(section.id, $0) }
             ))
