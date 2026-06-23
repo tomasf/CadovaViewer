@@ -77,26 +77,23 @@ extension ViewportController {
     }
     """
 
-    /// Surface modifier for the translucent locator plane: draws a subtle world-anchored grid so the
-    /// plane's orientation reads clearly (a flat gray fill gives no parallax cue, especially zoomed
-    /// in). `gridAxisU`/`gridAxisV` are the plane's in-plane basis in world space; lines fall every
-    /// `gridSpacing` mm and are kept ~1px wide via `fwidth` so they stay crisp at any zoom.
+    /// Surface modifier for the translucent locator plane: draws a world-anchored diagonal hatch so the
+    /// plane's orientation reads clearly (a flat gray fill gives no parallax cue, especially zoomed in)
+    /// and so it echoes the cut-cap hatch — the same direction and solid alternating bands. `hatchAxis`
+    /// is the in-plane direction the stripe spacing runs along (world space); bands repeat every
+    /// `hatchSpacing` mm, with a ~1px softened edge (via `fwidth`) so they don't shimmer at any zoom.
     static let planeGridShaderModifier = """
     #pragma arguments
-    float3 gridAxisU;
-    float3 gridAxisV;
-    float gridSpacing;
-    float4 gridLineColor;
+    float3 hatchAxis;
+    float hatchSpacing;
+    float4 hatchColor;
     #pragma body
-    float3 pgWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
-    float cu = dot(pgWorld, gridAxisU) / gridSpacing;
-    float cv = dot(pgWorld, gridAxisV) / gridSpacing;
-    float du = fwidth(cu);
-    float dv = fwidth(cv);
-    float lu = 1.0 - smoothstep(0.0, du, abs(fract(cu - 0.5) - 0.5));
-    float lv = 1.0 - smoothstep(0.0, dv, abs(fract(cv - 0.5) - 0.5));
-    float line = max(lu, lv);
-    _surface.diffuse = mix(_surface.diffuse, gridLineColor, line * gridLineColor.a);
+    float3 phWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
+    float c = dot(phWorld, hatchAxis) / hatchSpacing;
+    float f = fract(c);
+    float d = fwidth(c);
+    float band = 1.0 - smoothstep(0.5 - d, 0.5 + d, f); // solid stripe over the first half of each period
+    _surface.diffuse = mix(_surface.diffuse, hatchColor, band * hatchColor.a);
     """
 
     /// Attaches the clip modifier to this viewport's model materials. Called once per loaded model.
@@ -192,20 +189,20 @@ extension ViewportController {
             material.writesToDepthBuffer = false
             material.blendMode = .alpha
             material.shaderModifiers = [.surface: Self.planeGridShaderModifier]
-            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.8)), forKey: "gridLineColor")
+            material.setValue(NSValue(scnVector4: SCNVector4(1, 1, 1, 0.32)), forKey: "hatchColor")
             plane.firstMaterial = material
             node.geometry = plane
         }
         plane.width = CGFloat(diagonal)
         plane.height = CGFloat(diagonal)
 
-        // Fixed, round-number grid spacing (~1/20 of the model, snapped to a power of ten).
-        let spacing = max(pow(10, (log10(Double(diagonal) / 20)).rounded()), 1)
-        let u = section.orientation.act(SIMD3(1, 0, 0))
-        let v = section.orientation.act(SIMD3(0, 1, 0))
-        plane.firstMaterial?.setValue(NSValue(scnVector3: SCNVector3(u.x, u.y, u.z)), forKey: "gridAxisU")
-        plane.firstMaterial?.setValue(NSValue(scnVector3: SCNVector3(v.x, v.y, v.z)), forKey: "gridAxisV")
-        plane.firstMaterial?.setValue(NSNumber(value: spacing), forKey: "gridSpacing")
+        // Diagonal hatch in the plane, matching the cut-cap hatch direction and density. Spacing uses
+        // the same basis as the cap (`updateCrossSectionCap`): the model's max extent / 90, not the
+        // diagonal (which is longer and would make the locator bands wider than the cap's).
+        let hatchAxis = hatchDirection(for: SIMD3<Float>(section.normal))
+        let hatchSpacing = max(Double((bounds.max - bounds.min).max()) / 90, 0.3)
+        plane.firstMaterial?.setValue(NSValue(scnVector3: SCNVector3(hatchAxis.x, hatchAxis.y, hatchAxis.z)), forKey: "hatchAxis")
+        plane.firstMaterial?.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
 
         let normal = section.normal
         let normalFloat = SIMD3<Float>(normal)
