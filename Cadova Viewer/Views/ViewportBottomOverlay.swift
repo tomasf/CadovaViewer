@@ -138,55 +138,60 @@ struct ViewportBottomOverlay: View {
     // MARK: - Editing bar
 
     private func bar(_ section: CrossSection, showText: Bool, showAlign: Bool, showFlip: Bool) -> some View {
-        HStack(spacing: 14) {
-            HStack(spacing: 8) {
-                Toggle("", isOn: enabledBinding(section))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                if showText {
-                    Text("Cross-section")
-                        .fixedSize()
-                }
-            }
+        VStack(spacing: 12) {
+            Text("Cross-Section")
 
-            if showFlip {
-                Divider().frame(height: 26)
-                Button("Flip") { viewport.flipSelectedCrossSection() }
-                    .disabled(!section.enabled) // an inactive cut can't be reshaped
-            }
-
-            if showAlign {
-                Divider().frame(height: 26)
-
+            HStack(spacing: 14) {
                 VStack(spacing: 3) {
-                    Text("Align")
+                    Toggle("", isOn: enabledBinding(section))
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+
+                    Text("Enabled")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    HStack(spacing: 6) {
-                        ForEach(CrossSection.Axis.allCases, id: \.self) { axis in
-                            Button(axis.displayName) { viewport.alignSelectedCrossSection(to: axis) }
-                                .disabled(section.isAligned(to: axis))
-                        }
-                        Button("Nearest") { viewport.snapSelectedCrossSectionToNearestAxis() }
-                            .disabled(section.isAxisAligned)
-                    }
                 }
-                .disabled(!section.enabled) // an inactive cut can't be reshaped
+
+                if showFlip {
+                    Divider().frame(height: 26)
+                    Button("Flip") { viewport.flipSelectedCrossSection() }
+                        .disabled(!section.enabled) // an inactive cut can't be reshaped
+                }
+
+                if showAlign {
+                    Divider().frame(height: 26)
+
+                    VStack(spacing: 3) {
+                        HStack(spacing: 6) {
+                            ForEach(CrossSection.Axis.allCases, id: \.self) { axis in
+                                Button(axis.displayName) { viewport.alignSelectedCrossSection(to: axis) }
+                                    .disabled(section.isAligned(to: axis))
+                            }
+                            Button("Nearest") { viewport.snapSelectedCrossSectionToNearestAxis() }
+                                .disabled(section.isAxisAligned)
+                        }
+
+                        Text("Align")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(!section.enabled) // an inactive cut can't be reshaped
+                }
+
+                Divider().frame(height: 26)
+
+                Button(role: .destructive) {
+                    viewport.deleteCrossSection(section.id)
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help("Delete this cross-section")
+
+                Button("Done") { viewport.selectedCrossSectionID = nil }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             }
-
-            Divider().frame(height: 26)
-
-            Button(role: .destructive) {
-                viewport.deleteCrossSection(section.id)
-            } label: {
-                Image(systemName: "trash")
-            }
-            .help("Delete this cross-section")
-
-            Button("Done") { viewport.selectedCrossSectionID = nil }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
         }
         .buttonStyle(.bordered)
         .controlSize(.regular)
