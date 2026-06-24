@@ -64,6 +64,14 @@ struct CrossSectionButtonsOverlay: View {
         .frame(height: 28) // match chipContainer's height (16 content + 6 padding top/bottom)
         .background(background)
         .clipShape(RoundedRectangle(cornerSize: CGSize(width: 8, height: 8)))
+        // Hovering the button previews edit mode by boldening this section's cap hatch.
+        .onHover { hovering in
+            if hovering {
+                viewport.hoveredCrossSectionID = section.id
+            } else if viewport.hoveredCrossSectionID == section.id {
+                viewport.hoveredCrossSectionID = nil
+            }
+        }
         .contextMenu {
             Toggle("Enabled", isOn: Binding(
                 get: { section.enabled },

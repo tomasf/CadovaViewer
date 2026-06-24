@@ -181,6 +181,17 @@ class ViewportController: NSObject, ObservableObject {
         }
     }
 
+    /// The cross-section whose button the pointer is over. Previews the edit-mode look by boldening its
+    /// cap hatch. Not `@Published` — only the (imperative) cap update reads it, so it needn't re-render
+    /// the SwiftUI hierarchy on every hover.
+    var hoveredCrossSectionID: UUID? {
+        didSet {
+            if hoveredCrossSectionID != oldValue {
+                updateCrossSectionCapHatchStrength()
+            }
+        }
+    }
+
     @Published var canResetCameraRoll: Bool = false
     @Published var canShowPresets: [ViewPreset: Bool] = [:]
 

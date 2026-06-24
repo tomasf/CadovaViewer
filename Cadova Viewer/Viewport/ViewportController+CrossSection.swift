@@ -342,10 +342,11 @@ extension ViewportController {
         for (_, node) in crossSectionCapNodesByKey { node.isHidden = true }
     }
 
-    /// How strongly the diagonal hatch is blended into a section's cap. The section being edited gets a
-    /// much bolder hatch so its cut face stands out from the others.
+    /// How strongly the diagonal hatch is blended into a section's cap. The section being edited — or
+    /// the one whose button is hovered (an edit-mode preview) — gets a much bolder hatch so its cut
+    /// face stands out from the others.
     private func hatchStrength(forSection id: UUID) -> Float {
-        id == selectedCrossSectionID ? 0.75 : 0.2
+        (id == selectedCrossSectionID || id == hoveredCrossSectionID) ? 0.75 : 0.2
     }
 
     /// Re-pushes the hatch strength to the existing cap materials (no geometry rebuild) so the selected
