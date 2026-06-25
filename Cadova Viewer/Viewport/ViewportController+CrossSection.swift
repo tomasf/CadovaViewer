@@ -152,12 +152,22 @@ extension ViewportController {
     /// The cross-sections whose cut is currently applied (disabled ones still exist but don't clip).
     var activeCrossSections: [CrossSection] { crossSections.filter { $0.enabled } }
 
+    /// The sections actually *drawn* as cuts: the enabled ones plus a hover-previewed disabled section
+    /// (`crossSectionPreviewID`). Only the rendering paths (clip uniforms + caps) use this — picking and
+    /// measurement stay on the real `activeCrossSections`, so a transient preview doesn't affect them.
+    var renderedCrossSections: [CrossSection] {
+        guard let previewID = crossSectionPreviewID,
+              let preview = crossSections.first(where: { $0.id == previewID }), !preview.enabled
+        else { return activeCrossSections }
+        return activeCrossSections + [preview]
+    }
+
     func applyCrossSection() {
         // Overlays follow selection/hover regardless of enabled state, so a disabled section can still
         // be edited and previewed.
         updateCrossSectionOverlays()
 
-        guard !activeCrossSections.isEmpty else {
+        guard !renderedCrossSections.isEmpty else {
             let packed = packedClipPlanes([])
             for material in modelInstance.clipMaterials {
                 setClipUniforms(on: material, packed: packed, skip: -1)
@@ -175,12 +185,11 @@ extension ViewportController {
     /// model (re)load so the geometry is clipped in the first rendered frame — otherwise the whole
     /// model flashes uncut until the background cap slice finishes and applies the uniforms.
     func applyModelClipUniforms() {
-        let packed = packedClipPlanes(activeCrossSections)
+        let packed = packedClipPlanes(renderedCrossSections)
         for material in modelInstance.clipMaterials {
             setClipUniforms(on: material, packed: packed, skip: -1)
             material.isDoubleSided = packed.count > 0
         }
-        if crossSectionGhostVisible { setGhostClipUniforms(packed: packed) }
     }
 
     /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one —
@@ -279,7 +288,7 @@ extension ViewportController {
     /// Rebuilds caps for every section/part off the main thread, then applies clip planes + caps
     /// together on the main thread. One slice in flight at a time with a trailing rebuild (no backlog).
     func updateCrossSectionCap() {
-        guard !activeCrossSections.isEmpty else {
+        guard !renderedCrossSections.isEmpty else {
             crossSectionCapNeedsRebuild = false
             clearCrossSectionCaps()
             return
@@ -291,7 +300,7 @@ extension ViewportController {
         crossSectionCapInFlight = true
         crossSectionCapNeedsRebuild = false
 
-        let sections = Array(activeCrossSections.prefix(Self.maxCrossSections))
+        let sections = Array(renderedCrossSections.prefix(Self.maxCrossSections))
         let packed = packedClipPlanes(sections)
         let bounds = crossSectionModelBounds
         let hatchSpacing = Float(max((bounds.max - bounds.min).max() / 90, 0.3))
@@ -323,7 +332,7 @@ extension ViewportController {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.crossSectionCapInFlight = false
-                guard !self.activeCrossSections.isEmpty else { self.clearCrossSectionCaps(); return }
+                guard !self.renderedCrossSections.isEmpty else { self.clearCrossSectionCaps(); return }
 
                 for material in self.modelInstance.clipMaterials {
                     self.setClipUniforms(on: material, packed: packed, skip: -1)
@@ -390,6 +399,32 @@ extension ViewportController {
     }
 
     // MARK: - Cut-away ghost (shown while dragging a gizmo handle)
+
+    /// Hovering a *disabled* section's button previews enabling it: the model is clipped + capped as if
+    /// that section were active, and the material it would *newly* remove (vs the enabled cuts) is shown
+    /// as a persistent ghost. Hovering anything else (or an enabled section) tears the preview down.
+    /// Skipped during a gizmo drag (the drag owns the ghost and the cut state).
+    func updateCrossSectionHoverPreview() {
+        guard crossSectionDrag == nil else { return }
+        let hovered = hoveredCrossSectionID.flatMap { id in crossSections.first { $0.id == id } }
+        let preview = (hovered?.enabled == false) ? hovered : nil
+
+        if preview?.id != crossSectionPreviewID {
+            crossSectionPreviewID = preview?.id
+            applyModelClipUniforms() // clip immediately so the previewed region pops cleanly to a cut
+            applyCrossSection()      // rebuild caps + overlays for the new rendered set
+        }
+        if let preview {
+            showCrossSectionGhost(difference: preview)
+        } else {
+            // Snap off (no fade): the model reverts to its real cut at once, so a lingering ghost would
+            // sit over already-solid material.
+            crossSectionGhostFadeTimer?.invalidate()
+            crossSectionGhostFadeTimer = nil
+            crossSectionGhostNode?.isHidden = true
+            sceneView.setNeedsRedraw()
+        }
+    }
 
     /// Reveals the cut-away as a faint ghost (fully opaque, immediately). Builds the ghost on first use
     /// and excludes hidden parts. Cancels any in-flight fade so re-showing snaps back to full opacity.
