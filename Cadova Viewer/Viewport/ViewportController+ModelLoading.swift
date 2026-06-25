@@ -19,6 +19,8 @@ extension ViewportController {
         crossSectionCapNode.childNodes.forEach { $0.removeFromParentNode() }
         crossSectionCapNodesByKey.removeAll()
         crossSectionCapMaterialsByKey.removeAll()
+        // Drop the cut-away ghost too — it clones the old model's geometry; it's rebuilt on next drag.
+        tearDownCrossSectionGhost()
         installCrossSectionShader()
         applyModelClipUniforms() // clip in the first frame so a reload doesn't flash the whole model
         applyCrossSection()

@@ -28,6 +28,7 @@ extension ViewportController {
         crossSectionDrag = CrossSectionDragState(handle: handle, startSection: section, grab: grab, pivot: pivot, space: space)
         crossSectionDragUndoSnapshot = crossSections // for one undo step covering the whole drag
         crossSectionGizmo.setActiveHandle(handle) // dim the other handles
+        showCrossSectionGhost() // reveal the cut-away half faintly for the duration of the drag
         sceneView.setNeedsRedraw()
         return true
     }
@@ -105,6 +106,7 @@ extension ViewportController {
         crossSectionDragUndoSnapshot = nil
         crossSectionDrag = nil
         crossSectionGizmo.setActiveHandle(nil) // restore all handles
+        hideCrossSectionGhost() // the cut-away half is fully clipped again once the drag ends
         // Drag over: snap the gizmo and locator back to their resting, model-centred positions (a
         // translate drag may have slid them along the dragged axis). Updated directly, no animation.
         updateCrossSectionOverlays()

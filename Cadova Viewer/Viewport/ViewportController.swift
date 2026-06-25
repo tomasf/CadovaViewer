@@ -69,6 +69,20 @@ class ViewportController: NSObject, ObservableObject {
     /// only swaps geometry — avoiding per-frame material/shader-modifier recreation (which stutters).
     var crossSectionCapNodesByKey: [CrossSectionCapKey: SCNNode] = [:]
     var crossSectionCapMaterialsByKey: [CrossSectionCapKey: SCNMaterial] = [:]
+    /// Translucent "ghost" of the cut-away half, shown only while dragging a gizmo handle so the user
+    /// can see what they're cutting into. Built lazily (a per-part clone of the model) and torn down on
+    /// model reload; see `ViewportController+CrossSection`.
+    var crossSectionGhostNode: SCNNode?
+    /// The ghost's per-part container nodes, so hidden parts can be excluded while it's shown.
+    var crossSectionGhostFillNodes: [ModelData.Part.ID: SCNNode] = [:]
+    /// The ghost's (shared) materials, carrying the inverted-clip shader whose plane uniforms are
+    /// pushed live as the drag moves the plane.
+    var crossSectionGhostMaterials: [SCNMaterial] = []
+    var crossSectionGhostVisible: Bool { crossSectionGhostNode?.isHidden == false }
+    /// Drives the ghost's opacity fade-out (the scene renders on demand, so a self-stepping timer that
+    /// nudges `setNeedsRedraw` each tick animates it without touching the shared `rendersContinuously`).
+    var crossSectionGhostFadeTimer: Timer?
+
     /// In-progress gizmo drag (handle grabbed + the section state when the drag began).
     var crossSectionDrag: CrossSectionDragState?
     /// Cross-sections as they were when a gizmo drag began, so the whole drag is one undo step.

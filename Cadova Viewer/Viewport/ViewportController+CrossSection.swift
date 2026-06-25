@@ -48,6 +48,40 @@ extension ViewportController {
     }
     """
 
+    /// The inverse of `clipShaderModifier`, for the translucent cut-away ghost. Two modes:
+    /// - **union** (`ghostMode` 0, used while dragging): keep a fragment removed by **any** active
+    ///   plane — the whole cut-away half.
+    /// - **difference** (`ghostMode` 1, used when a single cut is enabled/added): keep only the material
+    ///   that cut *newly* removes — past `ghostNewPlane` yet still on the kept side of every **other**
+    ///   active plane (so it was visible before). `crossSectionPlanesA/B` hold those other planes.
+    /// The faint look comes from the ghost material, not this shader.
+    static let ghostClipShaderModifier = """
+    #pragma arguments
+    float4x4 crossSectionPlanesA;
+    float4x4 crossSectionPlanesB;
+    float crossSectionCount;
+    float ghostMode;
+    float4 ghostNewPlane;
+    #pragma body
+    int csCount = int(round(crossSectionCount));
+    float3 csWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
+    if (ghostMode < 0.5) {
+        if (csCount == 0) { discard_fragment(); }
+        bool removedByAny = false;
+        for (int i = 0; i < csCount; i++) {
+            float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
+            if (dot(csWorld, csPlane.xyz) > csPlane.w) { removedByAny = true; }
+        }
+        if (!removedByAny) { discard_fragment(); }
+    } else {
+        if (dot(csWorld, ghostNewPlane.xyz) <= ghostNewPlane.w) { discard_fragment(); } // not removed by the new cut
+        for (int i = 0; i < csCount; i++) {
+            float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
+            if (dot(csWorld, csPlane.xyz) > csPlane.w) { discard_fragment(); } // already removed before → not new
+        }
+    }
+    """
+
     /// Cap surface modifier: the same N-plane clip (skipping its own plane, so a cap is trimmed by the
     /// *other* cuts) plus the part colour and a diagonal hatch marking it as a cut face.
     static let capShaderModifier = """
@@ -141,18 +175,21 @@ extension ViewportController {
             setClipUniforms(on: material, packed: packed, skip: -1)
             material.isDoubleSided = packed.count > 0
         }
+        if crossSectionGhostVisible { setGhostClipUniforms(packed: packed) }
     }
 
-    /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one.
+    /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one —
+    /// but only while that section is enabled (a disabled cut can't be manipulated, so its gizmo is
+    /// hidden even in edit mode; the locator plane still shows where the plane sits).
     func updateCrossSectionOverlays() {
-        if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }) {
+        if let id = selectedCrossSectionID, let section = crossSections.first(where: { $0.id == id }), section.enabled {
             // While dragging, keep the gizmo fixed at the grab pivot and in the drag's space; otherwise
             // anchor it at the view centre (the per-frame `followView` keeps it there as the camera
             // moves) and let Shift pick world vs. plane space live.
             let anchor = crossSectionDrag?.pivot ?? crossSectionGizmoAnchor(for: section)
             let space = crossSectionDrag?.space ?? crossSectionGizmoSpaceForModifiers
             crossSectionGizmo.update(for: section, anchor: anchor, space: space)
-            crossSectionGizmo.setInteractive(section.enabled) // dim + lock the gizmo for an inactive cut
+            crossSectionGizmo.setInteractive(true)
         } else {
             crossSectionGizmo.hide()
         }
@@ -287,6 +324,11 @@ extension ViewportController {
                     self.setClipUniforms(on: material, packed: packed, skip: -1)
                     material.isDoubleSided = packed.count > 0
                 }
+                // Only a drag needs the ghost re-synced to moving planes (union mode); a static flash
+                // (enable/add difference mode) must keep the uniforms it was shown with.
+                if self.crossSectionGhostVisible, self.crossSectionDrag != nil {
+                    self.setGhostClipUniforms(packed: packed)
+                }
                 self.applyCrossSectionCaps(results, packed: packed, hatchSpacing: hatchSpacing)
                 self.sceneView.setNeedsRedraw()
 
@@ -340,6 +382,171 @@ extension ViewportController {
 
     func clearCrossSectionCaps() {
         for (_, node) in crossSectionCapNodesByKey { node.isHidden = true }
+    }
+
+    // MARK: - Cut-away ghost (shown while dragging a gizmo handle)
+
+    /// Reveals the cut-away as a faint ghost (fully opaque, immediately). Builds the ghost on first use
+    /// and excludes hidden parts. Cancels any in-flight fade so re-showing snaps back to full opacity.
+    ///
+    /// With `difference` nil it shows the **whole** cut-away (union of every active cut — used while
+    /// dragging). With `difference` set to a section it shows only what *that* cut newly removes (the
+    /// material still kept by every other active cut) — used when a single cut is enabled or added.
+    func showCrossSectionGhost(difference: CrossSection? = nil) {
+        if crossSectionGhostNode == nil { buildCrossSectionGhost() }
+        crossSectionGhostFadeTimer?.invalidate()
+        crossSectionGhostFadeTimer = nil
+        if let difference {
+            let others = activeCrossSections.filter { $0.id != difference.id }
+            let p = difference.plane()
+            setGhostUniforms(planes: packedClipPlanes(others),
+                             newPlane: SIMD4<Float>(Float(p.x), Float(p.y), Float(p.z), Float(p.w)))
+        } else {
+            setGhostUniforms(planes: packedClipPlanes(activeCrossSections), newPlane: nil)
+        }
+        for (id, node) in crossSectionGhostFillNodes {
+            node.isHidden = hiddenPartIDs.contains(id)
+        }
+        crossSectionGhostNode?.opacity = 1
+        crossSectionGhostNode?.isHidden = false
+        sceneView.setNeedsRedraw()
+    }
+
+    /// Fades the ghost out (used on drag end) rather than snapping it off.
+    func hideCrossSectionGhost() {
+        fadeOutCrossSectionGhost(afterHold: 0, fadeDuration: 0.25)
+    }
+
+    /// Briefly flashes the ghost then fades it — for one-shot changes that aren't a drag, so the user
+    /// gets a momentary preview. `difference` scopes it to one cut's newly-removed material (enable /
+    /// add); nil shows the whole cut-away (flip / align).
+    func flashCrossSectionGhost(difference: CrossSection? = nil) {
+        guard !activeCrossSections.isEmpty else { return } // nothing to reveal
+        showCrossSectionGhost(difference: difference)
+        fadeOutCrossSectionGhost(afterHold: 0.1, fadeDuration: 0.25)
+    }
+
+    /// Animates the ghost's opacity to zero after an optional hold, then hides it. Self-stepping on a
+    /// timer (the scene renders on demand) so it doesn't disturb the shared `rendersContinuously` used
+    /// by the camera glide / SpaceMouse.
+    private func fadeOutCrossSectionGhost(afterHold hold: TimeInterval, fadeDuration: TimeInterval) {
+        guard let node = crossSectionGhostNode, !node.isHidden else { return }
+        crossSectionGhostFadeTimer?.invalidate()
+        let start = Date()
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self, let node = crossSectionGhostNode else { timer.invalidate(); return }
+            let t = Date().timeIntervalSince(start) - hold
+            if t <= 0 {
+                node.opacity = 1
+            } else if t >= fadeDuration {
+                node.isHidden = true
+                node.opacity = 1
+                timer.invalidate()
+                crossSectionGhostFadeTimer = nil
+            } else {
+                node.opacity = CGFloat(1 - t / fadeDuration)
+            }
+            sceneView.setNeedsRedraw()
+        }
+        RunLoop.main.add(timer, forMode: .common) // keep fading across tracking run-loop modes
+        crossSectionGhostFadeTimer = timer
+    }
+
+    /// Pushes the active clip planes to the ghost materials so the revealed cut-away tracks the plane
+    /// live as it's dragged (union mode). Used by the drag's live-update hooks.
+    func setGhostClipUniforms(packed: PackedClipPlanes) {
+        setGhostUniforms(planes: packed, newPlane: nil)
+    }
+
+    /// Sets the ghost's clip uniforms. `newPlane` nil selects union mode (whole cut-away); a value
+    /// selects difference mode, where `planes` are the *other* active cuts and `newPlane` is the cut
+    /// whose newly-removed material is shown.
+    private func setGhostUniforms(planes: PackedClipPlanes, newPlane: SIMD4<Float>?) {
+        let plane = newPlane ?? SIMD4<Float>(0, 0, 0, 0)
+        for material in crossSectionGhostMaterials {
+            material.setValue(NSValue(scnMatrix4: planes.a), forKey: "crossSectionPlanesA")
+            material.setValue(NSValue(scnMatrix4: planes.b), forKey: "crossSectionPlanesB")
+            material.setValue(NSNumber(value: Float(planes.count)), forKey: "crossSectionCount")
+            material.setValue(NSNumber(value: newPlane == nil ? Float(0) : Float(1)), forKey: "ghostMode")
+            material.setValue(NSValue(scnVector4: SCNVector4(plane.x, plane.y, plane.z, plane.w)), forKey: "ghostNewPlane")
+        }
+    }
+
+    /// Drops the ghost so a reloaded model rebuilds a fresh one (it clones model geometry).
+    func tearDownCrossSectionGhost() {
+        crossSectionGhostFadeTimer?.invalidate()
+        crossSectionGhostFadeTimer = nil
+        crossSectionGhostNode?.removeFromParentNode()
+        crossSectionGhostNode = nil
+        crossSectionGhostFillNodes.removeAll()
+        crossSectionGhostMaterials.removeAll()
+    }
+
+    /// Builds the per-part translucent ghost (hidden, under `privateRoot`). Mirrors the hidden-part
+    /// hover ghost (`makeHighlightGhost`): a non-occluding faint fill plus light edges, with geometry
+    /// rebuilt via `SCNGeometry(sources:elements:)` so it shares the model's vertex buffers but carries
+    /// its own materials. Those materials carry the inverted-clip shader, so only the cut-away side draws.
+    private func buildCrossSectionGhost() {
+        tearDownCrossSectionGhost()
+
+        let root = SCNNode()
+        root.name = "Cross-section cut-away ghost"
+        root.renderingOrder = 100
+        root.isHidden = true
+
+        let fillMaterial = SCNMaterial()
+        fillMaterial.lightingModel = .constant
+        fillMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.10)
+        fillMaterial.transparencyMode = .singleLayer
+        fillMaterial.writesToDepthBuffer = false
+        fillMaterial.isDoubleSided = true
+        fillMaterial.shaderModifiers = [.surface: Self.ghostClipShaderModifier]
+
+        var materials = [fillMaterial]
+
+        let edgeVisibility = sceneController.documentOptions.edgeVisibility
+        let edgeMaterial: SCNMaterial? = edgeVisibility == .none ? nil : {
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = NSColor.white.withAlphaComponent(0.4)
+            material.writesToDepthBuffer = false
+            material.shaderModifiers = [.surface: Self.ghostClipShaderModifier]
+            materials.append(material)
+            return material
+        }()
+
+        for part in sceneController.parts {
+            let container = SCNNode()
+
+            let fill = part.nodes.model.clone()
+            for child in fill.childNodes {
+                guard let oldGeometry = child.geometry else { continue }
+                let newGeometry = SCNGeometry(sources: oldGeometry.sources(for: .vertex), elements: oldGeometry.elements)
+                newGeometry.materials = [fillMaterial]
+                child.geometry = newGeometry
+            }
+            container.addChildNode(fill)
+
+            let edgeSource = edgeVisibility == .all ? part.nodes.smoothEdges : part.nodes.sharpEdges
+            if let edgeMaterial, let edgeSource {
+                let edgeClone = edgeSource.clone()
+                edgeClone.isHidden = false
+                for node in edgeClone.childNodes(passingTest: { node, _ in node.geometry != nil }) {
+                    guard let oldGeometry = node.geometry else { continue }
+                    let newGeometry = SCNGeometry(sources: oldGeometry.sources(for: .vertex), elements: oldGeometry.elements)
+                    newGeometry.materials = [edgeMaterial]
+                    node.geometry = newGeometry
+                }
+                container.addChildNode(edgeClone)
+            }
+
+            root.addChildNode(container)
+            crossSectionGhostFillNodes[part.id] = container
+        }
+
+        privateRoot.addChildNode(root)
+        crossSectionGhostNode = root
+        crossSectionGhostMaterials = materials
     }
 
     /// How strongly the diagonal hatch is blended into a section's cap. The section being edited — or
@@ -404,6 +611,7 @@ extension ViewportController {
         nextCrossSectionColorIndex += 1
         updateCrossSections(crossSections + [section], actionName: "Add Cross-Section")
         selectedCrossSectionID = section.id
+        flashCrossSectionGhost(difference: section) // reveal just what this new cut removes
     }
 
     func deleteCrossSection(_ id: UUID) {
@@ -432,6 +640,8 @@ extension ViewportController {
         var sections = crossSections
         sections[index].enabled = enabled
         updateCrossSections(sections, actionName: enabled ? "Show Cross-Section" : "Hide Cross-Section")
+        // Preview just what this cut newly removes (kept by the other active cuts), not the whole cut-away.
+        if enabled { flashCrossSectionGhost(difference: sections[index]) }
     }
 
     /// Activates or deactivates every cross-section at once (single undo step).
@@ -440,6 +650,7 @@ extension ViewportController {
         var sections = crossSections
         for index in sections.indices { sections[index].enabled = enabled }
         updateCrossSections(sections, actionName: enabled ? "Show All Cross-Sections" : "Hide All Cross-Sections")
+        if enabled { flashCrossSectionGhost() }
     }
 
     func alignSelectedCrossSection(to axis: CrossSection.Axis) {
@@ -457,6 +668,8 @@ extension ViewportController {
         var sections = crossSections
         transform(&sections[index])
         updateCrossSections(sections, actionName: actionName)
+        // Flip / align / snap aren't drags, so briefly flash the cut-away ghost to preview the change.
+        flashCrossSectionGhost()
     }
 
     // MARK: - Undo
