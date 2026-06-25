@@ -130,6 +130,11 @@ extension ViewportController {
     _surface.diffuse = mix(_surface.diffuse, hatchColor, band * hatchColor.a);
     """
 
+    /// Opacities for the translucent ghosts (the cut-away ghost shown while editing and the per-part
+    /// hover ghost) — the faint fill and the slightly bolder edge lines. Shared so both stay in sync.
+    static let ghostFillOpacity: CGFloat = 0.10
+    static let ghostEdgeOpacity: CGFloat = 0.4
+
     /// Attaches the clip modifier to this viewport's model materials. Called once per loaded model.
     func installCrossSectionShader() {
         for material in modelInstance.clipMaterials {
@@ -458,18 +463,24 @@ extension ViewportController {
         setGhostUniforms(planes: packed, newPlane: nil)
     }
 
-    /// Sets the ghost's clip uniforms. `newPlane` nil selects union mode (whole cut-away); a value
-    /// selects difference mode, where `planes` are the *other* active cuts and `newPlane` is the cut
-    /// whose newly-removed material is shown.
+    /// Sets the ghost's clip uniforms on all the gizmo-drag ghost materials. `newPlane` nil selects
+    /// union mode (whole cut-away); a value selects difference mode, where `planes` are the *other*
+    /// active cuts and `newPlane` is the cut whose newly-removed material is shown.
     private func setGhostUniforms(planes: PackedClipPlanes, newPlane: SIMD4<Float>?) {
-        let plane = newPlane ?? SIMD4<Float>(0, 0, 0, 0)
         for material in crossSectionGhostMaterials {
-            material.setValue(NSValue(scnMatrix4: planes.a), forKey: "crossSectionPlanesA")
-            material.setValue(NSValue(scnMatrix4: planes.b), forKey: "crossSectionPlanesB")
-            material.setValue(NSNumber(value: Float(planes.count)), forKey: "crossSectionCount")
-            material.setValue(NSNumber(value: newPlane == nil ? Float(0) : Float(1)), forKey: "ghostMode")
-            material.setValue(NSValue(scnVector4: SCNVector4(plane.x, plane.y, plane.z, plane.w)), forKey: "ghostNewPlane")
+            setGhostUniforms(on: material, planes: planes, newPlane: newPlane)
         }
+    }
+
+    /// Sets the inverted-clip ghost uniforms on a single material — shared by the gizmo-drag ghost and
+    /// the per-part hover ghost (`makeHighlightGhost`). `newPlane` nil = union mode.
+    func setGhostUniforms(on material: SCNMaterial, planes: PackedClipPlanes, newPlane: SIMD4<Float>?) {
+        let plane = newPlane ?? SIMD4<Float>(0, 0, 0, 0)
+        material.setValue(NSValue(scnMatrix4: planes.a), forKey: "crossSectionPlanesA")
+        material.setValue(NSValue(scnMatrix4: planes.b), forKey: "crossSectionPlanesB")
+        material.setValue(NSNumber(value: Float(planes.count)), forKey: "crossSectionCount")
+        material.setValue(NSNumber(value: newPlane == nil ? Float(0) : Float(1)), forKey: "ghostMode")
+        material.setValue(NSValue(scnVector4: SCNVector4(plane.x, plane.y, plane.z, plane.w)), forKey: "ghostNewPlane")
     }
 
     /// Drops the ghost so a reloaded model rebuilds a fresh one (it clones model geometry).
@@ -496,7 +507,7 @@ extension ViewportController {
 
         let fillMaterial = SCNMaterial()
         fillMaterial.lightingModel = .constant
-        fillMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.10)
+        fillMaterial.diffuse.contents = NSColor.white.withAlphaComponent(Self.ghostFillOpacity)
         fillMaterial.transparencyMode = .singleLayer
         fillMaterial.writesToDepthBuffer = false
         fillMaterial.isDoubleSided = true
@@ -508,7 +519,7 @@ extension ViewportController {
         let edgeMaterial: SCNMaterial? = edgeVisibility == .none ? nil : {
             let material = SCNMaterial()
             material.lightingModel = .constant
-            material.diffuse.contents = NSColor.white.withAlphaComponent(0.4)
+            material.diffuse.contents = NSColor.white.withAlphaComponent(Self.ghostEdgeOpacity)
             material.writesToDepthBuffer = false
             material.shaderModifiers = [.surface: Self.ghostClipShaderModifier]
             materials.append(material)

@@ -36,14 +36,22 @@ extension ViewportController {
 
         let target: SCNNode
         if hiddenPartIDs.contains(id) {
-            // Hidden: reveal a faint ghost and outline its fill (the real geometry is invisible).
-            let ghost = makeHighlightGhost(for: part)
+            // Hidden: reveal the whole part as a faint ghost and outline its fill (the real geometry is
+            // invisible).
+            let ghost = makeHighlightGhost(for: part, clipToCutAway: false)
             privateRoot.addChildNode(ghost.root)
             highlightGhostNode = ghost.root
             target = ghost.fill
         } else if let modelNode = modelInstance.partModelNodes[id] {
-            // Visible: outline this viewport's clone of the part's model node.
+            // Visible: outline this viewport's clone of the part's model node. If cross-sections cut it,
+            // also reveal the removed portion of *this* part as a ghost (the outline mask already traces
+            // the full, unclipped silhouette).
             target = modelNode
+            if !activeCrossSections.isEmpty {
+                let ghost = makeHighlightGhost(for: part, clipToCutAway: true)
+                privateRoot.addChildNode(ghost.root)
+                highlightGhostNode = ghost.root
+            }
         } else {
             sceneView.technique = nil
             return
@@ -131,21 +139,31 @@ extension ViewportController {
         return technique
     }
 
-    /// A faint translucent stand-in for a hidden part: a non-occluding fill plus light edges. The
-    /// geometry is rebuilt with `SCNGeometry(sources:elements:)` so it shares the original vertex
-    /// buffers but carries its own material — cloning alone would mutate the real part's materials.
+    /// A faint translucent stand-in for a part: a non-occluding fill plus light edges. The geometry is
+    /// rebuilt with `SCNGeometry(sources:elements:)` so it shares the original vertex buffers but
+    /// carries its own material — cloning alone would mutate the real part's materials. With
+    /// `clipToCutAway` it shows only the part's cross-section *removed* portion (inverted clip shader),
+    /// for hovering a visible part that's cut; otherwise it shows the whole part (hovering a hidden one).
     /// Returns the root (to add/remove) and the fill node (which the outline traces).
-    private func makeHighlightGhost(for part: ModelData.Part) -> (root: SCNNode, fill: SCNNode) {
+    private func makeHighlightGhost(for part: ModelData.Part, clipToCutAway: Bool) -> (root: SCNNode, fill: SCNNode) {
         let root = SCNNode()
         root.name = "Highlight ghost \(part.id)"
         root.renderingOrder = 100
 
+        let packedPlanes = clipToCutAway ? packedClipPlanes(activeCrossSections) : nil
+        func applyGhostClip(to material: SCNMaterial) {
+            guard let packedPlanes else { return }
+            material.shaderModifiers = [.surface: Self.ghostClipShaderModifier]
+            setGhostUniforms(on: material, planes: packedPlanes, newPlane: nil) // union: whole cut-away of this part
+        }
+
         let fillMaterial = SCNMaterial()
         fillMaterial.lightingModel = .constant
-        fillMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.18)
+        fillMaterial.diffuse.contents = NSColor.white.withAlphaComponent(Self.ghostFillOpacity)
         fillMaterial.transparencyMode = .singleLayer
         fillMaterial.writesToDepthBuffer = false
         fillMaterial.isDoubleSided = true
+        applyGhostClip(to: fillMaterial)
 
         let fill = part.nodes.model.clone()
         fill.opacity = 1
@@ -163,8 +181,9 @@ extension ViewportController {
         if edgeVisibility != .none, let edgeSource {
             let edgeMaterial = SCNMaterial()
             edgeMaterial.lightingModel = .constant
-            edgeMaterial.diffuse.contents = NSColor.white.withAlphaComponent(0.3)
+            edgeMaterial.diffuse.contents = NSColor.white.withAlphaComponent(Self.ghostEdgeOpacity)
             edgeMaterial.writesToDepthBuffer = false
+            applyGhostClip(to: edgeMaterial)
 
             let edgeClone = edgeSource.clone()
             edgeClone.isHidden = false
