@@ -34,7 +34,7 @@ struct ViewportControlsOverlay: View {
                 Image(systemName: "plus.rectangle.on.rectangle")
                     .frame(height: 16)
             }
-            .help("Split Viewport")
+            .help("Split Pane")
             .disabled(!canSplit(.horizontal) && !canSplit(.vertical))
 
             if viewModel.hasMultipleViewports {
@@ -44,7 +44,7 @@ struct ViewportControlsOverlay: View {
                     Image(systemName: "xmark")
                         .frame(height: 16)
                 }
-                .help("Close Viewport")
+                .help("Close Pane")
             }
         }
         .buttonStyle(BlurButtonStyle())

@@ -204,7 +204,7 @@ extension ViewportController {
         let canSplitWide = sceneViewSize.width >= ViewportLayoutMetrics.minPaneWidth * 2 + ViewportLayoutMetrics.dividerThickness
         let canSplitTall = sceneViewSize.height >= ViewportLayoutMetrics.minPaneHeight * 2 + ViewportLayoutMetrics.dividerThickness
 
-        builder.addItem(label: "Viewports", submenu: { submenu in
+        builder.addItem(label: "Panes", submenu: { submenu in
             submenu.addItem(label: "Split Horizontally", enabled: canSplitWide,
                             keyEquivalent: "h", modifiers: [.command, .control]) {
                 viewModel.split(self.viewportID, axis: .horizontal)
@@ -214,7 +214,7 @@ extension ViewportController {
                 viewModel.split(self.viewportID, axis: .vertical)
             }
             // Always present, disabled when there's a single viewport (per the HIG).
-            submenu.addItem(label: "Close Viewport", enabled: viewModel.hasMultipleViewports,
+            submenu.addItem(label: "Close Pane", enabled: viewModel.hasMultipleViewports,
                             keyEquivalent: "w", modifiers: [.command, .control, .shift]) {
                 viewModel.close(self.viewportID)
             }
@@ -223,11 +223,11 @@ extension ViewportController {
 
             // Focus next/previous. The key equivalent is the US backtick key, whose key position is
             // the < / > (`<>|`) key on ISO layouts — so it reads as ⌘< / ⌘> there (and ⌘` on US ANSI).
-            submenu.addItem(label: "Focus Next Viewport", enabled: viewModel.hasMultipleViewports,
+            submenu.addItem(label: "Focus Next Pane", enabled: viewModel.hasMultipleViewports,
                             keyEquivalent: "`", modifiers: [.command]) {
                 viewModel.focusAdjacentViewport(forward: true)
             }
-            submenu.addItem(label: "Focus Previous Viewport", enabled: viewModel.hasMultipleViewports,
+            submenu.addItem(label: "Focus Previous Pane", enabled: viewModel.hasMultipleViewports,
                             keyEquivalent: "`", modifiers: [.command, .shift]) {
                 viewModel.focusAdjacentViewport(forward: false)
             }
