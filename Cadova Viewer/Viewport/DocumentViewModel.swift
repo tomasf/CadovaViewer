@@ -53,8 +53,13 @@ final class DocumentViewModel: ObservableObject {
     /// Long-lived subscriptions (document-global options → restorable state).
     private var cancellables: Set<AnyCancellable> = []
 
+    /// The focused viewport, with fallbacks. During state restoration `viewports`, `layout`, and
+    /// `focusedViewportID` are set in separate `@Published` writes, so a SwiftUI re-evaluation can read
+    /// this while they briefly disagree. Resolve defensively rather than force-unwrapping a stale id.
     var focusedViewport: ViewportController {
-        viewports[focusedViewportID] ?? viewports[layout.leafIDs[0]]!
+        if let viewport = viewports[focusedViewportID] { return viewport }
+        if let leaf = layout.leafIDs.first(where: { viewports[$0] != nil }) { return viewports[leaf]! }
+        return viewports.values.first!
     }
 
     var hasMultipleViewports: Bool { viewports.count > 1 }
@@ -298,11 +303,13 @@ final class DocumentViewModel: ObservableObject {
             rebuilt[id] = viewport
         }
 
+        // Set `viewports` and the layout/focus that index into it together, before publishing `ratios`,
+        // so a SwiftUI re-evaluation triggered mid-restore never sees them disagree.
         viewports = rebuilt
-        ratios = state.ratios
         layout = state.layout
         focusedViewportID = state.layout.leafIDs.contains(state.focusedViewportID)
             ? state.focusedViewportID : state.layout.leafIDs[0]
+        ratios = state.ratios
         sidebarVisibility = (state.sidebarVisible ?? false) ? .all : .detailOnly
         focusDidChange()
     }
