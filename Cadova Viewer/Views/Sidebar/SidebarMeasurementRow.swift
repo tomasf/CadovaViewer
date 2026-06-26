@@ -19,7 +19,7 @@ struct SidebarMeasurementRow: View {
             }
             if let delta = measurement.delta {
                 Divider()
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 2)
                 coordinate("Δ", delta)
             }
             if let length = measurement.length {
@@ -29,14 +29,16 @@ struct SidebarMeasurementRow: View {
         .font(.system(.callout))
         .monospacedDigit()
         .padding(.vertical, 12)
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 10)
+        .padding(.leading, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(rowBackground)
         .overlay(alignment: .topTrailing) {
             if measurement.phase != .coordinate {
                 Button(action: onDelete) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 16))
-                        .frame(width: 26, height: 32, alignment: .center)
+                        .frame(width: 32, height: 32, alignment: .center)
                 }
                 .contentShape(.interaction, Rectangle())
                 .buttonStyle(.plain)
@@ -51,20 +53,19 @@ struct SidebarMeasurementRow: View {
             }
             .disabled(measurement.phase == .coordinate)
         }
-        .listRowBackground(rowBackground)
+        .padding(.trailing, 2)
+        .padding(.vertical, 2)
     }
 
     /// The material chip behind the row, with its colour-coded border. The border dims when the window
     /// is inactive (`appearsActive`) so it doesn't stay vivid while the window is in the background.
     private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 9)
+        RoundedRectangle(cornerRadius: 16)
             .fill(.regularMaterial)
             .overlay {
-                RoundedRectangle(cornerRadius: 9)
+                RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(appearsActive ? color : color.opacity(0.45), lineWidth: 2)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
     }
 
     private func copyMeasurement() {
