@@ -6,6 +6,8 @@ struct SidebarMeasurementRow: View {
     let measurement: Measurement
     let onDelete: () -> Void
 
+    @Environment(\.appearsActive) private var appearsActive
+
     private var color: Color { ColorPalette.color(forIndex: measurement.colorIndex) }
 
     var body: some View {
@@ -17,7 +19,7 @@ struct SidebarMeasurementRow: View {
             }
             if let delta = measurement.delta {
                 Divider()
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 3)
                 coordinate("Δ", delta)
             }
             if let length = measurement.length {
@@ -28,7 +30,6 @@ struct SidebarMeasurementRow: View {
         .monospacedDigit()
         .padding(.vertical, 12)
         .padding(.horizontal, 6)
-        .padding(.top, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .topTrailing) {
             if measurement.phase != .coordinate {
@@ -50,6 +51,20 @@ struct SidebarMeasurementRow: View {
             }
             .disabled(measurement.phase == .coordinate)
         }
+        .listRowBackground(rowBackground)
+    }
+
+    /// The material chip behind the row, with its colour-coded border. The border dims when the window
+    /// is inactive (`appearsActive`) so it doesn't stay vivid while the window is in the background.
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: 9)
+            .fill(.regularMaterial)
+            .overlay {
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(appearsActive ? color : color.opacity(0.45), lineWidth: 2)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
     }
 
     private func copyMeasurement() {

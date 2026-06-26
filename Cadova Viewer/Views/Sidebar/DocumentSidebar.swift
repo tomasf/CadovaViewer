@@ -83,9 +83,6 @@ struct DocumentSidebar: View {
                                     measurements.highlightedID = nil
                                 }
                             }
-                            .listRowBackground(
-                                MeasurementRowBackground(colorIndex: measurement.colorIndex)
-                            )
                         }
                     }
                 }
@@ -318,24 +315,5 @@ private struct PartRow: View {
             }
         }
         .frame(width: thumbnailSize, height: thumbnailSize)
-    }
-}
-
-/// The material chip behind a measurement row, with its colour-coded border. The border dims when the
-/// window is inactive (`appearsActive`) so it doesn't stay vivid while the window is in the background.
-private struct MeasurementRowBackground: View {
-    let colorIndex: Int
-    @Environment(\.appearsActive) private var appearsActive
-
-    var body: some View {
-        let color = ColorPalette.color(forIndex: colorIndex)
-        RoundedRectangle(cornerRadius: 9)
-            .fill(.regularMaterial)
-            .overlay {
-                RoundedRectangle(cornerRadius: 9)
-                    .strokeBorder(appearsActive ? color : color.opacity(0.45), lineWidth: 2)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
     }
 }
