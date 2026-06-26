@@ -41,13 +41,13 @@ extension ViewportController {
                 self.highlightedPartID = h ? part.id : nil
             }
 
-            builder.addItem(label: "Show only \"\(part.name)\"", checked: onlyVisiblePartID == part.id, modifiers: .option, isAlternate: true) {
+            builder.addItem(label: "Show only “\(part.name)”", checked: onlyVisiblePartID == part.id, modifiers: .option, isAlternate: true) {
                 self.onlyVisiblePartID = part.id
             } onHighlight: { h, _ in
                 self.highlightedPartID = h ? part.id : nil
             }
 
-            builder.addItem(label: "Slice \"\(part.name)\"", modifiers: .shift, isAlternate: true) {
+            builder.addItem(label: "Slice “\(part.name)”", modifiers: .shift, isAlternate: true) {
                 self.document?.slicePart(part)
             } onHighlight: { h, _ in
                 self.highlightedPartID = h ? part.id : nil
