@@ -294,6 +294,7 @@ private struct PartRow: View {
             Spacer(minLength: 4)
             Button(action: toggleVisibility) {
                 Image(systemName: isVisible ? "checkmark.circle.fill" : "circle")
+                    .fontWeight(.bold)
                     .imageScale(.large)
                     .foregroundStyle(checkmarkStyle)
             }

@@ -61,6 +61,11 @@ extension ViewportController {
     /// (a screen-space "cylinder") and unions what they pass through; forgiveness measured in screen
     /// points stays constant regardless of the part's depth. Hidden parts are included (their
     /// geometry still lies under the cursor), which is why hidden nodes aren't ignored.
+    ///
+    /// A part sliced by a cross-section has its camera-facing surface clipped away, so a ray through
+    /// the exposed cut face lands only on the part's hidden (clipped) geometry and would miss the part
+    /// entirely. The visible cut face is its own cap node (`crossSectionCapNodesByKey`, keyed by part),
+    /// so those caps are hit-tested too and attributed straight to their part.
     func partsUnderCursor(viewPoint: CGPoint) -> [ModelData.Part] {
         guard let cameraPosition = sceneView.pointOfView?.presentation.worldPosition else { return [] }
 
@@ -69,17 +74,26 @@ extension ViewportController {
         // active cuts, so the first visible hit is just the nearest.
         let searchMode: SCNHitTestSearchMode = activeCrossSections.isEmpty ? .closest : .all
         let samplePoints = hitTestSamplePoints(around: viewPoint)
+
+        // The visible cut-face caps for each part (skipping hidden ones), so a click on an exposed cut
+        // surface finds the part even though its own geometry there is all clipped away.
+        let capNodesByPart = Dictionary(grouping: crossSectionCapNodesByKey.filter { !$0.value.isHidden },
+                                        by: \.key.part).mapValues { $0.map(\.value) }
+
         var hits: [(part: ModelData.Part, distance: Double)] = []
         for part in sceneController.parts {
             var best = Double.greatestFiniteMagnitude
+            let rootNodes = [part.nodes.model] + (capNodesByPart[part.id] ?? [])
             for samplePoint in samplePoints {
-                let results = sceneView.hitTest(samplePoint, options: [
-                    .rootNode: part.nodes.model,
-                    .searchMode: searchMode.rawValue as NSNumber,
-                    .ignoreHiddenNodes: false
-                ])
-                guard let hit = results.first(where: { !crossSectionHides($0.worldCoordinates) }) else { continue }
-                best = min(best, hit.worldCoordinates.distance(from: cameraPosition))
+                for rootNode in rootNodes {
+                    let results = sceneView.hitTest(samplePoint, options: [
+                        .rootNode: rootNode,
+                        .searchMode: searchMode.rawValue as NSNumber,
+                        .ignoreHiddenNodes: false
+                    ])
+                    guard let hit = results.first(where: { !crossSectionHides($0.worldCoordinates) }) else { continue }
+                    best = min(best, hit.worldCoordinates.distance(from: cameraPosition))
+                }
             }
             if best < .greatestFiniteMagnitude {
                 hits.append((part, best))
