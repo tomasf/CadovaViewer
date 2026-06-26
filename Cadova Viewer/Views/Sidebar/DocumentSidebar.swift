@@ -171,10 +171,7 @@ struct DocumentSidebar: View {
     }
 
     private func sliceTitle(for ids: Set<ModelData.Part.ID>) -> String {
-        if ids.count == 1, let part = allParts.first(where: { $0.id == ids.first }) {
-            return "Slice \"\(part.name)\""
-        }
-        return "Slice \(ids.count) Parts"
+        ids.count == 1 ? "Slice" : "Slice \(ids.count) Parts"
     }
 
     private func refreshMeasurementRows() {
