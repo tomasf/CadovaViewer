@@ -6,7 +6,13 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
     private var actions: [UUID: () -> Void] = [:]
     private var highlightActions: [UUID: (Bool, Bool) -> Void] = [:]
     private var enabledStates: [UUID: Bool] = [:]
+    private var asyncIcons: [(item: NSMenuItem, provider: AsyncIconProvider)] = []
     private var previousHighlight: UUID?
+
+    /// Produces an item's icon asynchronously. Lets a menu open immediately and fill in icons that are
+    /// expensive to render — updating an item's `image` while its menu is open refreshes the row in
+    /// place.
+    typealias AsyncIconProvider = () async -> NSImage?
 
     func addItem(
         label: String,
@@ -18,7 +24,10 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         isAlternate: Bool = false,
         action: (() -> Void)? = nil,
         onHighlight: ((_ highlighted: Bool, _ isClosing: Bool) -> Void)? = nil,
-        submenu: ((_ builder: MenuBuilder) -> ())? = nil
+        submenu: ((_ builder: MenuBuilder) -> ())? = nil,
+        // Declared last so it doesn't sit ahead of `action` in the trailing-closure forward scan,
+        // which would steal the bare `{ … }` action closures callers pass.
+        asyncIcon: AsyncIconProvider? = nil
     ) {
         let item = NSMenuItem(title: label, action: #selector(performAction(_:)), keyEquivalent: "")
         item.target = self
@@ -43,6 +52,9 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         actions[uuid] = action
         highlightActions[uuid] = onHighlight
         enabledStates[uuid] = enabled
+        if let asyncIcon {
+            asyncIcons.append((item, asyncIcon))
+        }
         menuItems.append(item)
     }
 
@@ -68,6 +80,13 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         menu.delegate = self
         for item in menuItems {
             menu.addItem(item)
+        }
+        // Kick off async icon rendering now that the menu exists; each result is set on its item in
+        // place, so icons appear whether the render lands before or after the menu is on screen.
+        for (item, provider) in asyncIcons {
+            Task { @MainActor in
+                if let image = await provider() { item.image = image }
+            }
         }
         return menu
     }

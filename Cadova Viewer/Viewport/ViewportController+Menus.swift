@@ -34,24 +34,47 @@ extension ViewportController {
     }
 
     func buildPartsMenuItems(for parts: [ModelData.Part], with builder: MenuBuilder) {
+        let thumbnails = sceneController.thumbnails
         for part in parts {
-            builder.addItem(label: part.name, checked: hiddenPartIDs.contains(part.id) == false) {
-                self.hiddenPartIDs.formSymmetricDifference([part.id])
-            } onHighlight: { h, _ in
-                self.highlightedPartID = h ? part.id : nil
+            // Same icon on all three variants (the option/shift alternates swap in place) so the row
+            // height and text indent stay put as the user holds a modifier. A cached thumbnail is set
+            // synchronously so it shows the instant the (blocking) menu opens; otherwise the async
+            // provider renders it off-main and caches it for the next open.
+            // All closures passed by label (rather than trailing-closure syntax) so `asyncIcon:`,
+            // declared last, can sit in the same argument list.
+            let cachedIcon = thumbnails.cachedMenuThumbnail(for: part.id)
+            let iconProvider: MenuBuilder.AsyncIconProvider = {
+                await thumbnails.menuThumbnail(for: part.id)
             }
+            builder.addItem(
+                label: part.name,
+                icon: cachedIcon,
+                checked: hiddenPartIDs.contains(part.id) == false,
+                action: { self.hiddenPartIDs.formSymmetricDifference([part.id]) },
+                onHighlight: { h, _ in self.highlightedPartID = h ? part.id : nil },
+                asyncIcon: iconProvider
+            )
 
-            builder.addItem(label: "Show only “\(part.name)”", checked: onlyVisiblePartID == part.id, modifiers: .option, isAlternate: true) {
-                self.onlyVisiblePartID = part.id
-            } onHighlight: { h, _ in
-                self.highlightedPartID = h ? part.id : nil
-            }
+            builder.addItem(
+                label: "Show only “\(part.name)”",
+                icon: cachedIcon,
+                checked: onlyVisiblePartID == part.id,
+                modifiers: .option,
+                isAlternate: true,
+                action: { self.onlyVisiblePartID = part.id },
+                onHighlight: { h, _ in self.highlightedPartID = h ? part.id : nil },
+                asyncIcon: iconProvider
+            )
 
-            builder.addItem(label: "Slice “\(part.name)”", modifiers: .shift, isAlternate: true) {
-                self.document?.slicePart(part)
-            } onHighlight: { h, _ in
-                self.highlightedPartID = h ? part.id : nil
-            }
+            builder.addItem(
+                label: "Slice “\(part.name)”",
+                icon: cachedIcon,
+                modifiers: .shift,
+                isAlternate: true,
+                action: { self.document?.slicePart(part) },
+                onHighlight: { h, _ in self.highlightedPartID = h ? part.id : nil },
+                asyncIcon: iconProvider
+            )
         }
     }
 

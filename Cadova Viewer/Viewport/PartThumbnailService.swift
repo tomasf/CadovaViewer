@@ -8,8 +8,10 @@ import ViewerCore
 /// the same master geometry, a part's thumbnail is identical across viewports, so it lives here
 /// (owned by `SceneController`) rather than per-viewport.
 ///
-/// Rendering is done lazily and off the main thread, one part at a time, as the sidebar asks for each
-/// thumbnail. Results are published back on the main thread so rows refresh as renders land.
+/// Rendering is done lazily and off the main thread, one part at a time, as the sidebar or a context
+/// menu asks for each thumbnail. Results are published on the main actor so rows refresh as renders
+/// land. Entry points are all called on the main thread; the async render methods are `@MainActor`
+/// so they resume there to mutate the published cache after awaiting the off-main snapshot.
 final class PartThumbnailService: ObservableObject {
     /// Rendered thumbnails keyed by part id.
     @Published private(set) var thumbnails: [ModelData.Part.ID: NSImage] = [:]
@@ -18,42 +20,79 @@ final class PartThumbnailService: ObservableObject {
     private let pixelSize: CGFloat = 108
 
     private var parts: [ModelData.Part.ID: ModelData.Part] = [:]
-    /// Parts whose render has already been kicked off, so a row asking repeatedly enqueues once.
-    private var requested: Set<ModelData.Part.ID> = []
-    /// Serial so renders happen one at a time and don't swamp the GPU/CPU for many-part models.
-    private let renderQueue = DispatchQueue(label: "se.tomasf.CadovaViewer.PartThumbnailRenderer", qos: .utility)
+    /// The in-flight (or finished) render for each part, so several askers share a single render
+    /// rather than each kicking off its own.
+    private var renderTasks: [ModelData.Part.ID: Task<NSImage?, Never>] = [:]
+    /// Serialises the actual snapshots so a many-part model doesn't swamp the GPU/CPU.
+    private let renderer = ThumbnailRenderer()
 
     /// Re-points the service at a freshly loaded model's parts, clearing any previous thumbnails.
     func setParts(_ parts: [ModelData.Part]) {
         self.parts = Dictionary(parts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         thumbnails = [:]
-        requested = []
+        for task in renderTasks.values { task.cancel() }
+        renderTasks = [:]
     }
 
     /// The cached thumbnail for a part, kicking off an async render the first time it's requested.
-    /// Call from the main thread (e.g. a SwiftUI row body).
+    /// Synchronous for SwiftUI row bodies; rows refresh via `@Published` once the render lands.
     func thumbnail(for id: ModelData.Part.ID) -> NSImage? {
         if let image = thumbnails[id] { return image }
-        requestRender(id)
+        Task { _ = await renderedThumbnail(for: id) }
         return nil
     }
 
-    private func requestRender(_ id: ModelData.Part.ID) {
-        guard !requested.contains(id), let part = parts[id] else { return }
-        requested.insert(id)
+    /// A small, menu-row-sized thumbnail, awaiting the render if it isn't cached yet. The right-click
+    /// menu opens without waiting and drops the icon in when it's ready. Only call for the handful of
+    /// parts under the cursor — for the sidebar's lazy, many-part case use `thumbnail(for:)`.
+    @MainActor
+    func menuThumbnail(for id: ModelData.Part.ID) async -> NSImage? {
+        await renderedThumbnail(for: id).map(menuSized)
+    }
 
-        // Clone on the main thread (where viewports also clone the shared master), then render the
-        // private copy off-main so the expensive snapshot doesn't hitch the UI. The clone shares the
-        // immutable geometry, which is safe to read concurrently with the live render.
+    /// A menu-sized copy of an already-rendered thumbnail, or nil if it isn't cached yet. Lets a menu
+    /// show icons for parts the sidebar has already rendered the instant it opens: `popUpContextMenu`
+    /// blocks the main thread in a modal tracking loop, so an async fill-in (see `menuThumbnail`)
+    /// can't land until the menu closes — only a value set before it's shown appears right away.
+    func cachedMenuThumbnail(for id: ModelData.Part.ID) -> NSImage? {
+        thumbnails[id].map(menuSized)
+    }
+
+    /// The full-size thumbnail for a part, rendering it once if needed. Concurrent callers for the
+    /// same part await the same task.
+    @MainActor
+    private func renderedThumbnail(for id: ModelData.Part.ID) async -> NSImage? {
+        if let image = thumbnails[id] { return image }
+        if let existing = renderTasks[id] { return await existing.value }
+        guard let part = parts[id] else { return nil }
+
+        // Clone on the main actor (where viewports also clone the shared master); the clone shares the
+        // immutable geometry, which is safe to read during the off-main render.
         let node = part.nodes.container.clone()
         let size = CGSize(width: pixelSize, height: pixelSize)
-        renderQueue.async { [weak self] in
-            let image = PartThumbnailRenderer.render(node: node, size: size)
-            DispatchQueue.main.async {
-                guard let self, let image else { return }
-                self.thumbnails[id] = image
-            }
-        }
+        let task = Task { await renderer.render(node: node, size: size) }
+        renderTasks[id] = task
+        let image = await task.value
+        renderTasks[id] = nil
+        if let image { thumbnails[id] = image }
+        return image
+    }
+
+    /// A copy of a full-size thumbnail sized for a menu row. `NSImage.size` only affects display size
+    /// (the 108px representation is preserved), so the menu draws a crisp Retina icon rather than a
+    /// 108 pt tall row.
+    private func menuSized(_ image: NSImage) -> NSImage {
+        let copy = image.copy() as! NSImage
+        copy.size = NSSize(width: 24, height: 24)
+        return copy
+    }
+}
+
+/// Serialises thumbnail snapshots onto a background executor: actor isolation means one render runs
+/// at a time, so a many-part model can't kick off dozens of simultaneous GPU snapshots.
+private actor ThumbnailRenderer {
+    func render(node: SCNNode, size: CGSize) -> NSImage? {
+        PartThumbnailRenderer.render(node: node, size: size)
     }
 }
 
