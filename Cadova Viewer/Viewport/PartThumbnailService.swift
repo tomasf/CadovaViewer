@@ -51,22 +51,12 @@ final class PartThumbnailService: ObservableObject {
         return nil
     }
 
-    /// A menu-row thumbnail, awaiting the render if it isn't cached yet. The right-click menu opens
-    /// without waiting and drops the icon in when it's ready. Only call for the handful of parts under
-    /// the cursor — for the sidebar's lazy, many-part case use `thumbnail(for:pixelSize:)`. Render at
-    /// `pixelSize = round(pointSize × scale)` so the `pointSize`-pt icon is pixel-perfect.
-    @MainActor
-    func menuThumbnail(for id: ModelData.Part.ID, pixelSize: Int, pointSize: CGFloat) async -> NSImage? {
-        await renderedThumbnail(for: Key(id: id, pixelSize: pixelSize)).map { sized($0, points: pointSize) }
-    }
-
     /// A menu-sized copy of an already-rendered thumbnail, or nil if the part hasn't been rendered at
     /// any size yet. Lets a menu show icons for parts the sidebar has already rendered the instant it
-    /// opens: `popUpContextMenu` blocks the main thread in a modal tracking loop, so an async fill-in
-    /// (see `menuThumbnail`) can't land until the menu closes — only a value set before it's shown
-    /// appears right away. The exact-size render rarely exists on the first open (the sidebar renders
-    /// at its own icon size), so fall back to the largest cached size for the part, resized; the async
-    /// provider then renders the pixel-perfect size for the next open.
+    /// opens, since the async render (see `renderMenuIcon`) may not land before the menu is on screen.
+    /// The exact-size render rarely exists on the first open (the sidebar renders at its own icon
+    /// size), so fall back to the largest cached size for the part, resized; the async provider then
+    /// renders and caches the pixel-perfect size.
     func cachedMenuThumbnail(for id: ModelData.Part.ID, pixelSize: Int, pointSize: CGFloat) -> NSImage? {
         let image = thumbnails[Key(id: id, pixelSize: pixelSize)] ?? largestCached(for: id)
         return image.map { sized($0, points: pointSize) }
@@ -75,6 +65,31 @@ final class PartThumbnailService: ObservableObject {
     /// The highest-resolution cached render for a part (best source to resize from), or nil if none.
     private func largestCached(for id: ModelData.Part.ID) -> NSImage? {
         thumbnails.filter { $0.key.id == id }.max { $0.key.pixelSize < $1.key.pixelSize }?.value
+    }
+
+    /// Whether a render is already cached at exactly this key (so the caller can skip re-rendering).
+    func contains(_ key: Key) -> Bool { thumbnails[key] != nil }
+
+    /// Renders a part's menu icon and caches the bitmap, returning a copy sized to `pointSize`.
+    ///
+    /// **Nothing here runs on the main actor**: the snapshot runs on the
+    /// `ThumbnailRenderer` actor and the cache store is marshalled onto the main thread via a run-loop
+    /// perform in tracking-live modes. That matters because `popUpContextMenu` spins the run loop in
+    /// `NSEventTrackingRunLoopMode`, which doesn't service the main-queue (main-actor) executor — so a
+    /// normal `Task { @MainActor … }` can't resume until the menu closes. Keeping off the main actor
+    /// lets the icon land while the menu is open. `node` must be a clone taken on the main thread.
+    func renderMenuIcon(id: ModelData.Part.ID, node: SCNNode, pixelSize: Int, pointSize: CGFloat) async -> NSImage? {
+        guard let bitmap = await renderer.render(node: node, size: CGSize(width: pixelSize, height: pixelSize)) else { return nil }
+        let key = Key(id: id, pixelSize: pixelSize)
+        // Publish to the main-thread @Published cache in modes that stay live during menu tracking, so
+        // the sidebar / next open reuse it and SwiftUI refreshes. (.common covers the non-tracking
+        // case.) `service` is touched only on the main thread inside the perform block, so opt it out
+        // of the Sendable check (the run-loop block is treated as `@Sendable` here).
+        nonisolated(unsafe) let service = self
+        RunLoop.main.perform(inModes: [.common, .eventTracking, .modalPanel]) {
+            service.thumbnails[key] = bitmap
+        }
+        return sized(bitmap, points: pointSize)
     }
 
     /// The thumbnail for a part at a given pixel size, rendering it once if needed. Concurrent callers

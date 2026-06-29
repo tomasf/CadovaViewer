@@ -83,9 +83,20 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         }
         // Kick off async icon rendering now that the menu exists; each result is set on its item in
         // place, so icons appear whether the render lands before or after the menu is on screen.
+        //
+        // Deliberately off the main actor: a context menu spins the run loop in
+        // `NSEventTrackingRunLoopMode`, which doesn't service the main-queue (main-actor) executor, so
+        // a `Task { @MainActor }` continuation can't resume until the menu closes. Instead render off
+        // the main actor (the provider must too) and assign `item.image` via a run-loop perform in
+        // tracking-live modes, which NSMenu picks up and redraws while the menu is open.
         for (item, provider) in asyncIcons {
-            Task { @MainActor in
-                if let image = await provider() { item.image = image }
+            // Only ever assigned on the main thread inside the perform block below.
+            nonisolated(unsafe) let item = item
+            Task.detached {
+                guard let image = await provider() else { return }
+                RunLoop.main.perform(inModes: [.common, .eventTracking, .modalPanel]) {
+                    item.image = image
+                }
             }
         }
         return menu

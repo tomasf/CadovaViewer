@@ -47,8 +47,18 @@ extension ViewportController {
             // All closures passed by label (rather than trailing-closure syntax) so `asyncIcon:`,
             // declared last, can sit in the same argument list.
             let cachedIcon = thumbnails.cachedMenuThumbnail(for: part.id, pixelSize: menuPixelSize, pointSize: menuPointSize)
-            let iconProvider: MenuBuilder.AsyncIconProvider = {
-                await thumbnails.menuThumbnail(for: part.id, pixelSize: menuPixelSize, pointSize: menuPointSize)
+            // When the exact-size icon isn't cached yet, render it off the main actor (so it can land
+            // while the menu is tracking — see `renderMenuIcon` / `MenuBuilder`). The node is cloned
+            // here on the main thread; one shared task feeds all three alternates for the part.
+            let iconProvider: MenuBuilder.AsyncIconProvider?
+            if thumbnails.contains(.init(id: part.id, pixelSize: menuPixelSize)) {
+                iconProvider = nil
+            } else {
+                let node = part.nodes.container.clone()
+                let renderTask = Task.detached {
+                    await thumbnails.renderMenuIcon(id: part.id, node: node, pixelSize: menuPixelSize, pointSize: menuPointSize)
+                }
+                iconProvider = { await renderTask.value }
             }
             builder.addItem(
                 label: part.name,
