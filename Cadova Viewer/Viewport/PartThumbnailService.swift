@@ -13,16 +13,22 @@ import ViewerCore
 /// land. Entry points are all called on the main thread; the async render methods are `@MainActor`
 /// so they resume there to mutate the published cache after awaiting the off-main snapshot.
 final class PartThumbnailService: ObservableObject {
-    /// Rendered thumbnails keyed by part id.
-    @Published private(set) var thumbnails: [ModelData.Part.ID: NSImage] = [:]
+    /// A part thumbnail at a specific pixel size. The same part is drawn at several device-pixel
+    /// footprints — the sidebar's icon-size setting (18/24/32 pt) and menu rows (24 pt), each times
+    /// the display's scale — so every (part, pixel size) is rendered and cached independently. That
+    /// way each consumer gets a bitmap matching its footprint exactly, with no up- or down-sampling.
+    struct Key: Hashable {
+        let id: ModelData.Part.ID
+        let pixelSize: Int
+    }
 
-    /// Pixel side length of the rendered image (≈3× the ~36 pt sidebar row image, for Retina).
-    private let pixelSize: CGFloat = 108
+    /// Rendered thumbnails keyed by part and pixel size.
+    @Published private(set) var thumbnails: [Key: NSImage] = [:]
 
     private var parts: [ModelData.Part.ID: ModelData.Part] = [:]
-    /// The in-flight (or finished) render for each part, so several askers share a single render
-    /// rather than each kicking off its own.
-    private var renderTasks: [ModelData.Part.ID: Task<NSImage?, Never>] = [:]
+    /// The in-flight (or finished) render for each (part, pixel size), so several askers share a
+    /// single render rather than each kicking off its own.
+    private var renderTasks: [Key: Task<NSImage?, Never>] = [:]
     /// Serialises the actual snapshots so a many-part model doesn't swamp the GPU/CPU.
     private let renderer = ThumbnailRenderer()
 
@@ -34,56 +40,69 @@ final class PartThumbnailService: ObservableObject {
         renderTasks = [:]
     }
 
-    /// The cached thumbnail for a part, kicking off an async render the first time it's requested.
-    /// Synchronous for SwiftUI row bodies; rows refresh via `@Published` once the render lands.
-    func thumbnail(for id: ModelData.Part.ID) -> NSImage? {
-        if let image = thumbnails[id] { return image }
-        Task { _ = await renderedThumbnail(for: id) }
+    /// The cached thumbnail for a part at `pixelSize` device pixels, kicking off an async render the
+    /// first time it's requested. Synchronous for SwiftUI row bodies; rows refresh via `@Published`
+    /// once the render lands. Pass `round(pointSize × displayScale)` so the bitmap matches the row's
+    /// device-pixel footprint exactly.
+    func thumbnail(for id: ModelData.Part.ID, pixelSize: Int) -> NSImage? {
+        let key = Key(id: id, pixelSize: pixelSize)
+        if let image = thumbnails[key] { return image }
+        Task { _ = await renderedThumbnail(for: key) }
         return nil
     }
 
-    /// A small, menu-row-sized thumbnail, awaiting the render if it isn't cached yet. The right-click
-    /// menu opens without waiting and drops the icon in when it's ready. Only call for the handful of
-    /// parts under the cursor — for the sidebar's lazy, many-part case use `thumbnail(for:)`.
+    /// A menu-row thumbnail, awaiting the render if it isn't cached yet. The right-click menu opens
+    /// without waiting and drops the icon in when it's ready. Only call for the handful of parts under
+    /// the cursor — for the sidebar's lazy, many-part case use `thumbnail(for:pixelSize:)`. Render at
+    /// `pixelSize = round(pointSize × scale)` so the `pointSize`-pt icon is pixel-perfect.
     @MainActor
-    func menuThumbnail(for id: ModelData.Part.ID) async -> NSImage? {
-        await renderedThumbnail(for: id).map(menuSized)
+    func menuThumbnail(for id: ModelData.Part.ID, pixelSize: Int, pointSize: CGFloat) async -> NSImage? {
+        await renderedThumbnail(for: Key(id: id, pixelSize: pixelSize)).map { sized($0, points: pointSize) }
     }
 
-    /// A menu-sized copy of an already-rendered thumbnail, or nil if it isn't cached yet. Lets a menu
-    /// show icons for parts the sidebar has already rendered the instant it opens: `popUpContextMenu`
-    /// blocks the main thread in a modal tracking loop, so an async fill-in (see `menuThumbnail`)
-    /// can't land until the menu closes — only a value set before it's shown appears right away.
-    func cachedMenuThumbnail(for id: ModelData.Part.ID) -> NSImage? {
-        thumbnails[id].map(menuSized)
+    /// A menu-sized copy of an already-rendered thumbnail, or nil if the part hasn't been rendered at
+    /// any size yet. Lets a menu show icons for parts the sidebar has already rendered the instant it
+    /// opens: `popUpContextMenu` blocks the main thread in a modal tracking loop, so an async fill-in
+    /// (see `menuThumbnail`) can't land until the menu closes — only a value set before it's shown
+    /// appears right away. The exact-size render rarely exists on the first open (the sidebar renders
+    /// at its own icon size), so fall back to the largest cached size for the part, resized; the async
+    /// provider then renders the pixel-perfect size for the next open.
+    func cachedMenuThumbnail(for id: ModelData.Part.ID, pixelSize: Int, pointSize: CGFloat) -> NSImage? {
+        let image = thumbnails[Key(id: id, pixelSize: pixelSize)] ?? largestCached(for: id)
+        return image.map { sized($0, points: pointSize) }
     }
 
-    /// The full-size thumbnail for a part, rendering it once if needed. Concurrent callers for the
-    /// same part await the same task.
+    /// The highest-resolution cached render for a part (best source to resize from), or nil if none.
+    private func largestCached(for id: ModelData.Part.ID) -> NSImage? {
+        thumbnails.filter { $0.key.id == id }.max { $0.key.pixelSize < $1.key.pixelSize }?.value
+    }
+
+    /// The thumbnail for a part at a given pixel size, rendering it once if needed. Concurrent callers
+    /// for the same (part, pixel size) await the same task.
     @MainActor
-    private func renderedThumbnail(for id: ModelData.Part.ID) async -> NSImage? {
-        if let image = thumbnails[id] { return image }
-        if let existing = renderTasks[id] { return await existing.value }
-        guard let part = parts[id] else { return nil }
+    private func renderedThumbnail(for key: Key) async -> NSImage? {
+        if let image = thumbnails[key] { return image }
+        if let existing = renderTasks[key] { return await existing.value }
+        guard let part = parts[key.id] else { return nil }
 
         // Clone on the main actor (where viewports also clone the shared master); the clone shares the
         // immutable geometry, which is safe to read during the off-main render.
         let node = part.nodes.container.clone()
-        let size = CGSize(width: pixelSize, height: pixelSize)
+        let size = CGSize(width: key.pixelSize, height: key.pixelSize)
         let task = Task { await renderer.render(node: node, size: size) }
-        renderTasks[id] = task
+        renderTasks[key] = task
         let image = await task.value
-        renderTasks[id] = nil
-        if let image { thumbnails[id] = image }
+        renderTasks[key] = nil
+        if let image { thumbnails[key] = image }
         return image
     }
 
-    /// A copy of a full-size thumbnail sized for a menu row. `NSImage.size` only affects display size
-    /// (the 108px representation is preserved), so the menu draws a crisp Retina icon rather than a
-    /// 108 pt tall row.
-    private func menuSized(_ image: NSImage) -> NSImage {
+    /// A copy of a rendered thumbnail with its point size set for a menu row. `NSImage.size` only
+    /// affects display size (the pixel representation is preserved), so the menu draws the bitmap at
+    /// `points` pt — pixel-perfect when it was rendered at `points × scale` device pixels.
+    private func sized(_ image: NSImage, points: CGFloat) -> NSImage {
         let copy = image.copy() as! NSImage
-        copy.size = NSSize(width: 24, height: 24)
+        copy.size = NSSize(width: points, height: points)
         return copy
     }
 }

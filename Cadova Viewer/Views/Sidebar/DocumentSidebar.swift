@@ -51,7 +51,7 @@ struct DocumentSidebar: View {
                     ForEach(allParts) { part in
                         PartRow(
                             part: part,
-                            thumbnail: thumbnails.thumbnail(for: part.id),
+                            thumbnails: thumbnails,
                             isVisible: !viewport.hiddenPartIDs.contains(part.id),
                             toggleVisibility: { toggleVisibility(part.id) }
                         )
@@ -259,10 +259,13 @@ private struct PartRow: View {
     // Match the thumbnail to the system "Sidebar icon size" setting, which SwiftUI surfaces here and
     // also uses to size the row's text/height — so the image scales in step with the rest of the row.
     @Environment(\.sidebarRowSize) private var sidebarRowSize
+    @Environment(\.displayScale) private var displayScale
     @Environment(\.appearsActive) private var appearsActive
 
     let part: ModelData.Part
-    let thumbnail: NSImage?
+    // Not observed: the parent `DocumentSidebar` observes the service and rebuilds these rows when a
+    // render lands, at which point this row re-reads the now-cached thumbnail.
+    let thumbnails: PartThumbnailService
     let isVisible: Bool
     let toggleVisibility: () -> Void
 
@@ -273,6 +276,12 @@ private struct PartRow: View {
         case .large: 32
         @unknown default: 24
         }
+    }
+
+    /// The thumbnail rendered to match this row's exact device-pixel footprint, so it's pixel-perfect
+    /// at the current sidebar icon size and display scale.
+    private var thumbnail: NSImage? {
+        thumbnails.thumbnail(for: part.id, pixelSize: Int((thumbnailSize * displayScale).rounded()))
     }
 
     private var checkmarkStyle: AnyShapeStyle {

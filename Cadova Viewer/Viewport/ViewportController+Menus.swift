@@ -35,6 +35,10 @@ extension ViewportController {
 
     func buildPartsMenuItems(for parts: [ModelData.Part], with builder: MenuBuilder) {
         let thumbnails = sceneController.thumbnails
+        // Render the menu icons to their exact device-pixel footprint (24 pt × the window's scale) so
+        // they're pixel-perfect rather than resampled from a fixed size.
+        let menuPointSize: CGFloat = 24
+        let menuPixelSize = Int((menuPointSize * (sceneView.window?.backingScaleFactor ?? 2)).rounded())
         for part in parts {
             // Same icon on all three variants (the option/shift alternates swap in place) so the row
             // height and text indent stay put as the user holds a modifier. A cached thumbnail is set
@@ -42,9 +46,9 @@ extension ViewportController {
             // provider renders it off-main and caches it for the next open.
             // All closures passed by label (rather than trailing-closure syntax) so `asyncIcon:`,
             // declared last, can sit in the same argument list.
-            let cachedIcon = thumbnails.cachedMenuThumbnail(for: part.id)
+            let cachedIcon = thumbnails.cachedMenuThumbnail(for: part.id, pixelSize: menuPixelSize, pointSize: menuPointSize)
             let iconProvider: MenuBuilder.AsyncIconProvider = {
-                await thumbnails.menuThumbnail(for: part.id)
+                await thumbnails.menuThumbnail(for: part.id, pixelSize: menuPixelSize, pointSize: menuPointSize)
             }
             builder.addItem(
                 label: part.name,
