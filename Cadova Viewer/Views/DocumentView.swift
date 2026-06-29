@@ -228,7 +228,10 @@ struct DocumentView: View {
                 Menu {
                     ForEach(apps, id: \.url) { app in
                         Button {
-                            app.open(file: url, errorHandler: errorHandler)
+                            Task {
+                                do { try await app.open(file: url) }
+                                catch { errorHandler(error) }
+                            }
                         } label: {
                             HStack {
                                 Image(nsImage: app.icon)

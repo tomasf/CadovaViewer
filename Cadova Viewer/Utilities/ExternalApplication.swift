@@ -43,13 +43,7 @@ extension ExternalApplication {
             .filter { $0.bundleIdentifier != Bundle.main.bundleIdentifier }
     }
 
-    func open(file fileURL: URL, errorHandler: @escaping (Error) -> ()) {
-        Task {
-            do {
-                try await NSWorkspace.shared.open([fileURL], withApplicationAt: url, configuration: NSWorkspace.OpenConfiguration())
-            } catch {
-                errorHandler(error)
-            }
-        }
+    func open(file fileURL: URL) async throws {
+        try await NSWorkspace.shared.open([fileURL], withApplicationAt: url, configuration: NSWorkspace.OpenConfiguration())
     }
 }

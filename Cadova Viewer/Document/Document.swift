@@ -143,16 +143,32 @@ class Document: NSDocument, NSWindowDelegate {
     /// decide whether any surgery is required — comes from the authoritative loaded model.
     func sliceModel(parts: [ModelData.Part]) {
         guard let fileURL, let totalItemCount = modelSubject.value?.parts.count else { return }
-        SlicingService.sliceModel(at: fileURL, parts: parts, totalItemCount: totalItemCount, willStart: beginSlicing, didFinish: endSlicing) { [weak self] error in
-            self?.presentError(error)
+        do {
+            guard let operation = try SlicingService.sliceModel(at: fileURL, parts: parts, totalItemCount: totalItemCount) else { return }
+            run(operation)
+        } catch {
+            presentError(error)
         }
     }
 
     /// Slices a single part in the preferred slicer.
     func slicePart(_ part: ModelData.Part) {
-        guard let fileURL else { return }
-        SlicingService.slicePart(part, at: fileURL, willStart: beginSlicing, didFinish: endSlicing) { [weak self] error in
-            self?.presentError(error)
+        guard let fileURL, let operation = SlicingService.slicePart(part, at: fileURL) else { return }
+        run(operation)
+    }
+
+    /// Runs a resolved slice, keeping the slicing indicator up for the duration of any archive write
+    /// (operations that just hand the original file to the slicer show no indicator).
+    private func run(_ operation: SlicingService.Operation) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if operation.showsProgress { beginSlicing() }
+            defer { if operation.showsProgress { endSlicing() } }
+            do {
+                try await operation.run()
+            } catch {
+                presentError(error)
+            }
         }
     }
 

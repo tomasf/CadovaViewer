@@ -290,7 +290,7 @@ extension ViewportController {
             guard let url = self.document?.fileURL else { return }
             for app in ExternalApplication.appsAbleToOpen(url: url) {
                 builder.addItem(label: app.name, icon: app.icon) {
-                    app.open(file: url, errorHandler: { _ in })
+                    Task { try? await app.open(file: url) }
                 }
             }
         })
