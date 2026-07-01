@@ -23,6 +23,11 @@ extension ViewportController {
     private static let rollInertiaMinStartSpeed: Float = 0.25
     private static let rollInertiaStopSpeed: Float = 0.08
 
+    /// Zoom's glide speed is in log-zoom units/sec (a rate of exponential dolly, so factor = e^logZoom),
+    /// so it needs its own thresholds too.
+    private static let zoomInertiaMinStartSpeed: Float = 0.5
+    private static let zoomInertiaStopSpeed: Float = 0.05
+
     // Zoom limits, in multiples of the model's bounding radius — a distance-to-pivot for perspective,
     // a view half-height (orthographicScale) for orthographic. The zoom-in floor matters: a
     // multiplicative dolly can otherwise reach a near-zero distance, from which zooming back out
@@ -49,6 +54,16 @@ extension ViewportController {
         /// main-thread only). Captured from `bounds` rather than the SwiftUI-fed `sceneViewSize`, which
         /// can briefly be zero (see the fallback in `fitModel`).
         let maxViewportDim: Float
+        /// The viewport height (points) at drag start. Like `maxViewportDim`, captured so the zoom glide
+        /// can compute an orthographic re-pan on the render thread without touching `sceneView.bounds`.
+        let viewportHeight: Float
+        /// The camera's `orthographicScale` (view half-height, world units) at drag start. Zoom re-applies
+        /// cumulatively from this start value, so it's captured rather than read live. Unused (0) in
+        /// perspective.
+        let orthographicScale: Float
+        /// Whether the camera was orthographic at drag start, choosing the zoom math. Won't change during
+        /// a gesture, so it's safe to capture once.
+        let usesOrthographic: Bool
     }
 
     // MARK: - Pivot
@@ -93,7 +108,10 @@ extension ViewportController {
             initialTransform: m,
             initialRight: right,
             worldPerPoint: worldPerPoint(atDepth: depth),
-            maxViewportDim: Float(max(sceneView.bounds.width, sceneView.bounds.height, 1))
+            maxViewportDim: Float(max(sceneView.bounds.width, sceneView.bounds.height, 1)),
+            viewportHeight: Float(max(sceneView.bounds.height, 1)),
+            orthographicScale: Float(cameraNode.camera?.orthographicScale ?? 0),
+            usesOrthographic: cameraNode.camera?.usesOrthographicProjection ?? false
         )
     }
 
@@ -233,6 +251,60 @@ extension ViewportController {
         viewDidChange()
     }
 
+    /// Cumulative zoom-toward-the-pivot, applied rigidly to the drag-start transform (like
+    /// `orbitCamera`/`panCamera`/`rollCamera`), so it's drift-free and keeps the pivot fixed on screen.
+    /// `logZoom` is the total exponential dolly from the start (factor = e^logZoom; > 0 zooms in). Runs
+    /// on the render thread during the zoom glide, so it touches only captured state — no `sceneView`.
+    func zoomCamera(_ state: CameraDragState, logZoom: Float) {
+        let factor = expf(logZoom)
+        guard factor > 0 else { return }
+        let target = simd_float3(state.pivot)
+        let limits = zoomLimits()
+        let pos0 = state.initialTransform.columns.3.xyz
+
+        if state.usesOrthographic {
+            guard let camera = cameraNode.camera, state.viewportHeight > 0 else { return }
+            var newScale = state.orthographicScale / factor
+            if let limits {
+                newScale = min(max(newScale, limits.min), limits.max)
+            } else {
+                newScale = max(newScale, 0.001)
+            }
+            // Re-pan so the pivot stays under the (fixed) cursor: in orthographic, a world point's screen
+            // offset from centre is dot(point − camPos, axis) / worldPerPoint. Holding that offset while
+            // the scale (and thus worldPerPoint) changes means shifting the camera by the offset times
+            // the change in worldPerPoint.
+            let wpp0 = 2 * state.orthographicScale / state.viewportHeight
+            let wppNew = 2 * newScale / state.viewportHeight
+            let right = simd_normalize(state.initialTransform.columns.0.xyz)
+            let up = simd_normalize(state.initialTransform.columns.1.xyz)
+            let offsetX = simd_dot(target - pos0, right) / wpp0
+            let offsetY = simd_dot(target - pos0, up) / wpp0
+            let newPos = pos0 - right * (offsetX * (wppNew - wpp0)) - up * (offsetY * (wppNew - wpp0))
+
+            SCNTransaction.begin()
+            SCNTransaction.disableActions = true
+            camera.orthographicScale = Double(newScale)
+            var m = state.initialTransform
+            m.columns.3 = SIMD4<Float>(newPos, 1)
+            cameraNode.simdTransform = m
+            SCNTransaction.commit()
+        } else {
+            // Perspective dolly along the camera→pivot ray (keeps the pivot fixed on screen). Distance to
+            // the pivot scales by 1/factor, clamped so it can't collapse to ~0 or run to infinity.
+            let offset = pos0 - target
+            let distance = simd_length(offset)
+            guard distance > 1e-5 else { return }
+            var newDistance = distance / factor
+            if let limits {
+                newDistance = min(max(newDistance, limits.min), limits.max)
+            }
+            var m = state.initialTransform
+            m.columns.3 = SIMD4<Float>(target + offset * (newDistance / distance), 1)
+            applyCameraTransform(m)
+        }
+    }
+
     /// Min/max zoom extent from the model's bounding radius: a distance-to-pivot for perspective, a
     /// view half-height (orthographicScale) for orthographic. `nil` when no model is loaded.
     private func zoomLimits() -> (min: Float, max: Float)? {
@@ -276,7 +348,12 @@ extension ViewportController {
     /// release (below the mode's min-start speed) doesn't glide.
     func startCameraInertia(dragState: CameraDragState, delta: SIMD2<Float>, velocity: SIMD2<Float>, mode: CameraInertiaMode) {
         stopCameraInertia()
-        let minStart = mode == .roll ? Self.rollInertiaMinStartSpeed : Self.inertiaMinStartSpeed
+        let minStart: Float
+        switch mode {
+        case .roll: minStart = Self.rollInertiaMinStartSpeed
+        case .zoom: minStart = Self.zoomInertiaMinStartSpeed
+        case .orbit, .pan: minStart = Self.inertiaMinStartSpeed
+        }
         guard simd_length(velocity) >= minStart else { return }
         inertia.withLock { $0 = InertiaState(dragState: dragState, delta: delta, velocity: velocity, mode: mode) }
         // Render vsync-paced for the whole glide, so the render loop ticks `stepCameraInertia` every
@@ -298,7 +375,12 @@ extension ViewportController {
             s.lastTime = time
             s.delta += s.velocity * dt
             s.velocity *= pow(Self.inertiaRetentionPerFrame, dt * 60)
-            let stopSpeed = s.mode == .roll ? Self.rollInertiaStopSpeed : Self.inertiaStopSpeed
+            let stopSpeed: Float
+            switch s.mode {
+            case .roll: stopSpeed = Self.rollInertiaStopSpeed
+            case .zoom: stopSpeed = Self.zoomInertiaStopSpeed
+            case .orbit, .pan: stopSpeed = Self.inertiaStopSpeed
+            }
             let stopped = simd_length(s.velocity) < stopSpeed
             let result = (s.dragState, s.delta, s.mode, stopped)
             state = stopped ? nil : s
@@ -310,6 +392,7 @@ extension ViewportController {
         case .orbit: orbitCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
         case .pan: panCamera(step.dragState, dx: step.delta.x, dy: step.delta.y)
         case .roll: rollCamera(step.dragState, angle: step.delta.x)
+        case .zoom: zoomCamera(step.dragState, logZoom: step.delta.x)
         }
 
         if step.stopped {

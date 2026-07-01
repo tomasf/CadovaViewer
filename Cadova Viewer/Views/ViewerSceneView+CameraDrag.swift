@@ -179,3 +179,27 @@ struct RollVelocityTracker {
         CACurrentMediaTime() - lastMoveTime > 0.06 ? 0 : velocity
     }
 }
+
+/// Tracks zoom speed (log-zoom units/sec, i.e. the rate of exponential dolly) across the discrete
+/// events of a trackpad pinch, so the post-release zoom glide starts at the right speed. Mirrors
+/// `RollVelocityTracker`: lightly smoothed, and zeroed if released after a pause so a deliberate stop
+/// doesn't fling.
+struct ZoomVelocityTracker {
+    private var lastLogZoom: Float = 0
+    private var lastMoveTime = CACurrentMediaTime()
+    private var velocity: Float = 0
+
+    mutating func record(logZoom: Float) {
+        let now = CACurrentMediaTime()
+        let dt = max(now - lastMoveTime, 1.0 / 60.0)
+        let instant = (logZoom - lastLogZoom) / Float(dt)
+        velocity = instant * 0.6 + velocity * 0.4
+        lastLogZoom = logZoom
+        lastMoveTime = now
+    }
+
+    /// Release speed (log-zoom units/sec), zero if the pinch stalled before lifting off.
+    func release() -> Float {
+        CACurrentMediaTime() - lastMoveTime > 0.06 ? 0 : velocity
+    }
+}

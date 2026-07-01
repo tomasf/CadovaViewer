@@ -49,6 +49,12 @@ class CustomSceneView: SCNView {
     var rollAngle: Float = 0
     var rollVelocityTracker = RollVelocityTracker()
 
+    /// In-progress trackpad pinch (zoom) state, accumulated across the gesture's discrete phased events.
+    /// See `magnify(with:)`.
+    var zoomDragState: ViewportController.CameraDragState?
+    var zoomLogAmount: Float = 0
+    var zoomVelocityTracker = ZoomVelocityTracker()
+
     let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
     let contextMenuSubject = PassthroughSubject<NSEvent, Never>()

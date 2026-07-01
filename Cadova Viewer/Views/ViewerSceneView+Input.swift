@@ -77,10 +77,43 @@ extension CustomSceneView {
         }
     }
 
+    /// Trackpad pinch gesture → zoom toward the pinch centre. Like `rotate(with:)` (and unlike the
+    /// synchronous orbit/pan `MouseTracker` loop), this arrives as discrete phased events, so a
+    /// cumulative log-zoom is accumulated across them (applied rigidly from the drag-start pose, so it's
+    /// drift-free) and a glide is started on release.
     override func magnify(with event: NSEvent) {
         guard let viewportController, cameraControlEnabled else { return }
         let point = convert(event.locationInWindow, from: nil)
-        viewportController.zoomCamera(factor: 1 + Double(event.magnification), towardViewPoint: point)
+        switch event.phase {
+        case .began:
+            viewportController.requestFocus()
+            mouseInteractionActiveSubject.send(true)
+            // beginCameraDrag cancels any ongoing glide and hit-tests the pivot under the cursor.
+            zoomDragState = viewportController.beginCameraDrag(atViewPoint: point)
+            zoomLogAmount = 0
+            zoomVelocityTracker = ZoomVelocityTracker()
+        case .changed:
+            guard let state = zoomDragState else { return }
+            // event.magnification is the per-event fractional change (factor − 1); accumulate its log so
+            // the total is an exponential dolly (factor = e^zoomLogAmount).
+            zoomLogAmount += log(1 + max(Float(event.magnification), -0.99))
+            zoomVelocityTracker.record(logZoom: zoomLogAmount)
+            viewportController.zoomCamera(state, logZoom: zoomLogAmount)
+        case .ended, .cancelled:
+            defer {
+                zoomDragState = nil
+                mouseInteractionActiveSubject.send(false)
+            }
+            guard let state = zoomDragState else { return }
+            viewportController.startCameraInertia(
+                dragState: state,
+                delta: SIMD2(zoomLogAmount, 0),
+                velocity: SIMD2(zoomVelocityTracker.release(), 0),
+                mode: .zoom
+            )
+        default:
+            break
+        }
     }
 
     /// Trackpad two-finger rotation gesture → roll about the screen-depth axis (like SceneKit's native
