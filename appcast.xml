@@ -3,6 +3,42 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.0.0</title>
+            <pubDate>Wed, 01 Jul 2026 14:27:02 +0200</pubDate>
+            <sparkle:version>9</sparkle:version>
+            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.0.0/CadovaViewer1.0.0.zip" length="22780364" type="application/octet-stream" sparkle:edSignature="caqbDjc9WDT1s8FjytmrBqZufNG5cKvHyWrJQ/uu2i2WOY9ZXktvk7f/VZ0x96EmIF+E9bS/VgFl5Wqs1rShCQ=="/>
+            <description><![CDATA[
+                <p>This release contains a ton of new features and improvements!</p>
+                <h4>New Features</h4>
+                <ul>
+                    <li><strong>Cross-sections</strong> — slice the model with interactive cut planes to inspect its interior. Add multiple planes and move, rotate, and toggle each independently, with axis snapping and a gizmo that stays reachable as you navigate. Cross-sections are undoable, and persist across reloads.</li>
+                    <li><strong>Split View</strong> — split the model view into multiple independent panes, each with its own camera, cross-sections and view options.</li>
+                    <li><strong>Sidebar</strong> — a window sidebar replaces the parts popover, listing the model's measurements and parts with thumbnails and visibility toggles.</li>
+                    <li><strong>Slicing</strong> — send the whole model or individual parts to a preferred external slicer, optionally leaving out non-solid (context/visual) parts.</li>
+                </ul>
+                <h4>Improvements</h4>
+                <ul>
+                    <li>Improved mouse interaction.</li>
+                    <li>Optional crease-aware smooth shading.</li>
+                    <li>Part highlighting now uses a clean outline.</li>
+                    <li>Apparent zoom is better preserved when switching between perspective and orthographic.</li>
+                    <li>Measurement display and interaction are significantly more efficient.</li>
+                    <li>The info sheet now reports dimensions, volume, surface area, and part count.</li>
+                    <li>Improved grid: it now follows the camera as you pan and zoom instead of staying a fixed patch, fades smoothly at its edge, and shows a live scale readout that updates as you zoom.</li>
+                </ul>
+                <h5>SpaceMouse</h5>
+                <ul>
+                    <li>New activation mode: claim the SpaceMouse in all apps except a listed set, alongside the existing "only these apps" mode.</li>
+                    <li>Improved compatibility.</li>
+                    <li>Smoother navigation.</li>
+                    <li>The cursor is now hidden while navigating.</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>0.4.0</title>
             <pubDate>Tue, 09 Jun 2026 15:55:55 +0200</pubDate>
             <sparkle:version>8</sparkle:version>
