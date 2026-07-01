@@ -72,10 +72,17 @@ extension ThreeMF.Model {
         }
 
         let defaultMaterial = SCNMaterial()
+        // Vertex colors can go fully black, at which point plain diffuse shading contributes
+        // nothing regardless of light direction. Physically-based shading keeps a Fresnel
+        // specular response independent of albedo, so black parts still pick up highlights
+        // and IBL reflections instead of reading as flat, depth-less silhouettes.
+        defaultMaterial.lightingModel = .physicallyBased
         defaultMaterial.diffuse.contents = NSColor.white
+        defaultMaterial.metalness.contents = 0 as NSNumber
+        defaultMaterial.roughness.contents = 0.5 as NSNumber
         defaultMaterial.emission.intensity = 0
         defaultMaterial.transparencyMode = .singleLayer
-        defaultMaterial.name = "Non-PBR material"
+        defaultMaterial.name = "Vertex-color material"
 
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: elements)
         geometry.materials = orderedMaterials.map { $0?.scnMaterial ?? defaultMaterial }
