@@ -7,7 +7,7 @@ extension ViewportController {
         // Assemble this viewport's own scene: shared image-based lighting, its chrome (grid +
         // measurements) under one hideable node, and an ambient fill. The model and the camera
         // headlight are added later (on load / below).
-        scene.lightingEnvironment.contents = sceneController.skyboxImages
+        scene.lightingEnvironment.contents = sceneController.environmentImage
         privateRoot.name = "Viewport chrome"
         scene.rootNode.addChildNode(privateRoot)
         privateRoot.addChildNode(grid.node)
