@@ -84,7 +84,7 @@ enum SlicingService {
         if keptItemIndices == IndexSet(integersIn: 0 ..< totalItemCount) {
             return Operation(app: app, action: .openOriginal(sourceURL))
         } else {
-            return Operation(app: app, action: .surgery(sourceURL: sourceURL, keptItemIndices: keptItemIndices, nameSuffix: nil))
+            return Operation(app: app, action: .surgery(sourceURL: sourceURL, keptItemIndices: keptItemIndices, nameSuffix: nameSuffix(for: includedParts)))
         }
     }
 
@@ -93,7 +93,18 @@ enum SlicingService {
     /// when no slicer is configured (Settings is opened).
     static func slicePart(_ part: ModelData.Part, at sourceURL: URL) -> Operation? {
         guard let app = resolveSlicerApp() else { return nil }
-        return Operation(app: app, action: .surgery(sourceURL: sourceURL, keptItemIndices: IndexSet(integer: part.itemIndex), nameSuffix: part.name))
+        return Operation(app: app, action: .surgery(sourceURL: sourceURL, keptItemIndices: IndexSet(integer: part.itemIndex), nameSuffix: part.name.sanitizedForFilename()))
+    }
+
+    /// The temp-filename suffix for a multi-part slice: the part names themselves when there are
+    /// few enough to stay readable, otherwise a count — so the slicer's window/tab title says what's
+    /// inside without becoming unwieldy for large selections.
+    private static func nameSuffix(for includedParts: [ModelData.Part]) -> String? {
+        let names = includedParts.map { $0.name.sanitizedForFilename() }
+        guard names.count > 1 else { return names.first }
+
+        let joined = ListFormatter.localizedString(byJoining: names)
+        return joined.count <= 50 ? joined : "\(names.count) parts"
     }
 
     /// The user's preferred slicer, or `nil` after opening Settings when none is chosen.
@@ -109,8 +120,8 @@ enum SlicingService {
         return app
     }
 
-    /// A unique temporary location named after the source file (with the part name appended for a
-    /// single-part slice) so the slicer shows a meaningful document name.
+    /// A unique temporary location named after the source file, with the included part name(s)
+    /// appended for a partial slice, so the slicer shows a meaningful document name.
     private static func makeTemporaryURL(for sourceURL: URL, nameSuffix: String?) throws -> URL {
         let baseName = sourceURL.deletingPathExtension().lastPathComponent
         let fileName = nameSuffix.map { "\(baseName) (\($0))" } ?? baseName
