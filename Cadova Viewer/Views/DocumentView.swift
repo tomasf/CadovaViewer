@@ -82,35 +82,37 @@ struct DocumentView: View {
         ViewportSplitView(viewModel: viewModel)
             .frame(minWidth: 500, minHeight: 300)
             .overlay(alignment: .bottom) {
-                Text("Loading")
-                    .font(.title2)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .foregroundStyle(.black)
-                    .background {
-                        Capsule()
-                            .fill(Color.yellow.opacity(0.8))
-                            .shadow(color: .black, radius: 2, x: 0, y: 0)
-                    }
-                    .opacity(isLoading ? 1 : 0)
-                    .padding()
-                    .allowsHitTesting(false)
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading")
+                        .font(.body)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(.white.opacity(0.15))
+                }
+                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+                .opacity(isLoading ? 1 : 0)
+                .padding()
+                .allowsHitTesting(false)
             }
             .overlay(alignment: .bottom) {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
                     Text("Preparing…")
-                        .font(.title2)
+                        .font(.body)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .colorScheme(.light)
-                .background {
-                    Capsule()
-                        .fill(Color.yellow.opacity(0.8))
-                        .shadow(color: .black, radius: 2, x: 0, y: 0)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.regularMaterial, in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(.white.opacity(0.15))
                 }
+                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
                 .opacity(isSlicing ? 1 : 0)
                 .padding()
                 .allowsHitTesting(false)
