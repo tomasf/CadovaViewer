@@ -126,20 +126,15 @@ extension Mesh {
 
     /// Crease-aware smooth normals, one per triangle corner, indexed by `triangleIndex * 3 + corner`.
     ///
-    /// Face normals are averaged per shared vertex, but only across edges whose dihedral angle is
-    /// within `creaseAngleDegrees` — the same threshold used to classify sharp/feature edges — so
-    /// genuine sharp edges keep hard, faceted shading while curved surfaces shade smoothly. The
-    /// shading creases therefore coincide with the drawn sharp edges. Degenerate (zero-area)
-    /// triangles never contribute a NaN normal; corners always receive a valid, normalized normal.
+    /// Each corner averages the normals of the faces around its vertex, but only those whose
+    /// normal lies within `creaseAngleDegrees` of the corner's *own* face normal — the same
+    /// threshold used to classify sharp/feature edges. The test being face-relative (rather than
+    /// transitive smoothing groups) means a flat region can't be tilted by an adjacent curved
+    /// surface: every corner of a coplanar region averages the same coplanar set and shades
+    /// perfectly flat, while curved surfaces still shade smoothly, and no corner can ever deviate
+    /// more than the crease angle from its face. Degenerate (zero-area) triangles never
+    /// contribute a NaN normal; corners always receive a valid, normalized normal.
     public func smoothCornerNormals(creaseAngleDegrees: Double = 30) -> [SCNVector3] {
-        struct Edge: Hashable {
-            let v1: Int
-            let v2: Int
-            init(_ a: Int, _ b: Int) {
-                if a < b { v1 = a; v2 = b } else { v1 = b; v2 = a }
-            }
-        }
-
         let triangleCount = triangles.count
         let cornerCount = triangleCount * 3
 
@@ -165,37 +160,12 @@ extension Mesh {
             return 2
         }
 
-        var edgeToTriangles: [Edge: [Int]] = [:]
-        edgeToTriangles.reserveCapacity(cornerCount)
+        // Faces around each mesh-vertex.
+        var vertexFaces = [[Int32]](repeating: [], count: vertices.count)
         for (faceIndex, t) in triangles.enumerated() {
-            edgeToTriangles[Edge(t.v1, t.v2), default: []].append(faceIndex)
-            edgeToTriangles[Edge(t.v2, t.v3), default: []].append(faceIndex)
-            edgeToTriangles[Edge(t.v3, t.v1), default: []].append(faceIndex)
-        }
-
-        // Union-find over corners. Two corners are merged when they sit on the same mesh-vertex
-        // and the edge connecting their triangles is smooth (within the crease threshold).
-        var parent = Array(0..<cornerCount)
-        func find(_ x: Int) -> Int {
-            var root = x
-            while parent[root] != root { parent[root] = parent[parent[root]]; root = parent[root] }
-            return root
-        }
-        func union(_ a: Int, _ b: Int) {
-            let ra = find(a), rb = find(b)
-            if ra != rb { parent[ra] = rb }
-        }
-
-        let cosThreshold = cos(creaseAngleDegrees * .pi / 180.0)
-        for (edge, faces) in edgeToTriangles where faces.count == 2 {
-            let f1 = faces[0], f2 = faces[1]
-            guard faceValid[f1], faceValid[f2] else { continue }
-            guard simd_dot(faceNormals[f1], faceNormals[f2]) >= cosThreshold else { continue }
-            // Merge the corners at both endpoints of this shared, smooth edge.
-            union(f1 * 3 + cornerIndex(of: edge.v1, in: triangles[f1]),
-                  f2 * 3 + cornerIndex(of: edge.v1, in: triangles[f2]))
-            union(f1 * 3 + cornerIndex(of: edge.v2, in: triangles[f1]),
-                  f2 * 3 + cornerIndex(of: edge.v2, in: triangles[f2]))
+            vertexFaces[t.v1].append(Int32(faceIndex))
+            vertexFaces[t.v2].append(Int32(faceIndex))
+            vertexFaces[t.v3].append(Int32(faceIndex))
         }
 
         // Interior angle at a corner, used to weight each face's contribution (Thürmer–Wüthrich),
@@ -211,29 +181,33 @@ extension Mesh {
             return acos(min(1, max(-1, simd_dot(u, v) / (lu * lv))))
         }
 
-        // Accumulate angle-weighted face normals into each smoothing group (keyed by its root).
-        var groupNormals = [SIMD3<Double>](repeating: .zero, count: cornerCount)
-        for f in 0..<triangleCount where faceValid[f] {
-            for corner in 0..<3 {
-                let weight = cornerAngle(face: f, corner: corner)
-                groupNormals[find(f * 3 + corner)] += faceNormals[f] * weight
-            }
-        }
-
+        // For each corner, blend the angle-weighted normals of the surrounding faces that lie
+        // within the crease angle of the corner's own face. Contributions also taper smoothly
+        // to zero as they approach the crease angle: a hard cutoff would let a feature bevel
+        // just under the threshold (e.g. a 25° cone skirting a flat face) tilt the flat face's
+        // edge normals by tens of degrees, which smears a shadow-like gradient across large
+        // faces. With the taper, near-threshold neighbors contribute almost nothing, while the
+        // small dihedrals of finely tessellated curved surfaces keep nearly full weight.
+        let cosThreshold = cos(creaseAngleDegrees * .pi / 180.0)
         var result = [SCNVector3](repeating: SCNVector3(0, 0, 1), count: cornerCount)
-        for f in 0..<triangleCount {
-            for corner in 0..<3 {
-                let cornerID = f * 3 + corner
-                var normal = groupNormals[find(cornerID)]
-                let length = simd_length(normal)
-                if length > 1e-12 {
-                    normal /= length
-                } else if faceValid[f] {
-                    normal = faceNormals[f] // isolated/degenerate group → fall back to the face normal
-                } else {
-                    continue // keep the default; this corner belongs to a degenerate triangle
+        for f in 0..<triangleCount where faceValid[f] {
+            let t = triangles[f]
+            for (corner, vertex) in [(0, t.v1), (1, t.v2), (2, t.v3)] {
+                var normal = SIMD3<Double>.zero
+                for packedFace in vertexFaces[vertex] {
+                    let g = Int(packedFace)
+                    guard faceValid[g] else { continue }
+                    let dot = simd_dot(faceNormals[g], faceNormals[f])
+                    guard dot >= cosThreshold else { continue }
+                    let angleDegrees = acos(min(1, dot)) * 180 / .pi
+                    let closeness = max(0, min(1, 1 - angleDegrees / creaseAngleDegrees))
+                    let taper = closeness * closeness * (3 - 2 * closeness)
+                    let weight = cornerAngle(face: g, corner: cornerIndex(of: vertex, in: triangles[g])) * taper
+                    normal += faceNormals[g] * weight
                 }
-                result[cornerID] = SCNVector3(normal.x, normal.y, normal.z)
+                let length = simd_length(normal)
+                let unit = length > 1e-12 ? normal / length : faceNormals[f]
+                result[f * 3 + corner] = SCNVector3(unit.x, unit.y, unit.z)
             }
         }
         return result
