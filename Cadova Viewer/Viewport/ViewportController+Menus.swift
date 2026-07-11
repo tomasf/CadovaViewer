@@ -13,7 +13,6 @@ extension ViewportController {
             if !partsUnderCursor.isEmpty {
                 builder.addHeader("Parts", alternate: "Show Only")
                 buildPartsMenuItems(for: partsUnderCursor, with: builder)
-                //builder.addSeparator()
             }
 
             if hiddenPartIDs.isEmpty {
