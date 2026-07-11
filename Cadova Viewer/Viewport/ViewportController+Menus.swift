@@ -11,9 +11,9 @@ extension ViewportController {
         let partsUnderCursor = viewPoint.map(partsUnderCursor(viewPoint:)) ?? []
         if sceneController.parts.count > 1 {
             if !partsUnderCursor.isEmpty {
-                builder.addHeader("Part Visibility", alternate: "Show Only")
+                builder.addHeader("Parts", alternate: "Show Only")
                 buildPartsMenuItems(for: partsUnderCursor, with: builder)
-                builder.addSeparator()
+                //builder.addSeparator()
             }
 
             if hiddenPartIDs.isEmpty {
@@ -28,8 +28,11 @@ extension ViewportController {
             builder.addSeparator()
         }
 
-        buildViewOptionToggles(with: builder)
-        builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
+        builder.addItem(label: "Show", submenu: { submenu in
+            self.buildViewOptionToggles(with: submenu, titlePrefix: "")
+            submenu.addSeparator()
+            self.buildEdgeVisibilityItems(with: submenu, labels: (none: "No Edges", sharp: "Sharp Edges", all: "All Edges"))
+        })
         return builder.makeMenu()
     }
 
@@ -323,21 +326,25 @@ extension ViewportController {
         }
     }
 
-    func buildViewOptionToggles(with builder: MenuBuilder) {
-        builder.addItem(label: "Show Grid", checked: viewOptions.showGrid) {
+    func buildViewOptionToggles(with builder: MenuBuilder, titlePrefix: String = "Show ") {
+        builder.addItem(label: "\(titlePrefix)Grid", checked: viewOptions.showGrid) {
             self.viewOptions.showGrid = !self.viewOptions.showGrid
         }
 
-        builder.addItem(label: "Show Origin", checked: viewOptions.showOrigin) {
+        builder.addItem(label: "\(titlePrefix)Origin", checked: viewOptions.showOrigin) {
             self.viewOptions.showOrigin = !self.viewOptions.showOrigin
         }
 
-        builder.addItem(label: "Show Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
+        builder.addItem(label: "\(titlePrefix)Axis Directions", checked: viewOptions.showCoordinateSystemIndicator) {
             self.viewOptions.showCoordinateSystemIndicator = !self.viewOptions.showCoordinateSystemIndicator
         }
     }
 
     func buildEdgeVisibilityMenu(_ menuBuilder: MenuBuilder) {
+        buildEdgeVisibilityItems(with: menuBuilder, labels: (none: "None", sharp: "Sharp", all: "All"))
+    }
+
+    private func buildEdgeVisibilityItems(with menuBuilder: MenuBuilder, labels: (none: String, sharp: String, all: String)) {
         // Edge visibility is document-wide (it acts on the shared geometry), so it lives on the
         // SceneController rather than this viewport's options.
         let initialEdgeVisibility = sceneController.documentOptions.edgeVisibility
@@ -354,8 +361,8 @@ extension ViewportController {
             }
         }
 
-        visibility(.none, label: "None")
-        visibility(.sharp, label: "Sharp")
-        visibility(.all, label: "All")
+        visibility(.none, label: labels.none)
+        visibility(.sharp, label: labels.sharp)
+        visibility(.all, label: labels.all)
     }
 }
