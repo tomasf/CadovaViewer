@@ -69,8 +69,14 @@ class MenuBuilder: NSObject, NSMenuDelegate, NSMenuItemValidation {
         menuItems.append(.separator())
     }
 
-    func addHeader(_ title: String) {
+    func addHeader(_ title: String, alternate: String? = nil) {
         menuItems.append(.sectionHeader(title: title))
+        if let alternate {
+            let altItem = NSMenuItem.sectionHeader(title: alternate)
+            altItem.keyEquivalentModifierMask = .option
+            altItem.isAlternate = true
+            menuItems.append(altItem)
+        }
     }
 
     private static let associationKey = "MenuBuilder"

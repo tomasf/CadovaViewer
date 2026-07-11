@@ -11,7 +11,7 @@ extension ViewportController {
         let partsUnderCursor = viewPoint.map(partsUnderCursor(viewPoint:)) ?? []
         if sceneController.parts.count > 1 {
             if !partsUnderCursor.isEmpty {
-                builder.addHeader("Part Visibility")
+                builder.addHeader("Part Visibility", alternate: "Show Only")
                 buildPartsMenuItems(for: partsUnderCursor, with: builder)
                 builder.addSeparator()
             }
@@ -70,12 +70,18 @@ extension ViewportController {
             )
 
             builder.addItem(
-                label: "Show only “\(part.name)”",
+                label: part.name,
                 icon: cachedIcon,
                 checked: onlyVisiblePartID == part.id,
                 modifiers: .option,
                 isAlternate: true,
-                action: { self.onlyVisiblePartID = part.id },
+                action: {
+                    if self.onlyVisiblePartID == part.id {
+                        self.hiddenPartIDs = []
+                    } else {
+                        self.onlyVisiblePartID = part.id
+                    }
+                },
                 onHighlight: { h, _ in self.highlightedPartID = h ? part.id : nil },
                 asyncIcon: iconProvider
             )

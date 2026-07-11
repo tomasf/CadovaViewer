@@ -91,7 +91,16 @@ struct DocumentSidebar: View {
             .contextMenu(forSelectionType: ModelData.Part.ID.self) { ids in
                 if !ids.isEmpty {
                     Button("Center View") { viewport.centerView(onPartIDs: ids) }
-                    Button("Show Only") { viewport.visibleParts = ids }
+                    Toggle("Show Only", isOn: Binding(
+                        get: { viewport.visibleParts == ids },
+                        set: { isOn in
+                            if isOn {
+                                viewport.visibleParts = ids
+                            } else {
+                                viewport.hiddenPartIDs = []
+                            }
+                        }
+                    ))
                     Divider()
                     Button(sliceTitle(for: ids)) {
                         viewModel.document?.sliceModel(parts: parts(for: ids))
