@@ -40,40 +40,57 @@ extension Mesh {
         return (area, abs(signedVolume))
     }
 
-    public func edgeGeometries() -> (sharp: SCNGeometry, smooth: SCNGeometry) {
-        let material = SCNMaterial()
-        material.lightingModel = .constant
-        material.diffuse.contents = NSColor.black
-
+    /// Builds this mesh's sharp and smooth edge lines, classifying each edge as needing a light or
+    /// dark line colour by the triangles that border it — `triangleColors[i]` is triangle `i`'s own
+    /// explicit colour (see `ThreeMF.Model.explicitTriangleColors(for:)`), or `nil` where it has none
+    /// and would rely on the containing part's inherited colour, which isn't knowable here.
+    public func edgeGeometries(triangleColors: [SIMD4<Float>?]) -> (sharp: EdgeLines, smooth: EdgeLines) {
         let positions: [SCNVector3] = vertices.map(\.scnVector3)
-        let vertexSource = SCNGeometrySource(vertices: positions)
-        let (sharpEdgesElement, smoothEdgesElement) = extractEdgeSegments()
+        let (sharpEdges, smoothEdges) = extractEdgeSegments()
 
-        let sharpGeometry = SCNGeometry(sources: [vertexSource], elements: [sharpEdgesElement])
-        sharpGeometry.materials = [material]
+        func edgeLines(_ edges: [(edge: Edge, faces: [Int])]) -> EdgeLines {
+            var linePositions: [SCNVector3] = []
+            linePositions.reserveCapacity(edges.count * 2)
+            var needsLightColor: [Bool?] = []
+            needsLightColor.reserveCapacity(edges.count)
 
-        let smoothGeometry = SCNGeometry(sources: [vertexSource], elements: [smoothEdgesElement])
-        smoothGeometry.materials = [material]
+            for (edge, faces) in edges {
+                linePositions.append(positions[edge.v1])
+                linePositions.append(positions[edge.v2])
 
-        return (sharpGeometry, smoothGeometry)
-    }
-
-    private func extractEdgeSegments() -> (sharp: SCNGeometryElement, smooth: SCNGeometryElement) {
-        struct Edge: Hashable {
-            let v1: Int
-            let v2: Int
-
-            init(_ a: Int, _ b: Int) {
-                if a < b {
-                    v1 = a
-                    v2 = b
+                // Only commit to a known verdict when every bordering face has an explicit colour
+                // of its own; a face relying on the part's inherited colour makes the edge's true
+                // colour unknowable from the mesh alone, so it's left for the part-level fallback.
+                let neighboringColors = faces.compactMap { triangleColors[$0] }
+                if !neighboringColors.isEmpty && neighboringColors.count == faces.count {
+                    needsLightColor.append(neighboringColors.contains { isDarkColor($0) })
                 } else {
-                    v1 = b
-                    v2 = a
+                    needsLightColor.append(nil)
                 }
             }
+
+            return EdgeLines(positions: linePositions, needsLightColor: needsLightColor)
         }
 
+        return (edgeLines(sharpEdges), edgeLines(smoothEdges))
+    }
+
+    fileprivate struct Edge: Hashable {
+        let v1: Int
+        let v2: Int
+
+        init(_ a: Int, _ b: Int) {
+            if a < b {
+                v1 = a
+                v2 = b
+            } else {
+                v1 = b
+                v2 = a
+            }
+        }
+    }
+
+    private func extractEdgeSegments() -> (sharp: [(edge: Edge, faces: [Int])], smooth: [(edge: Edge, faces: [Int])]) {
         var edgeToTriangles: [Edge: [Int]] = [:]
         for (faceIndex, triangle) in triangles.enumerated() {
             let edges = [
@@ -99,29 +116,26 @@ extension Mesh {
 
         let maxSmoothAngleDegrees = 30.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
-        var featureEdges: [Edge] = []
-        var smoothEdges: [Edge] = []
+        var featureEdges: [(edge: Edge, faces: [Int])] = []
+        var smoothEdges: [(edge: Edge, faces: [Int])] = []
 
         for (edge, faces) in edgeToTriangles {
             if faces.count == 1 {
-                smoothEdges.append(edge)
-                
+                smoothEdges.append((edge, faces))
+
             } else if faces.count == 2 {
                 let n1 = triangleNormals[faces[0]]
                 let n2 = triangleNormals[faces[1]]
                 let dot = simd_dot(n1, n2)
                 if dot < angleThreshold {
-                    featureEdges.append(edge)
+                    featureEdges.append((edge, faces))
                 } else {
-                    smoothEdges.append(edge)
+                    smoothEdges.append((edge, faces))
                 }
             }
         }
 
-        return (
-            sharp: SCNGeometryElement(indices: featureEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line),
-            smooth: SCNGeometryElement(indices: smoothEdges.flatMap { [Int32($0.v1), Int32($0.v2)] }, primitiveType: .line)
-        )
+        return (featureEdges, smoothEdges)
     }
 
     /// Crease-aware smooth normals, one per triangle corner, indexed by `triangleIndex * 3 + corner`.
@@ -212,4 +226,55 @@ extension Mesh {
         }
         return result
     }
+}
+
+/// A mesh's edge lines (sharp or smooth), each classified as needing a light or dark colour by its
+/// bordering faces — or left unresolved (`nil` in `needsLightColor`) where those faces rely on a
+/// colour inherited from the part rather than one of their own. Positions are duplicated per edge
+/// (not shared via indices into the mesh's vertex list) so each edge can carry its own colour
+/// without bleeding into its neighbors, the same reasoning the main mesh geometry uses for
+/// per-triangle vertex colours.
+public struct EdgeLines {
+    fileprivate let positions: [SCNVector3]
+    fileprivate let needsLightColor: [Bool?]
+
+    fileprivate static let darkColor = ThreeMF.Color(red: 0, green: 0, blue: 0).scnVector4
+    fileprivate static let lightColor = ThreeMF.Color(red: 160, green: 160, blue: 160).scnVector4
+
+    static let empty = EdgeLines(positions: [], needsLightColor: [])
+
+    /// Builds the renderable line geometry, resolving any edge left unclassified by
+    /// `edgeGeometries(triangleColors:)` (its bordering faces relied on an inherited colour) to
+    /// `unknownNeedsLightColor` — the containing part's own dominant-colour darkness check, the
+    /// best information available once the mesh alone can't say.
+    public func geometry(unknownNeedsLightColor: Bool) -> SCNGeometry {
+        guard !positions.isEmpty else {
+            return SCNGeometry()
+        }
+
+        var colors: [SCNVector4] = []
+        colors.reserveCapacity(positions.count)
+        for needsLight in needsLightColor {
+            let color = (needsLight ?? unknownNeedsLightColor) ? Self.lightColor : Self.darkColor
+            colors.append(color)
+            colors.append(color)
+        }
+
+        let vertexSource = SCNGeometrySource(vertices: positions)
+        let colorSource = SCNGeometrySource.colors(colors)
+        let element = SCNGeometryElement(indices: Array(Int32(0)..<Int32(positions.count)), primitiveType: .line)
+
+        let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = NSColor.white
+        geometry.materials = [material]
+        return geometry
+    }
+}
+
+/// Whether `color` (linear RGBA) reads as dark enough that a black line drawn against it would
+/// disappear. Relative luminance using Rec. 709 coefficients.
+func isDarkColor(_ color: SIMD4<Float>) -> Bool {
+    0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z < 0.05
 }

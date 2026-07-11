@@ -108,6 +108,33 @@ extension ThreeMF.Model {
             return SIMD4(Float(average.x), Float(average.y), Float(average.z), Float(average.w))
         }
     }
+
+    /// Each triangle's own colour (a PBR triangle's diffuse, or the average of a vertex-colour
+    /// triangle's corners), as linear RGBA — using only the triangle's *own* explicit colour
+    /// property, never a component's inherited default. `nil` where the triangle has no explicit
+    /// property of its own, since it would then rely on a specific component's inherited colour,
+    /// which isn't knowable independent of which part instances the mesh. Used to colour individual
+    /// edges by their neighbouring faces rather than by a single colour for the whole part.
+    public func explicitTriangleColors(for mesh: ThreeMF.Mesh) -> [SIMD4<Float>?] {
+        let noInheritance = PartialPropertyReference(groupID: nil, index: nil)
+        return mesh.triangles.map { triangle in
+            switch material(for: triangle, inheritedProperty: noInheritance) {
+            case .pbr(let pbrMaterial):
+                let c = pbrMaterial.diffuse.scnVector4
+                return SIMD4(Float(c.x), Float(c.y), Float(c.z), Float(c.w))
+            case .vertexColors(let c1, let c2, let c3):
+                let v1 = c1.scnVector4, v2 = c2.scnVector4, v3 = c3.scnVector4
+                return SIMD4(
+                    Float((v1.x + v2.x + v3.x) / 3),
+                    Float((v1.y + v2.y + v3.y) / 3),
+                    Float((v1.z + v2.z + v3.z) / 3),
+                    Float((v1.w + v2.w + v3.w) / 3)
+                )
+            case .none:
+                return nil
+            }
+        }
+    }
 }
 
 public enum ThreeMFError: Swift.Error {

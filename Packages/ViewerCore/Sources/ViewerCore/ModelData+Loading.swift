@@ -15,8 +15,8 @@ extension ModelData {
 
         struct ComponentProducts: Sendable {
             let mainGeometry: SCNGeometry
-            let sharpEdgesGeometry: SCNGeometry
-            let smoothEdgesGeometry: SCNGeometry
+            let sharpEdgeLines: EdgeLines
+            let smoothEdgeLines: EdgeLines
             let mesh: ThreeMF.Mesh
             let emittedCorners: [Int32]
             let stats: ModelData.Statistics
@@ -26,11 +26,18 @@ extension ModelData {
             let capIndices: [UInt32]
         }
 
-        let indexedEdgeGeometries: [(sharp: SCNGeometry, smooth: SCNGeometry)]
+        // Edge lines are classified once per unique mesh, by each edge's own bordering triangles
+        // (see `edgeGeometries(triangleColors:)`) — independent of which part instances the mesh,
+        // so this is shared even when the same mesh is placed multiple times with different colours.
+        let indexedEdgeLines: [(sharp: EdgeLines, smooth: EdgeLines)]
         if includeEdges {
-            indexedEdgeGeometries = await loadedModel.meshes.asyncMap { $0.mesh.edgeGeometries() }
+            indexedEdgeLines = await loadedModel.meshes.asyncMap { loadedMesh in
+                let model = loadedModel.models[loadedMesh.modelIndex]
+                let triangleColors = model.explicitTriangleColors(for: loadedMesh.mesh)
+                return loadedMesh.mesh.edgeGeometries(triangleColors: triangleColors)
+            }
         } else {
-            indexedEdgeGeometries = []
+            indexedEdgeLines = []
         }
 
         let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
@@ -58,12 +65,12 @@ extension ModelData {
                     capIndices += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
                 }
 
-                if includeEdges && loadedComponent.meshIndex < indexedEdgeGeometries.count {
-                    let (sharp, smooth) = indexedEdgeGeometries[loadedComponent.meshIndex]
+                if includeEdges && loadedComponent.meshIndex < indexedEdgeLines.count {
+                    let (sharp, smooth) = indexedEdgeLines[loadedComponent.meshIndex]
                     return ComponentProducts(
                         mainGeometry: geometry,
-                        sharpEdgesGeometry: sharp,
-                        smoothEdgesGeometry: smooth,
+                        sharpEdgeLines: sharp,
+                        smoothEdgeLines: smooth,
                         mesh: loadedMesh.mesh,
                         emittedCorners: emittedCorners,
                         stats: stats,
@@ -73,11 +80,10 @@ extension ModelData {
                         capIndices: capIndices
                     )
                 } else {
-                    let emptyGeometry = SCNGeometry()
                     return ComponentProducts(
                         mainGeometry: geometry,
-                        sharpEdgesGeometry: emptyGeometry,
-                        smoothEdgesGeometry: emptyGeometry,
+                        sharpEdgeLines: .empty,
+                        smoothEdgeLines: .empty,
                         mesh: loadedMesh.mesh,
                         emittedCorners: emittedCorners,
                         stats: stats,
@@ -93,13 +99,13 @@ extension ModelData {
             nodes.container.name = "Item \(itemIndex)"
 
             // The part's cap colour is the dominant colour of its heaviest component (most triangles).
-            // Also used to decide the edge line colour: black edges disappear against a near-black
-            // part, so those get light edges instead.
+            // Also the fallback for edges whose bordering faces rely on this inherited colour rather
+            // than an explicit one of their own, since the mesh alone can't classify those.
             let dominantColor = products
                 .filter { $0.dominantColor != nil }
                 .max { $0.stats.triangleCount < $1.stats.triangleCount }?
                 .dominantColor
-            let usesLightEdges = dominantColor.map(isDarkColor) ?? false
+            let unknownEdgesNeedLightColor = dominantColor.map(isDarkColor) ?? false
 
             if includeEdges && loadedItem.item.semantic == .solid {
                 let sharpEdgesGroupNode = SCNNode()
@@ -117,7 +123,7 @@ extension ModelData {
                     sharpNodeContainer.transform = product.transform
                     sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
 
-                    let sharpGeometry = usesLightEdges ? recoloredEdgeGeometry(product.sharpEdgesGeometry, color: darkPartEdgeColor) : product.sharpEdgesGeometry
+                    let sharpGeometry = product.sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
                     let sharpNode = SCNNode(geometry: sharpGeometry)
                     sharpNode.name = "Sharp edges geometry"
                     sharpNodeContainer.addChildNode(sharpNode)
@@ -127,7 +133,7 @@ extension ModelData {
                     smoothNodeContainer.transform = product.transform
                     smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
 
-                    let smoothGeometry = usesLightEdges ? recoloredEdgeGeometry(product.smoothEdgesGeometry, color: darkPartEdgeColor) : product.smoothEdgesGeometry
+                    let smoothGeometry = product.smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
                     let smoothNode = SCNNode(geometry: smoothGeometry)
                     smoothNode.name = "Smooth edges geometry"
                     smoothNodeContainer.addChildNode(smoothNode)
@@ -190,29 +196,6 @@ extension ModelData {
 
         self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize)
     }
-}
-
-/// Whether `color` (linear RGBA) reads as dark enough that black edge lines would disappear
-/// against it. Relative luminance using Rec. 709 coefficients.
-private func isDarkColor(_ color: SIMD4<Float>) -> Bool {
-    0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z < 0.05
-}
-
-/// Edge line colour used on parts too dark for black edges to read against.
-private let darkPartEdgeColor = NSColor(white: 0.5, alpha: 1)
-
-/// A copy of an edge geometry with its material swapped to a flat `color`. Rebuilt with
-/// `SCNGeometry(sources:elements:)` rather than mutating `geometry`'s material in place, since
-/// `geometry` may be the one shared instance backing every part that reuses this mesh (edge
-/// geometries are built once per unique mesh) — mutating it would recolor every other part's
-/// edges too.
-private func recoloredEdgeGeometry(_ geometry: SCNGeometry, color: NSColor) -> SCNGeometry {
-    let newGeometry = SCNGeometry(sources: geometry.sources(for: .vertex), elements: geometry.elements)
-    let material = SCNMaterial()
-    material.lightingModel = .constant
-    material.diffuse.contents = color
-    newGeometry.materials = [material]
-    return newGeometry
 }
 
 extension simd_double4x4 {
