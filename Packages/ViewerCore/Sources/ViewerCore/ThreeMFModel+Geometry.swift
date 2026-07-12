@@ -79,7 +79,7 @@ extension ThreeMF.Model {
         defaultMaterial.lightingModel = .physicallyBased
         defaultMaterial.diffuse.contents = NSColor.white
         defaultMaterial.metalness.contents = 0 as NSNumber
-        defaultMaterial.roughness.contents = 0.8 as NSNumber
+        defaultMaterial.roughness.contents = 0.9 as NSNumber
         defaultMaterial.emission.intensity = 0
         defaultMaterial.transparencyMode = .singleLayer
         defaultMaterial.name = "Vertex-color material"
