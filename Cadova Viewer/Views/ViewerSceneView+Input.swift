@@ -83,11 +83,16 @@ extension CustomSceneView {
     /// drift-free) and a glide is started on release.
     override func magnify(with event: NSEvent) {
         guard let viewportController, cameraControlEnabled else { return }
+        // A twist almost always carries a trace of pinch, so AppKit delivers this alongside rotate(with:)
+        // from the same touches; ignore it entirely for the duration of an active roll rather than let it
+        // fight the roll with a concurrent zoom drag.
+        guard activeTrackpadCameraGesture != .roll else { return }
         let point = convert(event.locationInWindow, from: nil)
         switch event.phase {
         case .began:
             viewportController.requestFocus()
             mouseInteractionActiveSubject.send(true)
+            activeTrackpadCameraGesture = .zoom
             // beginCameraDrag cancels any ongoing glide and hit-tests the pivot under the cursor.
             zoomDragState = viewportController.beginCameraDrag(atViewPoint: point)
             zoomLogAmount = 0
@@ -102,6 +107,7 @@ extension CustomSceneView {
         case .ended, .cancelled:
             defer {
                 zoomDragState = nil
+                activeTrackpadCameraGesture = nil
                 mouseInteractionActiveSubject.send(false)
             }
             guard let state = zoomDragState else { return }
@@ -121,11 +127,16 @@ extension CustomSceneView {
     /// phased events, so the angle is accumulated across them and a glide is started on release.
     override func rotate(with event: NSEvent) {
         guard let viewportController, cameraControlEnabled else { return }
+        // A twist almost always carries a trace of pinch, so AppKit delivers magnify(with:) alongside
+        // this from the same touches; ignore it entirely for the duration of an active zoom rather than
+        // let it fight the pinch with a concurrent roll drag.
+        guard activeTrackpadCameraGesture != .zoom else { return }
         let point = convert(event.locationInWindow, from: nil)
         switch event.phase {
         case .began:
             viewportController.requestFocus()
             mouseInteractionActiveSubject.send(true)
+            activeTrackpadCameraGesture = .roll
             // beginCameraDrag cancels any ongoing glide and hit-tests the pivot under the cursor.
             rollDragState = viewportController.beginCameraDrag(atViewPoint: point)
             rollAngle = 0
@@ -140,6 +151,7 @@ extension CustomSceneView {
         case .ended, .cancelled:
             defer {
                 rollDragState = nil
+                activeTrackpadCameraGesture = nil
                 mouseInteractionActiveSubject.send(false)
             }
             guard let state = rollDragState else { return }

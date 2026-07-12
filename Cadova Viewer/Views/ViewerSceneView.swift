@@ -19,6 +19,11 @@ struct ViewerSceneView: NSViewRepresentable {
     }
 }
 
+enum TrackpadCameraGesture {
+    case roll
+    case zoom
+}
+
 class CustomSceneView: SCNView {
     var onClick: ((CGPoint) -> Void)? = nil
     var onHover: ((CGPoint?) -> Void)? = nil
@@ -54,6 +59,13 @@ class CustomSceneView: SCNView {
     var zoomDragState: ViewportController.CameraDragState?
     var zoomLogAmount: Float = 0
     var zoomVelocityTracker = ZoomVelocityTracker()
+
+    /// A real two-finger twist almost always carries a tiny amount of pinch too, so AppKit delivers
+    /// `rotate(with:)` and `magnify(with:)` concurrently from the same touches. Without this, that stray
+    /// pinch would start its own independent zoom drag mid-roll, fighting the roll and feeling glitchy.
+    /// Once one of the two gestures begins, it's latched here and the other is ignored entirely until the
+    /// latched one ends.
+    var activeTrackpadCameraGesture: TrackpadCameraGesture?
 
     let mouseInteractionActiveSubject = CurrentValueSubject<Bool, Never>(false)
     let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
