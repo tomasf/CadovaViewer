@@ -26,15 +26,22 @@ extension ViewportController {
     /// Up to this many simultaneous cutting planes (the clip uniform packs planes into two `float4x4`).
     static let maxCrossSections = 8
 
-    /// Surface shader modifier clipping fragments past **any** active plane. Planes are packed into two
-    /// `float4x4` uniforms (columns 0–3 in A, 4–7 in B); `crossSectionSkip` lets a cap skip its own
-    /// plane. Attached to every per-viewport model material.
+    /// Surface shader modifier clipping fragments past **any** active plane, and — via the
+    /// `materialsEnabled` uniform — overriding the surface when the viewport's materials-enabled
+    /// option is off. Face materials go flat opaque matte white; edge-line materials (flagged by the
+    /// `isEdgeMaterial` uniform, set once at install time — see `installCrossSectionShader`) instead
+    /// force plain black, since their baked light/dark choice was picked for contrast against the
+    /// *original* face colour, which no longer applies once faces turn white. Planes are packed into
+    /// two `float4x4` uniforms (columns 0–3 in A, 4–7 in B); `crossSectionSkip` lets a cap skip its
+    /// own plane. Attached to every per-viewport model material.
     static let clipShaderModifier = """
     #pragma arguments
     float4x4 crossSectionPlanesA;
     float4x4 crossSectionPlanesB;
     float crossSectionCount;
     float crossSectionSkip;
+    float materialsEnabled;
+    float isEdgeMaterial;
     #pragma body
     int csCount = int(round(crossSectionCount));
     if (csCount > 0) {
@@ -45,6 +52,13 @@ extension ViewportController {
             float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
             if (dot(csWorld, csPlane.xyz) > csPlane.w) { discard_fragment(); }
         }
+    }
+    if (materialsEnabled < 0.5 && isEdgeMaterial > 0.5) {
+        _surface.diffuse = float4(0.0, 0.0, 0.0, 1.0);
+    } else if (materialsEnabled < 0.5) {
+        _surface.diffuse = float4(1.0, 1.0, 1.0, 1.0);
+        _surface.metalness = 0.0;
+        _surface.roughness = 0.9;
     }
     """
 
@@ -83,7 +97,10 @@ extension ViewportController {
     """
 
     /// Cap surface modifier: the same N-plane clip (skipping its own plane, so a cap is trimmed by the
-    /// *other* cuts) plus the part colour and a diagonal hatch marking it as a cut face.
+    /// *other* cuts) plus the part colour and a diagonal hatch marking it as a cut face. When the
+    /// viewport's materials-enabled option is off, both the base fill and the hatch stripe desaturate
+    /// to white/gray (same "no material" look as the model's faces) rather than showing the part or
+    /// cross-section colour.
     static let capShaderModifier = """
     #pragma arguments
     float4x4 crossSectionPlanesA;
@@ -95,6 +112,7 @@ extension ViewportController {
     float3 hatchDirection;
     float hatchSpacing;
     float hatchStrength;
+    float materialsEnabled;
     #pragma body
     float3 csWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
     int csCount = int(round(crossSectionCount));
@@ -104,10 +122,13 @@ extension ViewportController {
         float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
         if (dot(csWorld, csPlane.xyz) > csPlane.w) { discard_fragment(); }
     }
-    _surface.diffuse = capColor;
+    bool csMaterialsEnabled = materialsEnabled >= 0.5;
+    float3 csBaseColor = csMaterialsEnabled ? capColor.rgb : float3(1.0, 1.0, 1.0);
+    float3 csStripeColor = csMaterialsEnabled ? capStripeColor.rgb : float3(0.6, 0.6, 0.6);
+    _surface.diffuse = float4(csBaseColor, capColor.a);
     float hatchCoordinate = dot(csWorld, hatchDirection) / hatchSpacing;
     if (fract(hatchCoordinate) < 0.5) {
-        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, capStripeColor.rgb, hatchStrength);
+        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, csStripeColor, hatchStrength);
     }
     """
 
@@ -136,12 +157,35 @@ extension ViewportController {
     static let ghostEdgeOpacity: CGFloat = 0.4
 
     /// Attaches the clip modifier to this viewport's model materials. Called once per loaded model.
+    /// Also gives every material an explicit initial `isEdgeMaterial` flag (0 for faces, 1 for edge
+    /// lines — see `ViewportModelInstance.faceMaterials`) so the shader knows to force black rather
+    /// than white when materials are off, and pushes the viewport's current `materialsEnabled` value
+    /// via `applyMaterialsEnabled()` — a shader-modifier float argument that's never explicitly set
+    /// can't be assumed to default to any particular value, so every material needs an explicit push.
     func installCrossSectionShader() {
+        let faceMaterialIDs = Set(modelInstance.faceMaterials.map(ObjectIdentifier.init))
         for material in modelInstance.clipMaterials {
             var modifiers = material.shaderModifiers ?? [:]
             modifiers[.surface] = Self.clipShaderModifier
             material.shaderModifiers = modifiers
+            let isEdge = !faceMaterialIDs.contains(ObjectIdentifier(material))
+            material.setValue(NSNumber(value: isEdge ? Float(1) : Float(0)), forKey: "isEdgeMaterial")
         }
+        applyMaterialsEnabled()
+    }
+
+    /// Pushes the viewport's materials-enabled option to every model material (faces turn flat matte
+    /// white; edge lines turn black instead — see `clipShaderModifier`) and to the cross-section cap
+    /// fills.
+    func applyMaterialsEnabled() {
+        let value = NSNumber(value: viewOptions.materialsEnabled ? Float(1) : Float(0))
+        for material in modelInstance.clipMaterials {
+            material.setValue(value, forKey: "materialsEnabled")
+        }
+        for material in crossSectionCapMaterialsByKey.values {
+            material.setValue(value, forKey: "materialsEnabled")
+        }
+        sceneView.setNeedsRedraw()
     }
 
     // MARK: - Apply
@@ -371,6 +415,7 @@ extension ViewportController {
                 material.shaderModifiers = [.surface: Self.capShaderModifier]
                 material.setValue(NSValue(scnVector4: SCNVector4(cap.color.x, cap.color.y, cap.color.z, 1)), forKey: "capColor")
                 material.setValue(NSValue(scnVector4: SCNVector4(cap.stripeColor.x, cap.stripeColor.y, cap.stripeColor.z, 1)), forKey: "capStripeColor")
+                material.setValue(NSNumber(value: viewOptions.materialsEnabled ? Float(1) : Float(0)), forKey: "materialsEnabled")
                 crossSectionCapMaterialsByKey[cap.key] = material
             }
             setClipUniforms(on: material, packed: packed, skip: cap.sectionIndex)

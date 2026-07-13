@@ -150,6 +150,10 @@ class ViewportController: NSObject, ObservableObject {
             if viewOptions.smoothShading != oldValue.smoothShading || viewOptions.edgeVisibility != oldValue.edgeVisibility {
                 applyGeometryOptions()
             }
+            // Same willSet reason as above: applyMaterialsEnabled() reads self.viewOptions directly.
+            if viewOptions.materialsEnabled != oldValue.materialsEnabled {
+                applyMaterialsEnabled()
+            }
         }
     }
     var hasSetInitialView = false

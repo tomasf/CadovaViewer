@@ -19,6 +19,7 @@ struct ViewOptionsCodableTests {
         options.hiddenPartIDs = ["part-a", "part-b"]
         options.smoothShading = true
         options.edgeVisibility = .all
+        options.materialsEnabled = false
 
         let data = try JSONEncoder().encode(options)
         let decoded = try JSONDecoder().decode(ViewOptions.self, from: data)
@@ -30,6 +31,7 @@ struct ViewOptionsCodableTests {
         #expect(decoded.hiddenPartIDs == ["part-a", "part-b"])
         #expect(decoded.smoothShading == true)
         #expect(decoded.edgeVisibility == .all)
+        #expect(decoded.materialsEnabled == false)
     }
 
     @Test func `default view options round trip unchanged`() throws {
@@ -43,6 +45,7 @@ struct ViewOptionsCodableTests {
         #expect(decoded.hiddenPartIDs == options.hiddenPartIDs)
         #expect(decoded.smoothShading == options.smoothShading)
         #expect(decoded.edgeVisibility == options.edgeVisibility)
+        #expect(decoded.materialsEnabled == options.materialsEnabled)
     }
 
     @Test func `decoding a blob without smoothShading or edgeVisibility defaults them`() throws {
@@ -60,6 +63,20 @@ struct ViewOptionsCodableTests {
         let decoded = try JSONDecoder().decode(ViewOptions.self, from: strippedData)
         #expect(decoded.smoothShading == false)
         #expect(decoded.edgeVisibility == .sharp)
+    }
+
+    @Test func `decoding a blob without materialsEnabled defaults it to true`() throws {
+        // Simulates a `ViewOptions` blob persisted before this field existed: encode a real value,
+        // then strip the key those old blobs wouldn't have had.
+        var options = ViewOptions()
+        options.materialsEnabled = false
+        let data = try JSONEncoder().encode(options)
+        var json = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        json.removeValue(forKey: "materialsEnabled")
+        let strippedData = try JSONSerialization.data(withJSONObject: json)
+
+        let decoded = try JSONDecoder().decode(ViewOptions.self, from: strippedData)
+        #expect(decoded.materialsEnabled == true)
     }
 
     @Test func `edge visibility raw values are stable`() {

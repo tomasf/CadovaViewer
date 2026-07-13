@@ -22,6 +22,7 @@ extension ModelData {
             let stats: ModelData.Statistics
             let transform: SCNMatrix4
             let dominantColor: SIMD4<Float>?
+            let hasMaterial: Bool
             let capVertices: [SIMD3<Float>]
             let capIndices: [UInt32]
         }
@@ -46,7 +47,7 @@ extension ModelData {
                 let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
                 let model = loadedModel.models[loadedMesh.modelIndex]
 
-                let (geometry, emittedCorners, dominantColor) = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
+                let geometryResult = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
 
                 // Mesh coords → millimetres = unit scale ∘ this component's placement transform.
                 let worldTransform = unitScale * simd_double4x4(loadedComponent.scnMatrix)
@@ -68,27 +69,29 @@ extension ModelData {
                 if includeEdges && loadedComponent.meshIndex < indexedEdgeLines.count {
                     let (sharp, smooth) = indexedEdgeLines[loadedComponent.meshIndex]
                     return ComponentProducts(
-                        mainGeometry: geometry,
+                        mainGeometry: geometryResult.geometry,
                         sharpEdgeLines: sharp,
                         smoothEdgeLines: smooth,
                         mesh: loadedMesh.mesh,
-                        emittedCorners: emittedCorners,
+                        emittedCorners: geometryResult.emittedCorners,
                         stats: stats,
                         transform: loadedComponent.scnMatrix,
-                        dominantColor: dominantColor,
+                        dominantColor: geometryResult.dominantColor,
+                        hasMaterial: geometryResult.hasMaterial,
                         capVertices: capVertices,
                         capIndices: capIndices
                     )
                 } else {
                     return ComponentProducts(
-                        mainGeometry: geometry,
+                        mainGeometry: geometryResult.geometry,
                         sharpEdgeLines: .empty,
                         smoothEdgeLines: .empty,
                         mesh: loadedMesh.mesh,
-                        emittedCorners: emittedCorners,
+                        emittedCorners: geometryResult.emittedCorners,
                         stats: stats,
                         transform: loadedComponent.scnMatrix,
-                        dominantColor: dominantColor,
+                        dominantColor: geometryResult.dominantColor,
+                        hasMaterial: geometryResult.hasMaterial,
                         capVertices: capVertices,
                         capIndices: capIndices
                     )
@@ -173,6 +176,7 @@ extension ModelData {
                 stats: Statistics(products.map(\.stats)),
                 modelGeometryVariants: modelGeometryVariants,
                 dominantColor: dominantColor,
+                hasMaterial: products.contains { $0.hasMaterial },
                 capSolid: capSolid
             )
         }
@@ -194,7 +198,7 @@ extension ModelData {
             Double(boundsMax.z - boundsMin.z)
         ) * Double(multiplier)
 
-        self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize)
+        self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize, hasAnyMaterials: parts.contains { $0.hasMaterial })
     }
 }
 

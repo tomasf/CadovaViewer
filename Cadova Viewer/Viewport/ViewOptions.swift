@@ -2,10 +2,10 @@ import Foundation
 import SceneKit
 import ViewerCore
 
-/// Per-viewport view state. Each viewport in a document has its own, including smooth shading and
-/// edge visibility — the per-viewport model clone (`ViewportModelInstance`) gives each viewport its
-/// own edge-line nodes and flat/smooth geometry copies, so these can differ per viewport rather than
-/// being shared across the document.
+/// Per-viewport view state. Each viewport in a document has its own, including smooth shading, edge
+/// visibility, and materials-enabled — the per-viewport model clone (`ViewportModelInstance`) gives
+/// each viewport its own edge-line nodes, flat/smooth geometry copies, and material copies, so these
+/// can differ per viewport rather than being shared across the document.
 struct ViewOptions: Codable {
     var showGrid = true
     var showOrigin = true
@@ -14,6 +14,7 @@ struct ViewOptions: Codable {
     var hiddenPartIDs: Set<ModelData.Part.ID> = []
     var smoothShading = false
     var edgeVisibility: EdgeVisibility = .sharp
+    var materialsEnabled = true
 
     enum EdgeVisibility: String, Codable {
         case none
@@ -29,6 +30,7 @@ struct ViewOptions: Codable {
         case hiddenPartIDs
         case smoothShading
         case edgeVisibility
+        case materialsEnabled
     }
 
     init() {}
@@ -40,10 +42,12 @@ struct ViewOptions: Codable {
         showCoordinateSystemIndicator = try container.decode(Bool.self, forKey: .showCoordinateSystemIndicator)
         cameraTransform = try container.decode(SCNMatrix4.CodingWrapper.self, forKey: .cameraTransform).scnMatrix4
         hiddenPartIDs = try container.decode(Set<ModelData.Part.ID>.self, forKey: .hiddenPartIDs)
-        // Older persisted blobs predate these two fields (they used to be a separate document-wide
-        // preference) — default them rather than failing to decode.
+        // Older persisted blobs predate these fields (smoothShading/edgeVisibility used to be a
+        // separate document-wide preference; materialsEnabled is simply new) — default them rather
+        // than failing to decode.
         smoothShading = try container.decodeIfPresent(Bool.self, forKey: .smoothShading) ?? false
         edgeVisibility = try container.decodeIfPresent(EdgeVisibility.self, forKey: .edgeVisibility) ?? .sharp
+        materialsEnabled = try container.decodeIfPresent(Bool.self, forKey: .materialsEnabled) ?? true
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -55,5 +59,6 @@ struct ViewOptions: Codable {
         try container.encode(hiddenPartIDs, forKey: .hiddenPartIDs)
         try container.encode(smoothShading, forKey: .smoothShading)
         try container.encode(edgeVisibility, forKey: .edgeVisibility)
+        try container.encode(materialsEnabled, forKey: .materialsEnabled)
     }
 }

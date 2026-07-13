@@ -3,6 +3,22 @@ import ThreeMF
 import SceneKit
 import AppKit
 
+/// The result of building a mesh's (flat) `SCNGeometry`.
+public struct MeshGeometryResult: Sendable {
+    public let geometry: SCNGeometry
+    /// `emittedCorners[i]` is the packed `triangleIndex * 3 + corner` that the i-th emitted vertex
+    /// came from. Lets smooth per-vertex normals be computed later, aligned to the vertex source,
+    /// without re-deriving the (material-grouped, transparency-filtered) emission order.
+    public let emittedCorners: [Int32]
+    /// A representative colour for the mesh (the colour of its largest material group), as linear
+    /// RGBA. `nil` when the mesh has no drawable geometry.
+    public let dominantColor: SIMD4<Float>?
+    /// Whether any triangle resolved an explicit material property at all — a PBR `<basematerials>`
+    /// group *or* a colour group — as opposed to falling back to the plain, uncoloured default.
+    /// Used to tell whether the model has any real "materials" to toggle at all.
+    public let hasMaterial: Bool
+}
+
 extension ThreeMF.Model {
     public func object(for id: ResourceID) throws -> Object {
         guard let object = resources.resource(for: id) as? Object else {
@@ -11,11 +27,9 @@ extension ThreeMF.Model {
         return object
     }
 
-    /// Builds the (flat) geometry for a mesh and, alongside it, records the emission order:
-    /// `emittedCorners[i]` is the packed `triangleIndex * 3 + corner` that the i-th emitted
-    /// vertex came from. This lets us later compute smooth per-vertex normals aligned to the
-    /// vertex source without re-deriving the (material-grouped, transparency-filtered) order.
-    public func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> (geometry: SCNGeometry, emittedCorners: [Int32], dominantColor: SIMD4<Float>?) {
+    /// Builds the (flat) geometry for a mesh, alongside its emission order, dominant colour, and
+    /// whether it has any real material (see `MeshGeometryResult`).
+    public func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> MeshGeometryResult {
         var colors: [SCNVector4] = []
         var positions: [SCNVector3] = []
         var emittedCorners: [Int32] = []
@@ -27,11 +41,19 @@ extension ThreeMF.Model {
         // the vertex-colour group averages its accumulated corner colours.
         var triangleCountPerMaterial: [PBRMaterial?: Int] = [:]
         var colorSumPerMaterial: [PBRMaterial?: SIMD4<Double>] = [:]
+        // Whether any triangle resolved an explicit material property at all — a PBR `<basematerials>`
+        // group *or* a colour group (the common case for multi-colour/AMS-style prints) — as opposed
+        // to falling back to the plain, uncoloured default. Both cases bake a real, non-default colour
+        // into the geometry, so both count as "this model has materials".
+        var hasMaterial = false
 
         for (triangleIndex, triangle) in mesh.triangles.enumerated() {
             let material = material(for: triangle, inheritedProperty: inheritedProperty)
             guard material?.isFullyTransparent != true else {
                 continue
+            }
+            if material != nil {
+                hasMaterial = true
             }
 
             let vertexIndices = (positions.count..<positions.count + 3).map(Int32.init)
@@ -87,7 +109,7 @@ extension ThreeMF.Model {
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: elements)
         geometry.materials = orderedMaterials.map { $0?.scnMaterial ?? defaultMaterial }
         geometry.name = UUID().uuidString
-        return (geometry, emittedCorners, dominantColor)
+        return MeshGeometryResult(geometry: geometry, emittedCorners: emittedCorners, dominantColor: dominantColor, hasMaterial: hasMaterial)
     }
 
     /// The colour of whichever material group covers the most triangles, as linear RGBA. PBR groups

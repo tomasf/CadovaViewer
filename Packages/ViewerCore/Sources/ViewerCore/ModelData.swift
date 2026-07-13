@@ -12,11 +12,17 @@ public struct ModelData: Sendable {
     /// parts the way `Statistics` does), so it lives here rather than in `Statistics`.
     public let boundingBoxSize: SIMD3<Double>
 
-    public init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata], boundingBoxSize: SIMD3<Double> = .zero) {
+    /// Whether any part resolved an explicit material property (a PBR `<basematerials>` group or a
+    /// colour group), as opposed to the whole model relying purely on the plain default material.
+    /// Used to disable the "Show Materials" option when there's nothing for it to toggle.
+    public let hasAnyMaterials: Bool
+
+    public init(rootNode: SCNNode, parts: [Part], metadata: [ThreeMF.Metadata], boundingBoxSize: SIMD3<Double> = .zero, hasAnyMaterials: Bool = false) {
         self.rootNode = rootNode
         self.parts = parts
         self.metadata = metadata
         self.boundingBoxSize = boundingBoxSize
+        self.hasAnyMaterials = hasAnyMaterials
     }
 
     public init() {
@@ -48,11 +54,16 @@ public struct ModelData: Sendable {
         /// material. `nil` when the part has no drawable geometry.
         public let dominantColor: SIMD4<Float>?
 
+        /// Whether any of the part's geometry resolved an explicit material property (a PBR
+        /// `<basematerials>` group or a colour group), as opposed to relying purely on the plain
+        /// default material.
+        public let hasMaterial: Bool
+
         /// The part's solid geometry (world-space, millimetres) for computing the cross-section cap.
         /// `nil` when the part has no drawable geometry. See `PartSolid`.
         public let capSolid: PartSolid?
 
-        public init(nodes: Nodes, itemIndex: Int, name: String, id: ID?, semantic: PartSemantic, stats: Statistics, modelGeometryVariants: [ModelGeometryVariant] = [], dominantColor: SIMD4<Float>? = nil, capSolid: PartSolid? = nil) {
+        public init(nodes: Nodes, itemIndex: Int, name: String, id: ID?, semantic: PartSemantic, stats: Statistics, modelGeometryVariants: [ModelGeometryVariant] = [], dominantColor: SIMD4<Float>? = nil, hasMaterial: Bool = false, capSolid: PartSolid? = nil) {
             self.nodes = nodes
             self.itemIndex = itemIndex
             self.name = name
@@ -61,6 +72,7 @@ public struct ModelData: Sendable {
             self.statistics = stats
             self.modelGeometryVariants = modelGeometryVariants
             self.dominantColor = dominantColor
+            self.hasMaterial = hasMaterial
             self.capSolid = capSolid
         }
 

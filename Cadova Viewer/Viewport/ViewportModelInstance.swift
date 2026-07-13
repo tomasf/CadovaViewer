@@ -39,6 +39,11 @@ struct ViewportModelInstance {
     /// Every unique material in this viewport's clone (faces + edges). The cross-section clip uniform
     /// and double-sidedness are applied to these.
     let clipMaterials: [SCNMaterial]
+    /// `clipMaterials` minus every material used by an edge-line geometry node — i.e. just the model
+    /// face materials. Used once, at shader-install time, to flag each material as face or edge (see
+    /// `ViewportController.installCrossSectionShader`) so the materials-enabled shader override knows
+    /// whether to turn a material white (faces) or black (edges) when materials are off.
+    let faceMaterials: [SCNMaterial]
 
     /// An empty instance, used before a model has loaded.
     init() {
@@ -50,6 +55,7 @@ struct ViewportModelInstance {
         edgeGeometryNodes = []
         variantSwaps = []
         clipMaterials = []
+        faceMaterials = []
     }
 
     init(modelData: ModelData) {
@@ -120,6 +126,9 @@ struct ViewportModelInstance {
         self.edgeGeometryNodes = edgeGeometry
         self.variantSwaps = swaps
         self.clipMaterials = Array(materialMap.values)
+
+        let edgeMaterialIdentifiers = Set(edgeGeometry.flatMap { $0.geometry?.materials ?? [] }.map(ObjectIdentifier.init))
+        self.faceMaterials = clipMaterials.filter { !edgeMaterialIdentifiers.contains(ObjectIdentifier($0)) }
     }
 }
 

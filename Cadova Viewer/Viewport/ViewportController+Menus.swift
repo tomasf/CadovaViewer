@@ -326,6 +326,11 @@ extension ViewportController {
     }
 
     func buildViewOptionToggles(with builder: MenuBuilder, titlePrefix: String = "Show ") {
+        let hasMaterials = sceneController.modelData.hasAnyMaterials
+        builder.addItem(label: "\(titlePrefix)Materials", checked: viewOptions.materialsEnabled && hasMaterials, enabled: hasMaterials) {
+            self.viewOptions.materialsEnabled.toggle()
+        }
+
         builder.addItem(label: "\(titlePrefix)Grid", checked: viewOptions.showGrid) {
             self.viewOptions.showGrid = !self.viewOptions.showGrid
         }
