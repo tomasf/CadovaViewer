@@ -41,6 +41,20 @@ enum SplitLayout: Codable, Equatable {
         }
     }
 
+    /// Finds the split node whose direct child is `.leaf(leafID)`, returning that split's id and
+    /// whether the leaf is its first (vs second) child. Used to animate a pane's collapse into its
+    /// sibling before it's removed. Returns nil if the leaf isn't found (e.g. it's the only leaf).
+    func split(containing leafID: UUID) -> (id: UUID, closingIsFirst: Bool)? {
+        switch self {
+        case .leaf:
+            return nil
+        case .split(let splitID, _, let first, let second):
+            if case .leaf(leafID) = first { return (splitID, true) }
+            if case .leaf(leafID) = second { return (splitID, false) }
+            return first.split(containing: leafID) ?? second.split(containing: leafID)
+        }
+    }
+
     /// Removes the `.leaf(id)`, collapsing its parent split so the sibling takes its place.
     /// Returns nil if `id` was the only leaf (the caller should keep the tree unchanged).
     func removingLeaf(_ id: UUID) -> SplitLayout? {

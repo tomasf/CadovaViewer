@@ -20,6 +20,7 @@ struct ViewportSplitView: View {
             ResizableSplit(
                 axis: axis,
                 ratio: viewModel.ratio(for: splitID),
+                animating: viewModel.animatingSplitID == splitID,
                 first: { AnyView(layoutView(first)) },
                 second: { AnyView(layoutView(second)) }
             )
@@ -32,6 +33,9 @@ struct ViewportSplitView: View {
 struct ResizableSplit<First: View, Second: View>: View {
     let axis: SplitLayout.Axis
     @Binding var ratio: Double
+    /// While true (this split is animating a pane open/closed) the per-pane minimum-size clamp is
+    /// skipped so the ratio can reach 0 or 1 and a pane can fully grow-from / collapse-to zero.
+    var animating: Bool = false
     @ViewBuilder var first: () -> First
     @ViewBuilder var second: () -> Second
 
@@ -43,15 +47,18 @@ struct ResizableSplit<First: View, Second: View>: View {
             let total = horizontal ? geo.size.width : geo.size.height
             let available = max(total - ViewportLayoutMetrics.dividerThickness, 1)
             let minExtent = horizontal ? ViewportLayoutMetrics.minPaneWidth : ViewportLayoutMetrics.minPaneHeight
-            let firstExtent = available * clampedRatio(ratio, available: available, minExtent: minExtent)
+            let effectiveRatio = animating ? min(max(ratio, 0), 1) : clampedRatio(ratio, available: available, minExtent: minExtent)
+            let firstExtent = available * effectiveRatio
 
             stack(horizontal: horizontal) {
                 first()
                     .frame(width: horizontal ? firstExtent : nil,
                            height: horizontal ? nil : firstExtent)
+                    .clipped()
                 divider(horizontal: horizontal, available: available, minExtent: minExtent)
                 second()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
             }
             .coordinateSpace(.named(spaceID))
         }

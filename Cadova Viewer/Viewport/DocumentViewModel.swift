@@ -23,6 +23,10 @@ final class DocumentViewModel: ObservableObject {
     @Published private(set) var layout: SplitLayout
     @Published private(set) var viewports: [UUID: ViewportController] = [:]
     @Published var ratios: [UUID: Double] = [:]
+    /// The split currently animating a pane open (on split) or closed (on close). While set, that
+    /// split ignores its min-size clamp so the pane can fully grow-from / collapse-to zero. Transient
+    /// UI state — not persisted with the document.
+    @Published private(set) var animatingSplitID: UUID?
     @Published var focusedViewportID: UUID {
         didSet { focusDidChange() }
     }
@@ -150,7 +154,12 @@ final class DocumentViewModel: ObservableObject {
 
     // MARK: - Split / close
 
+    /// Spring used to grow a new pane in (split) and collapse a pane into its sibling (close).
+    /// Matches the app's cross-section overlay spring for a consistent feel.
+    private static let paneAnimation: Animation = .spring(response: 0.32, dampingFraction: 0.88)
+
     func split(_ id: UUID, axis: SplitLayout.Axis) {
+        guard animatingSplitID == nil else { return }
         guard let document, let source = viewports[id] else { return }
 
         let newID = UUID()
@@ -166,9 +175,22 @@ final class DocumentViewModel: ObservableObject {
 
         let splitID = UUID()
         viewports[newID] = viewport
-        ratios[splitID] = 0.5
+        // Start with the new pane (the split's second child) collapsed so it grows in from the
+        // divider; `animatingSplitID` lets the split reach ratio 1.0 past its normal min-size clamp.
+        animatingSplitID = splitID
+        ratios[splitID] = 1.0
         layout = layout.replacingLeaf(id, with: .split(id: splitID, axis: axis, .leaf(id), .leaf(newID)))
         focusedViewportID = newID
+
+        // On the next runloop tick — after the split has rendered at ratio 1.0 — animate it open to
+        // 50/50. Animating in the same update would just render the final ratio with no motion.
+        DispatchQueue.main.async {
+            withAnimation(Self.paneAnimation) {
+                self.ratios[splitID] = 0.5
+            } completion: {
+                self.animatingSplitID = nil
+            }
+        }
 
         // Build this viewport's clone of the model *after* the split has rendered, so the new pane
         // appears immediately rather than waiting on the (potentially heavy) clone + snap-vertex
@@ -179,14 +201,25 @@ final class DocumentViewModel: ObservableObject {
     }
 
     func close(_ id: UUID) {
-        guard viewports.count > 1, let newLayout = layout.removingLeaf(id) else { return }
-        let viewport = viewports.removeValue(forKey: id)
-        layout = newLayout
-        let validSplits = Set(layout.splitIDs)
-        ratios = ratios.filter { validSplits.contains($0.key) }
-        viewport?.tearDown()
-        if viewports[focusedViewportID] == nil {
-            focusedViewportID = layout.leafIDs[0]
+        guard animatingSplitID == nil else { return }
+        guard viewports.count > 1, let parent = layout.split(containing: id) else { return }
+
+        // Collapse the closing pane into its sibling first, then remove it once the animation ends.
+        // `animatingSplitID` lets the split's ratio reach the extreme past its normal min-size clamp.
+        animatingSplitID = parent.id
+        withAnimation(Self.paneAnimation) {
+            self.ratios[parent.id] = parent.closingIsFirst ? 0.0 : 1.0
+        } completion: {
+            self.animatingSplitID = nil
+            guard let newLayout = self.layout.removingLeaf(id) else { return }
+            let viewport = self.viewports.removeValue(forKey: id)
+            self.layout = newLayout
+            let validSplits = Set(self.layout.splitIDs)
+            self.ratios = self.ratios.filter { validSplits.contains($0.key) }
+            viewport?.tearDown()
+            if self.viewports[self.focusedViewportID] == nil {
+                self.focusedViewportID = self.layout.leafIDs[0]
+            }
         }
     }
 

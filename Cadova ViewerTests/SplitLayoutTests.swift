@@ -56,6 +56,21 @@ struct SplitLayoutTests {
         #expect(tree.removingLeaf(UUID())?.leafIDs == [a, b, c])
     }
 
+    @Test func `split containing finds a leaf and its side`() {
+        // A is the root split's first child; B and C are the inner split's children.
+        #expect(sampleTree().split(containing: a)?.id == rootSplit)
+        #expect(sampleTree().split(containing: a)?.closingIsFirst == true)
+        #expect(sampleTree().split(containing: b)?.id == innerSplit)
+        #expect(sampleTree().split(containing: b)?.closingIsFirst == true)
+        #expect(sampleTree().split(containing: c)?.id == innerSplit)
+        #expect(sampleTree().split(containing: c)?.closingIsFirst == false)
+    }
+
+    @Test func `split containing returns nil when the leaf is absent or alone`() {
+        #expect(sampleTree().split(containing: UUID()) == nil)
+        #expect(SplitLayout.leaf(a).split(containing: a) == nil)
+    }
+
     @Test func `a layout survives a codable round trip`() throws {
         let tree = sampleTree()
         let data = try JSONEncoder().encode(tree)
