@@ -3,6 +3,33 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.1.0</title>
+            <pubDate>Mon, 13 Jul 2026 22:39:40 +0200</pubDate>
+            <sparkle:version>10</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.1.0/CadovaViewer1.1.0.zip" length="9038045" type="application/octet-stream" sparkle:edSignature="ZCIz8BA4HYbPTQ3lOf+QIA9yZKIasMYa+g4P6G7oWabTwfvFJQKjAqsZjsJkJgpDJ2Jay45DdmdKCXeAALkcDw=="/>
+            <description><![CDATA[
+                <h4>New Features</h4>
+                <ul>
+                    <li><strong>Materials toggle</strong> — a new per-viewport View menu option renders the model as plain matte white, as if it had no materials, useful for focusing on a model's shape rather than its color.</li>
+                </ul>
+                <h4>Improvements</h4>
+                <ul>
+                    <li>Smooth shading and edge visibility are now set per viewport, so each pane in a split view can use its own shading and edge style.</li>
+                    <li>Dark parts are now more visible, keeping highlights and legible edges instead of reading as flat silhouettes.</li>
+                    <li>Multi-part slices are now named after the parts they contain, making it clear in your slicer which parts each file holds.</li>
+                    <li>Various user interface refinements.</li>
+                </ul>
+                <h4>Bug Fixes</h4>
+                <ul>
+                    <li>Fixed smooth shading darkening flat faces near shallow bevels.</li>
+                    <li>Fixed a trackpad roll gesture being interrupted by stray zoom events.</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>1.0.0</title>
             <pubDate>Wed, 01 Jul 2026 14:27:02 +0200</pubDate>
             <sparkle:version>9</sparkle:version>
