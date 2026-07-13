@@ -26,6 +26,7 @@ struct OffscreenRenderer {
     ) async throws -> CGImage {
         let scene = SCNScene()
         scene.background.contents = NSColor(white: 0.05, alpha: 1)
+        scene.lightingEnvironment.contents = SceneLighting.environmentImage
         scene.rootNode.addChildNode(modelData.rootNode)
 
         let ambientLight = SCNLight()
@@ -35,7 +36,7 @@ struct OffscreenRenderer {
         ambientLightNode.light = ambientLight
         scene.rootNode.addChildNode(ambientLightNode)
 
-        let cameraNode = setupCamera(for: modelData.rootNode, in: scene)
+        let cameraNode = setupCamera(for: modelData.rootNode, in: scene, size: size)
 
         let edgeNodes = modelData.parts.flatMap {
             [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 }
@@ -55,38 +56,27 @@ struct OffscreenRenderer {
         return cgImage
     }
 
-    private static func setupCamera(for modelNode: SCNNode, in scene: SCNScene) -> SCNNode {
+    private static func setupCamera(for modelNode: SCNNode, in scene: SCNScene, size: CGSize) -> SCNNode {
         let (minBound, maxBound) = modelNode.boundingBox
-        let center = simd_float3(
-            Float((minBound.x + maxBound.x) / 2),
-            Float((minBound.y + maxBound.y) / 2),
-            Float((minBound.z + maxBound.z) / 2)
+        let boundingBox = (
+            min: SIMD3<Double>(Double(minBound.x), Double(minBound.y), Double(minBound.z)),
+            max: SIMD3<Double>(Double(maxBound.x), Double(maxBound.y), Double(maxBound.z))
         )
-
-        let sizeX = Float(maxBound.x - minBound.x)
-        let sizeY = Float(maxBound.y - minBound.y)
-        let sizeZ = Float(maxBound.z - minBound.z)
+        let center = (boundingBox.min + boundingBox.max) / 2
 
         let camera = SCNCamera()
         camera.automaticallyAdjustsZRange = true
         camera.fieldOfView = 30
 
-        let fovRadians = Float(camera.fieldOfView) * (.pi / 180.0)
-        let objectSizeX = max(sizeY, sizeZ)
-        let objectSizeY = max(sizeX, sizeZ)
-        let objectSizeZ = max(sizeX, sizeY)
-        let distanceX = (objectSizeX / 2) / tan(fovRadians / 2)
-        let distanceY = (objectSizeY / 2) / tan(fovRadians / 2)
-        let distanceZ = (objectSizeZ / 2) / tan(fovRadians / 2)
-
-        let isoAngle: Float = 35.264 * (.pi / 180)
-        let isoDist = max(distanceX, distanceY, distanceZ)
-
-        let position = simd_float3(
-            center.x - isoDist * cos(isoAngle),
-            center.y - isoDist * cos(isoAngle),
-            center.z + isoDist * sin(isoAngle)
+        let axis = ViewPreset.isometric.axis
+        let framing = frameBoundingBox(
+            axis: axis,
+            boundingBox: boundingBox,
+            center: center,
+            fieldOfViewDegrees: Double(camera.fieldOfView),
+            aspectRatio: Double(size.width / max(size.height, 1))
         )
+        let position = center + axis * framing.distance
 
         let cameraLight = SCNLight()
         cameraLight.type = .directional
@@ -95,7 +85,7 @@ struct OffscreenRenderer {
         let cameraNode = SCNNode()
         cameraNode.camera = camera
         cameraNode.light = cameraLight
-        cameraNode.simdTransform = float4x4(lookingFrom: position, at: center)
+        cameraNode.simdTransform = float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(center))
 
         scene.rootNode.addChildNode(cameraNode)
 

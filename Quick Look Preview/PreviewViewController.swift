@@ -30,6 +30,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
 
         await MainActor.run {
             let scene = SCNScene()
+            scene.lightingEnvironment.contents = SceneLighting.environmentImage
             scene.rootNode.addChildNode(modelData.rootNode)
             self.modelNode = modelData.rootNode
             self.parts = modelData.parts
@@ -110,53 +111,28 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     
     private func cameraTransform(for preset: ViewPreset) -> float4x4 {
         guard let modelNode = modelNode else { return matrix_identity_float4x4 }
-        
+
         let (minBound, maxBound) = modelNode.boundingBox
-        let center = simd_float3(
-            Float((minBound.x + maxBound.x) / 2),
-            Float((minBound.y + maxBound.y) / 2),
-            Float((minBound.z + maxBound.z) / 2)
+        let boundingBox = (
+            min: SIMD3<Double>(Double(minBound.x), Double(minBound.y), Double(minBound.z)),
+            max: SIMD3<Double>(Double(maxBound.x), Double(maxBound.y), Double(maxBound.z))
         )
-        
-        let sizeX = Float(maxBound.x - minBound.x)
-        let sizeY = Float(maxBound.y - minBound.y)
-        let sizeZ = Float(maxBound.z - minBound.z)
-        
-        let fovRadians: Float = 30 * (.pi / 180.0)
-        let objectSizeX = max(sizeY, sizeZ)
-        let objectSizeY = max(sizeX, sizeZ)
-        let objectSizeZ = max(sizeX, sizeY)
-        let distanceX = (objectSizeX / 2) / tan(fovRadians / 2)
-        let distanceY = (objectSizeY / 2) / tan(fovRadians / 2)
-        let distanceZ = (objectSizeZ / 2) / tan(fovRadians / 2)
-        
-        var position = center
-        
-        switch preset {
-        case .isometric:
-            let isoAngle: Float = 35.264 * (.pi / 180)
-            let isoDist = max(distanceX, distanceY, distanceZ)
-            position = simd_float3(
-                center.x - isoDist * cos(isoAngle),
-                center.y - isoDist * cos(isoAngle),
-                center.z + isoDist * sin(isoAngle)
-            )
-        case .front:
-            position.y = Float(minBound.y) - distanceY
-        case .back:
-            position.y = Float(maxBound.y) + distanceY
-        case .left:
-            position.x = Float(minBound.x) - distanceX
-        case .right:
-            position.x = Float(maxBound.x) + distanceX
-        case .top:
-            position.z = Float(maxBound.z) + distanceZ
-        case .bottom:
-            position.z = Float(minBound.z) - distanceZ
-            position.x += 0.001
-        }
-        
-        return float4x4(lookingFrom: position, at: center)
+        let center = (boundingBox.min + boundingBox.max) / 2
+
+        let bounds = view.bounds.size
+        let aspectRatio = bounds.width > 0 && bounds.height > 0 ? Double(bounds.width / bounds.height) : 1
+
+        let axis = preset.axis
+        let framing = frameBoundingBox(
+            axis: axis,
+            boundingBox: boundingBox,
+            center: center,
+            fieldOfViewDegrees: 30,
+            aspectRatio: aspectRatio
+        )
+        let position = center + axis * framing.distance
+
+        return float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(center))
     }
 
     // MARK: - Edge Visibility

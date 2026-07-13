@@ -131,25 +131,9 @@ extension ViewportController {
         }
 
         let center = SIMD3<Double>(sphere.center)
-        return cameraView(axis: Self.viewAxis(for: preset),
+        return cameraView(axis: preset.axis,
                           boundingBox: (SIMD3<Double>(min), SIMD3<Double>(max)),
                           center: center)
-    }
-
-    /// The outward view axis (a unit vector pointing from the model center toward the camera) for
-    /// each standard preset.
-    static func viewAxis(for preset: ViewPreset) -> SIMD3<Double> {
-        switch preset {
-        case .isometric:
-            let isoAngle = 35.264 * (.pi / 180)
-            return simd_normalize(SIMD3(-cos(isoAngle), -cos(isoAngle), sin(isoAngle)))
-        case .front:  return SIMD3(0, -1, 0)
-        case .back:   return SIMD3(0,  1, 0)
-        case .left:   return SIMD3(-1, 0, 0)
-        case .right:  return SIMD3( 1, 0, 0)
-        case .top:    return SIMD3(0, 0,  1)
-        case .bottom: return SIMD3(0, 0, -1)
-        }
     }
 
     /// Frames a world-space bounding box from the given outward `axis`, looking at `center`, with
@@ -158,45 +142,6 @@ extension ViewportController {
     func cameraView(axis: SIMD3<Double>, boundingBox: (min: SIMD3<Double>, max: SIMD3<Double>), center: SIMD3<Double>) -> CameraView {
         guard let camera = cameraNode.camera else {
             return (cameraNode.transform, 1)
-        }
-
-        let (min, max) = boundingBox
-
-        // Build a provisional orientation (distance-independent) so we know the camera's
-        // right/up vectors, then project the 8 bbox corners onto them to get the true
-        // on-screen extents. This handles every preset uniformly and works even when the
-        // model isn't centered on its bounding sphere. The lookingFrom helper supplies a
-        // sane right/up fallback for the top/bottom cases where the view axis is parallel
-        // to world up.
-        let orientation = float4x4(lookingFrom: SIMD3<Float>(center + axis), at: SIMD3<Float>(center))
-        let right = SIMD3<Double>(orientation.columns.0.xyz)
-        let up = SIMD3<Double>(orientation.columns.1.xyz)
-
-        let corners: [SIMD3<Double>] = [
-            SIMD3(min.x, min.y, min.z), SIMD3(min.x, min.y, max.z),
-            SIMD3(min.x, max.y, min.z), SIMD3(min.x, max.y, max.z),
-            SIMD3(max.x, min.y, min.z), SIMD3(max.x, min.y, max.z),
-            SIMD3(max.x, max.y, min.z), SIMD3(max.x, max.y, max.z)
-        ]
-
-        var minU = Double.greatestFiniteMagnitude, maxU = -Double.greatestFiniteMagnitude
-        var minV = Double.greatestFiniteMagnitude, maxV = -Double.greatestFiniteMagnitude
-        for corner in corners {
-            let diff = corner - center
-            let u = simd_dot(diff, right)
-            let v = simd_dot(diff, up)
-            minU = Swift.min(minU, u); maxU = Swift.max(maxU, u)
-            minV = Swift.min(minV, v); maxV = Swift.max(maxV, v)
-        }
-
-        var width = maxU - minU
-        var height = maxV - minV
-
-        if width <= 0 || height <= 0 || !width.isFinite || !height.isFinite {
-            let boxExtent = simd_reduce_max(max - min)
-            let fallbackExtent = boxExtent > 0 && boxExtent.isFinite ? boxExtent : 1
-            width = fallbackExtent
-            height = fallbackExtent
         }
 
         // The scene view spans the whole detail area, but part of it is hidden under the floating
@@ -213,35 +158,28 @@ extension ViewportController {
         let visibleWidth = Swift.max(full.width - insets.left - insets.right, 1)
         let visibleHeight = Swift.max(full.height - insets.top - insets.bottom, 1)
 
-        // orthoScale is half the world-height that fills the *full* view height, so scale the fit by
-        // full/visible to make the model fit the smaller visible rectangle instead.
-        let fitWidthScale = width / 2 * full.height / visibleWidth
-        let fitHeightScale = height / 2 * full.height / visibleHeight
-        var orthoScale = Swift.max(fitWidthScale, fitHeightScale) * 1.5
-        if orthoScale <= 0 || !orthoScale.isFinite {
-            orthoScale = 1
-        }
-
-        // Place the camera at the distance that makes calculateOrthographicScale()
-        // (distance * tan(fov/2), the value SceneKit actually uses for the ortho
-        // projection) reproduce exactly orthoScale, so the framing isn't overridden.
-        // The same distance frames the model with matching margin in perspective mode.
-        let fovRadians = camera.fieldOfView * (.pi / 180.0)
-        let tanHalfFov = tan(fovRadians / 2)
-        let distance = tanHalfFov > 0 && orthoScale > 0 ? orthoScale / tanHalfFov : 1
+        // Frame against the *visible* rectangle's aspect ratio, so the margin/fit math accounts for
+        // the sidebar the same way the pan-to-centre step below does.
+        let framing = frameBoundingBox(
+            axis: axis,
+            boundingBox: boundingBox,
+            center: center,
+            fieldOfViewDegrees: Double(camera.fieldOfView),
+            aspectRatio: Double(visibleWidth / visibleHeight)
+        )
 
         // Pan the camera so the model centre lands at the centre of the visible rectangle rather than
         // the full view. The visible centre is offset from the full centre by half the difference of
         // opposing insets; shifting the camera the opposite way moves the model the matching amount on
         // screen. (AppKit y grows upward, matching `up`; x grows right, matching `right`.)
-        let worldPerPoint = full.height > 0 ? 2 * orthoScale / full.height : 0
+        let worldPerPoint = full.height > 0 ? 2 * framing.orthographicScale / full.height : 0
         let offsetRight = (insets.left - insets.right) / 2 * worldPerPoint
         let offsetUp = (insets.bottom - insets.top) / 2 * worldPerPoint
-        let shift = right * -offsetRight + up * -offsetUp
+        let shift = framing.right * -offsetRight + framing.up * -offsetUp
         let shiftedCenter = center + shift
-        let position = shiftedCenter + axis * distance
+        let position = shiftedCenter + axis * framing.distance
 
-        return (SCNMatrix4(float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(shiftedCenter))), orthoScale)
+        return (SCNMatrix4(float4x4(lookingFrom: SIMD3<Float>(position), at: SIMD3<Float>(shiftedCenter))), framing.orthographicScale)
     }
 
     /// Animates the camera to an isometric framing of the given parts (their combined world-space
@@ -249,7 +187,7 @@ extension ViewportController {
     func centerView(onPartIDs ids: Set<ModelData.Part.ID>) {
         guard let box = combinedWorldBoundingBox(ofPartIDs: ids) else { return }
         let center = (box.min + box.max) / 2
-        setCameraView(cameraView(axis: Self.viewAxis(for: .isometric), boundingBox: box, center: center), movement: .large)
+        setCameraView(cameraView(axis: ViewPreset.isometric.axis, boundingBox: box, center: center), movement: .large)
     }
 
     /// The union, in world space, of the bounding boxes of the given parts' clone container nodes in
