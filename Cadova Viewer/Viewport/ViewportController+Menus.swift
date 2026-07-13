@@ -194,8 +194,8 @@ extension ViewportController {
 
         builder.addSeparator()
         buildViewOptionToggles(with: builder)
-        builder.addItem(label: "Smooth Shading", checked: sceneController.documentOptions.smoothShading) {
-            self.sceneController.documentOptions.smoothShading.toggle()
+        builder.addItem(label: "Smooth Shading", checked: viewOptions.smoothShading) {
+            self.viewOptions.smoothShading.toggle()
         }
         builder.addItem(label: "Show Edges", submenu: buildEdgeVisibilityMenu)
 
@@ -344,18 +344,16 @@ extension ViewportController {
     }
 
     private func buildEdgeVisibilityItems(with menuBuilder: MenuBuilder, labels: (none: String, sharp: String, all: String)) {
-        // Edge visibility is document-wide (it acts on the shared geometry), so it lives on the
-        // SceneController rather than this viewport's options.
-        let initialEdgeVisibility = sceneController.documentOptions.edgeVisibility
+        let initialEdgeVisibility = viewOptions.edgeVisibility
 
-        func visibility(_ visibility: DocumentViewOptions.EdgeVisibility, label: String) {
-            menuBuilder.addItem(label: label, checked: sceneController.documentOptions.edgeVisibility == visibility) {
-                self.sceneController.documentOptions.edgeVisibility = visibility
+        func visibility(_ visibility: ViewOptions.EdgeVisibility, label: String) {
+            menuBuilder.addItem(label: label, checked: viewOptions.edgeVisibility == visibility) {
+                self.viewOptions.edgeVisibility = visibility
             } onHighlight: { highlighted, isClosing in
                 if !isClosing {
-                    // Preview by setting the document-wide option (every viewport reflects it);
-                    // restored to the initial value when the highlight leaves without a click.
-                    self.sceneController.documentOptions.edgeVisibility = highlighted ? visibility : initialEdgeVisibility
+                    // Preview by setting this viewport's own option; restored to the initial value
+                    // when the highlight leaves without a click.
+                    self.viewOptions.edgeVisibility = highlighted ? visibility : initialEdgeVisibility
                 }
             }
         }

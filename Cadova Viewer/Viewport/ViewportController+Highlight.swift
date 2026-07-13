@@ -176,7 +176,7 @@ extension ViewportController {
         root.addChildNode(fill)
 
         // Light edges, following the current edge-visibility choice.
-        let edgeVisibility = sceneController.documentOptions.edgeVisibility
+        let edgeVisibility = viewOptions.edgeVisibility
         let edgeSource = edgeVisibility == .all ? part.nodes.smoothEdges : part.nodes.sharpEdges
         if edgeVisibility != .none, let edgeSource {
             let edgeMaterial = SCNMaterial()

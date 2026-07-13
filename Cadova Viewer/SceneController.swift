@@ -7,8 +7,9 @@ import ViewerCore
 /// Owns the shared, document-wide model data. It does not own a rendered scene: each viewport
 /// renders its own `SCNScene` built from `modelData` (see `ViewportModelInstance`), sharing the
 /// heavy `SCNGeometry` while keeping its own lights and per-viewport visibility. This object holds
-/// what is genuinely shared — the loaded model, the parts list, the document-global geometry
-/// options (edge visibility, smooth shading), the cached bounds, and the lighting environment.
+/// what is genuinely shared — the loaded model, the parts list, the shared smooth-geometry build,
+/// the cached bounds, and the lighting environment. Smooth shading and edge visibility are
+/// per-viewport (`ViewOptions`); only the expensive smooth-normal computation itself is shared.
 final class SceneController: ObservableObject {
     /// Image-based-lighting environment, shared as each viewport scene's `lightingEnvironment`.
     /// A procedural neutral gray gradient (bright overhead, dark underfoot) rather than a
@@ -26,19 +27,6 @@ final class SceneController: ObservableObject {
     /// viewports (the geometry is the same in each), so it lives here.
     let thumbnails = PartThumbnailService()
 
-    /// Document-wide view options that act on the shared geometry (smooth shading, edge
-    /// visibility). Owned here, not on any single viewport, because they apply to every viewport
-    /// identically. Viewports observe `documentGeometryChanged` and apply them to their own clones.
-    @Published var documentOptions: DocumentViewOptions = Preferences().documentViewOptions {
-        didSet {
-            if documentOptions.smoothShading, !oldValue.smoothShading {
-                buildSmoothGeometries()
-            }
-            geometryChanged.send()
-            Preferences().documentViewOptions = documentOptions
-        }
-    }
-
     /// The model's bounding box and sphere, cached when the model loads. Computing these walks the
     /// whole node hierarchy and takes SceneKit's scene lock, which contends with the render thread
     /// — costly when read on every NavLib (SpaceMouse) motion frame on the main thread. The model
@@ -49,10 +37,11 @@ final class SceneController: ObservableObject {
     private let modelLoadedSignal = PassthroughSubject<Void, Never>()
     var modelWasLoaded: AnyPublisher<Void, Never> { modelLoadedSignal.eraseToAnyPublisher() }
 
-    /// Fires when a document-global geometry option changes (or a background smooth-geometry build
-    /// finishes). Each viewport re-applies the options to its own clone nodes.
-    private let geometryChanged = PassthroughSubject<Void, Never>()
-    var documentGeometryChanged: AnyPublisher<Void, Never> { geometryChanged.eraseToAnyPublisher() }
+    /// Fires when the shared smooth-shaded geometry finishes building in the background. Each
+    /// viewport that wants smooth shading re-applies it to its own clone nodes (falling back to flat
+    /// until this fires, in case it asked before the build was ready).
+    private let smoothGeometryDidBuildSignal = PassthroughSubject<Void, Never>()
+    var smoothGeometryDidBuild: AnyPublisher<Void, Never> { smoothGeometryDidBuildSignal.eraseToAnyPublisher() }
 
     private var observers: Set<AnyCancellable> = []
 
@@ -121,27 +110,39 @@ final class SceneController: ObservableObject {
         modelBoundingBox = modelData.rootNode.boundingBox
         modelBoundingSphere = modelData.rootNode.boundingSphere
 
-        if documentOptions.smoothShading {
-            buildSmoothGeometries()
-        }
+        // A reloaded model has fresh `ModelGeometryVariant`s, so any previous build no longer applies.
+        smoothGeometryBuildState = .notStarted
         modelLoadedSignal.send()
     }
 
-    // MARK: - Document-wide geometry options
+    // MARK: - Shared smooth-shaded geometry
 
-    /// Builds the smooth-shaded geometry for every part off the main thread (the result is cached
-    /// on each shared `ModelGeometryVariant`), then notifies the viewports to swap it in. Keeps
-    /// large models from hitching the UI, and builds each variant once for all viewports.
-    private func buildSmoothGeometries() {
+    private enum SmoothGeometryBuildState {
+        case notStarted, building, done
+    }
+    private var smoothGeometryBuildState: SmoothGeometryBuildState = .notStarted
+
+    /// Builds the smooth-shaded geometry for every part off the main thread (the result is cached on
+    /// each shared `ModelGeometryVariant`), then notifies viewports to swap it in. Keeps large models
+    /// from hitching the UI, and builds each variant once no matter how many viewports want smooth
+    /// shading. Safe to call repeatedly / from multiple viewports — only the first call after a model
+    /// load actually starts the build; later calls (and viewports that ask before it finishes) pick up
+    /// the result via `smoothGeometryDidBuild`.
+    func ensureSmoothGeometryBuilt() {
+        guard smoothGeometryBuildState == .notStarted else { return }
         let variants = parts.flatMap(\.modelGeometryVariants)
         guard !variants.isEmpty else { return }
+        smoothGeometryBuildState = .building
         Task.detached { [weak self] in
             await withTaskGroup(of: Void.self) { group in
                 for variant in variants {
                     group.addTask { _ = variant.smoothGeometry() }
                 }
             }
-            await MainActor.run { self?.geometryChanged.send() }
+            await MainActor.run {
+                self?.smoothGeometryBuildState = .done
+                self?.smoothGeometryDidBuildSignal.send()
+            }
         }
     }
 }

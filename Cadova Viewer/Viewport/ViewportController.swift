@@ -144,6 +144,12 @@ class ViewportController: NSObject, ObservableObject {
             if viewOptions.hiddenPartIDs != oldValue.hiddenPartIDs, !activeCrossSections.isEmpty {
                 updateCrossSectionCap()
             }
+            // Same willSet reason applies here: `applyGeometryOptions()` reads `self.viewOptions`
+            // directly, so it must run from didSet (where the new value is already stored), not the
+            // $viewOptions sink (where it would still see the old smoothShading/edgeVisibility).
+            if viewOptions.smoothShading != oldValue.smoothShading || viewOptions.edgeVisibility != oldValue.edgeVisibility {
+                applyGeometryOptions()
+            }
         }
     }
     var hasSetInitialView = false

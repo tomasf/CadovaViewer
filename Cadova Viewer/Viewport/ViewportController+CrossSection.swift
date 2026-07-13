@@ -550,7 +550,7 @@ extension ViewportController {
 
         var materials = [fillMaterial]
 
-        let edgeVisibility = sceneController.documentOptions.edgeVisibility
+        let edgeVisibility = viewOptions.edgeVisibility
         let edgeMaterial: SCNMaterial? = edgeVisibility == .none ? nil : {
             let material = SCNMaterial()
             material.lightingModel = .constant

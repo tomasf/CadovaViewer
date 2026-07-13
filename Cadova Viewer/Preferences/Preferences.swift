@@ -64,14 +64,20 @@ class Preferences: ObservableObject {
     }
 
     var viewOptions: ViewOptions {
-        get { self[Self.viewOptionsDataKey] ?? .init() }
+        get {
+            var options: ViewOptions = self[Self.viewOptionsDataKey] ?? .init()
+            // Pre-migration installs stored smoothShading/edgeVisibility as a separate document-wide
+            // default under `documentViewOptionsDataKey`; fold it into the per-viewport default once
+            // so upgrading doesn't reset a remembered shading/edge choice.
+            if let legacy: LegacyDocumentViewOptions = self[Self.documentViewOptionsDataKey] {
+                options.smoothShading = legacy.smoothShading
+                options.edgeVisibility = legacy.edgeVisibility
+                self[Self.viewOptionsDataKey] = options
+                defaults.removeObject(forKey: Self.documentViewOptionsDataKey)
+            }
+            return options
+        }
         set { self[Self.viewOptionsDataKey] = newValue }
-    }
-
-    /// Document-wide defaults (smooth shading, edge visibility) for newly opened documents.
-    var documentViewOptions: DocumentViewOptions {
-        get { self[Self.documentViewOptionsDataKey] ?? .init() }
-        set { self[Self.documentViewOptionsDataKey] = newValue }
     }
 
     /// The bundle identifier of the app to use as the slicer for the "Slice" command. `nil` (the

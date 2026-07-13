@@ -75,11 +75,6 @@ final class DocumentViewModel: ObservableObject {
         viewports[id] = makeViewport(id: id, document: document)
         focusDidChange()
 
-        // The document-global geometry options are part of the saved state.
-        sceneController.$documentOptions.dropFirst().sink { [weak self] _ in
-            self?.document?.invalidateRestorableState()
-        }.store(in: &cancellables)
-
         // The toolbar's measurement mode picker follows the shared mode. (The list overlay observes
         // the controller directly, so only the mode needs to be forwarded here.)
         measurements.$interactionMode.dropFirst().sink { [weak self] _ in
@@ -259,15 +254,15 @@ final class DocumentViewModel: ObservableObject {
 
     // MARK: - State restoration
 
-    /// Captures the full layout (tree, divider ratios, focus, each viewport's options, and the
-    /// document-global geometry options) for `NSDocument` restorable state.
+    /// Captures the full layout (tree, divider ratios, focus, and each viewport's options) for
+    /// `NSDocument` restorable state.
     func snapshot() -> DocumentLayoutState {
         DocumentLayoutState(
             layout: layout,
             ratios: ratios,
             focusedViewportID: focusedViewportID,
             viewOptions: viewports.mapValues(\.viewOptionsForStateRestoration),
-            documentOptions: sceneController.documentOptions,
+            legacyDocumentOptions: nil,
             sidebarVisible: sidebarVisibility != .detailOnly,
             crossSections: viewports.mapValues(\.crossSections),
             measurements: measurements.restorableState
@@ -282,7 +277,6 @@ final class DocumentViewModel: ObservableObject {
 
         for viewport in viewports.values { viewport.tearDown() }
 
-        sceneController.documentOptions = state.documentOptions
         if let measurementState = state.measurements {
             measurements.loadRestorableState(measurementState)
         }
@@ -292,6 +286,13 @@ final class DocumentViewModel: ObservableObject {
             let viewport = makeViewport(id: id, document: document)
             if let options = state.viewOptions[id] {
                 viewport.setViewOptions(options)
+            }
+            // Saves from before smoothShading/edgeVisibility moved into per-viewport `ViewOptions`
+            // carried one document-wide value instead; apply it to every restored viewport so
+            // reopening an old document doesn't reset its shading/edge choice.
+            if let legacy = state.legacyDocumentOptions {
+                viewport.viewOptions.smoothShading = legacy.smoothShading
+                viewport.viewOptions.edgeVisibility = legacy.edgeVisibility
             }
             let restoredCrossSections = state.crossSections?[id] ?? []
             viewport.crossSections = restoredCrossSections
@@ -321,7 +322,10 @@ struct DocumentLayoutState: Codable {
     var ratios: [UUID: Double]
     var focusedViewportID: UUID
     var viewOptions: [UUID: ViewOptions]
-    var documentOptions: DocumentViewOptions
+    /// Present only in saves from before smoothShading/edgeVisibility moved into per-viewport
+    /// `ViewOptions`; migrated onto every restored viewport in `restore(_:)`. Always `nil` going
+    /// forward — `snapshot()` never writes it.
+    var legacyDocumentOptions: LegacyDocumentViewOptions?
     /// Optional so documents saved before the sidebar existed still decode (treated as closed).
     var sidebarVisible: Bool?
     /// Per-viewport cross-section planes. Optional so documents saved before cross-sections decode.

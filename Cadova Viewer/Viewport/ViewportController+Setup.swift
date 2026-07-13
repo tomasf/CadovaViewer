@@ -134,8 +134,8 @@ extension ViewportController {
             self?.applyLoadedModel()
         }.store(in: &observers)
 
-        sceneController.documentGeometryChanged.sink { [weak self] in
-            self?.applyDocumentOptions()
+        sceneController.smoothGeometryDidBuild.sink { [weak self] in
+            self?.applyGeometryOptions()
         }.store(in: &observers)
     }
 
