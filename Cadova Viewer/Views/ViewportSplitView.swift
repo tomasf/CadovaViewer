@@ -30,6 +30,11 @@ struct ViewportSplitView: View {
                         }
                     }
                 },
+                onDragBegan: { [weak viewModel] in viewModel?.beginDividerDrag() },
+                onDragChanged: { [weak viewModel] proposedRatio, available in
+                    viewModel?.updateDividerDrag(splitID: splitID, proposedRatio: proposedRatio, available: available) ?? proposedRatio
+                },
+                onDragEnded: { [weak viewModel] in viewModel?.endDividerDrag() },
                 first: { AnyView(layoutView(first)) },
                 second: { AnyView(layoutView(second)) }
             )
@@ -46,6 +51,14 @@ struct ResizableSplit<First: View, Second: View>: View {
     /// skipped so the ratio can reach 0 or 1 and a pane can fully grow-from / collapse-to zero.
     var animating: Bool = false
     var onResizeActiveChanged: (Bool) -> Void = { _ in }
+    /// Called once when a divider drag begins (before the first `onDragChanged`).
+    var onDragBegan: () -> Void = {}
+    /// Given where the drag wants the divider (first pane's fraction of `available`) and the split's
+    /// available extent in points, returns the ratio to actually show for this split — clamped, and
+    /// with any interior-pane compensation already applied as a side effect. Defaults to a passthrough.
+    var onDragChanged: (_ proposedRatio: Double, _ available: CGFloat) -> Double = { proposedRatio, _ in proposedRatio }
+    /// Called once when the drag ends (after the final `onDragChanged`, after the ratio is committed).
+    var onDragEnded: () -> Void = {}
     @ViewBuilder var first: () -> First
     @ViewBuilder var second: () -> Second
 
@@ -133,19 +146,21 @@ struct ResizableSplit<First: View, Second: View>: View {
                         if !resizeActive {
                             resizeActive = true
                             onResizeActiveChanged(true)
+                            onDragBegan()
                         }
                         refreshCursor()
                         let location = horizontal ? value.location.x : value.location.y
-                        dragRatio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
+                        dragRatio = onDragChanged(Double(location) / Double(available), available)
                     }
                     .onEnded { value in
                         let location = horizontal ? value.location.x : value.location.y
-                        let finalRatio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
+                        let finalRatio = onDragChanged(Double(location) / Double(available), available)
                         var transaction = Transaction()
                         transaction.animation = nil
                         withTransaction(transaction) {
                             ratio = finalRatio
                         }
+                        onDragEnded()
                         DispatchQueue.main.async {
                             var transaction = Transaction()
                             transaction.animation = nil

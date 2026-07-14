@@ -145,11 +145,57 @@ final class DocumentViewModel: ObservableObject {
     }
 
     func ratio(for splitID: UUID) -> Binding<Double> {
-        Binding(get: { [weak self] in self?.ratios[splitID] ?? 0.5 },
+        // During a drag the interior-pinning compensation is held in `dragOverrideRatios` rather than
+        // written into `@Published ratios`, so it doesn't fire `objectWillChange` (which would re-evaluate
+        // the whole document UI every frame and make the drag stutter). The dragged split's own ResizableSplit
+        // re-renders from its local drag state each frame, which rebuilds this subtree and re-reads this
+        // getter — so the override still shows live. See `updateDividerDrag`.
+        Binding(get: { [weak self] in self?.dragOverrideRatios[splitID] ?? self?.ratios[splitID] ?? 0.5 },
                 set: { [weak self] in
                     self?.ratios[splitID] = $0
                     self?.document?.invalidateRestorableState()
                 })
+    }
+
+    // MARK: - Divider drag
+
+    /// The ratios captured when a divider drag begins. The interior panes are pinned to these sizes
+    /// for the whole drag, so every update recomputes the compensation from the same baseline and
+    /// can't drift. Nil when no drag is in progress.
+    private var dividerDragStartRatios: [UUID: Double]?
+
+    /// Live interior-pinning compensation for the in-progress divider drag, keyed by split id. Kept out
+    /// of `@Published ratios` on purpose (see `ratio(for:)`); merged into `ratios` once on release.
+    private var dragOverrideRatios: [UUID: Double] = [:]
+
+    func beginDividerDrag() {
+        dividerDragStartRatios = ratios
+    }
+
+    /// Handles one step of a divider drag so only the panes touching the divider resize. Stashes the
+    /// interior-pinning compensation in `dragOverrideRatios` (not `@Published ratios`, to avoid a
+    /// per-frame whole-UI re-evaluation) and returns the clamped ratio for the dragged split itself —
+    /// the split view previews that one locally and commits it through `ratio(for:)` on release.
+    func updateDividerDrag(splitID: UUID, proposedRatio: Double, available: CGFloat) -> Double {
+        let startRatios = dividerDragStartRatios ?? ratios
+        let axis = layout.node(withSplitID: splitID)?.axis
+        let minExtent = axis == .vertical ? ViewportLayoutMetrics.minPaneHeight : ViewportLayoutMetrics.minPaneWidth
+        guard let solution = DividerDragSolver.solve(
+            layout: layout, splitID: splitID, proposedRatio: proposedRatio, available: available,
+            ratios: startRatios, dividerThickness: ViewportLayoutMetrics.dividerThickness, minExtent: minExtent
+        ) else { return proposedRatio }
+        dragOverrideRatios = solution.updates
+        return solution.ratio
+    }
+
+    func endDividerDrag() {
+        dividerDragStartRatios = nil
+        // Commit the drag's final compensation in one @Published change, then drop the override.
+        if !dragOverrideRatios.isEmpty {
+            ratios.merge(dragOverrideRatios) { _, new in new }
+            dragOverrideRatios.removeAll()
+        }
+        document?.invalidateRestorableState()
     }
 
     // MARK: - Split / close

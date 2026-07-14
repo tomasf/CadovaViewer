@@ -29,6 +29,18 @@ enum SplitLayout: Codable, Equatable {
         }
     }
 
+    /// The split node with the given id — its axis and two child subtrees. Used by the divider drag
+    /// to walk the panes on either side of the dragged split. Returns nil if no such split exists.
+    func node(withSplitID id: UUID) -> (axis: Axis, first: SplitLayout, second: SplitLayout)? {
+        switch self {
+        case .leaf:
+            return nil
+        case .split(let splitID, let axis, let first, let second):
+            if splitID == id { return (axis, first, second) }
+            return first.node(withSplitID: id) ?? second.node(withSplitID: id)
+        }
+    }
+
     /// Replaces the `.leaf(id)` with `replacement`, returning the new tree.
     func replacingLeaf(_ id: UUID, with replacement: SplitLayout) -> SplitLayout {
         switch self {
