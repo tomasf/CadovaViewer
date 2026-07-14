@@ -192,9 +192,15 @@ final class DocumentViewModel: ObservableObject {
             if !self.sceneController.parts.isEmpty {
                 viewport.applyLoadedModel()
             }
+            // Drive the animation through the same SceneKit live-resize path a divider drag uses, so
+            // the panes' 3D content resizes smoothly instead of jumping as their frames animate. The
+            // new pane starts collapsed, so its projection anchoring is skipped until it has size (see
+            // `setProjectionDirectionForPaneResize`); the depth-counted begin/end tolerates that.
+            self.viewports.values.forEach { $0.sceneView.beginPaneResize(axis: axis) }
             withAnimation(Self.paneAnimation) {
                 self.ratios[splitID] = 0.5
             } completion: {
+                self.viewports.values.forEach { $0.sceneView.endPaneResize() }
                 self.animatingSplitID = nil
             }
         }
@@ -207,9 +213,13 @@ final class DocumentViewModel: ObservableObject {
         // Collapse the closing pane into its sibling first, then remove it once the animation ends.
         // `animatingSplitID` lets the split's ratio reach the extreme past its normal min-size clamp.
         animatingSplitID = parent.id
+        // Same live-resize path as a divider drag, so the sibling's 3D content resizes smoothly as it
+        // grows to fill the space instead of jumping (see `split(_:axis:)`).
+        viewports.values.forEach { $0.sceneView.beginPaneResize(axis: parent.axis) }
         withAnimation(Self.paneAnimation) {
             self.ratios[parent.id] = parent.closingIsFirst ? 0.0 : 1.0
         } completion: {
+            self.viewports.values.forEach { $0.sceneView.endPaneResize() }
             self.animatingSplitID = nil
             guard let newLayout = self.layout.removingLeaf(id) else { return }
             let viewport = self.viewports.removeValue(forKey: id)

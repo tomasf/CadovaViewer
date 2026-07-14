@@ -118,7 +118,12 @@ class CustomSceneView: SCNView {
     }
 
     private func setProjectionDirectionForPaneResize(axis: SplitLayout.Axis) {
-        guard axis == .horizontal,
+        // A pane that starts a resize collapsed (the new pane grows in from the divider on a split)
+        // has a degenerate size here, so the aspect-ratio conversion below would bake in a bogus
+        // field of view. Skip it — it stays in the standard vertical projection and reveals as it
+        // grows, which lands on the same final projection with no end-of-animation pop.
+        guard bounds.width > 1, bounds.height > 1,
+              axis == .horizontal,
               let camera = pointOfView?.camera,
               !camera.usesOrthographicProjection else { return }
 
