@@ -129,33 +129,6 @@ extension ViewportController {
         return hitDistance >= vertexDistance * 0.98
     }
 
-    /// Collects the world-space endpoints of every part's sharp (feature) edges, which are
-    /// the genuine corner vertices — flat-surface and smooth-tessellation vertices are
-    /// excluded because they don't lie on a sharp edge.
-    func gatherSnapVertices() -> [SCNVector3] {
-        var seen = Set<SIMD3<Int>>()
-        var result: [SCNVector3] = []
-
-        for part in sceneController.parts {
-            guard let sharpEdges = part.nodes.sharpEdges else { continue }
-            sharpEdges.enumerateHierarchy { node, _ in
-                guard let geometry = node.geometry,
-                      let source = geometry.sources(for: .vertex).first,
-                      let element = geometry.elements.first else { return }
-
-                let vertices = source.decodedVertices()
-                for index in Set(element.decodedLineIndices()) where index < vertices.count {
-                    let world = node.convertPosition(vertices[index], to: nil)
-                    let key = SIMD3<Int>(Int((world.x * 1000).rounded()), Int((world.y * 1000).rounded()), Int((world.z * 1000).rounded()))
-                    if seen.insert(key).inserted {
-                        result.append(world)
-                    }
-                }
-            }
-        }
-        return result
-    }
-
     /// Projects the cursor ray onto an axis line through `start`, choosing the axis whose
     /// screen-space direction best matches the cursor's movement from the start point.
     private func axisConstrainedPoint(atViewPoint point: CGPoint, from start: SCNVector3) -> SCNVector3? {

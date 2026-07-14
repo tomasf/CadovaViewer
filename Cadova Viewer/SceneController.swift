@@ -33,6 +33,19 @@ final class SceneController: ObservableObject {
     private(set) var modelBoundingBox: (min: SCNVector3, max: SCNVector3) = (SCNVector3Zero, SCNVector3Zero)
     private(set) var modelBoundingSphere: (center: SCNVector3, radius: Float) = (SCNVector3Zero, 0)
 
+    /// World-space corner vertices (sharp/feature-edge endpoints) the measurement tool snaps to.
+    /// Computed from the shared master parts, so the result is identical for every viewport — cached
+    /// here and reused rather than re-decoded on every split (decoding + deduplicating all edge
+    /// vertices is costly and previously ran on the new pane's open-animation frame). Lazily built on
+    /// first use and invalidated on model load.
+    private var cachedSnapVertices: [SCNVector3]?
+    var snapVertices: [SCNVector3] {
+        if let cachedSnapVertices { return cachedSnapVertices }
+        let vertices = computeSnapVertices()
+        cachedSnapVertices = vertices
+        return vertices
+    }
+
     private let modelLoadedSignal = PassthroughSubject<Void, Never>()
     var modelWasLoaded: AnyPublisher<Void, Never> { modelLoadedSignal.eraseToAnyPublisher() }
 
@@ -66,7 +79,34 @@ final class SceneController: ObservableObject {
 
         // A reloaded model has fresh `ModelGeometryVariant`s, so any previous build no longer applies.
         smoothGeometryBuildState = .notStarted
+        cachedSnapVertices = nil
         modelLoadedSignal.send()
+    }
+
+    /// Decodes and deduplicates the endpoints of every part's sharp edges in world space. Backs the
+    /// cached `snapVertices`; see there for why the result is shared across viewports.
+    private func computeSnapVertices() -> [SCNVector3] {
+        var seen = Set<SIMD3<Int>>()
+        var result: [SCNVector3] = []
+
+        for part in parts {
+            guard let sharpEdges = part.nodes.sharpEdges else { continue }
+            sharpEdges.enumerateHierarchy { node, _ in
+                guard let geometry = node.geometry,
+                      let source = geometry.sources(for: .vertex).first,
+                      let element = geometry.elements.first else { return }
+
+                let vertices = source.decodedVertices()
+                for index in Set(element.decodedLineIndices()) where index < vertices.count {
+                    let world = node.convertPosition(vertices[index], to: nil)
+                    let key = SIMD3<Int>(Int((world.x * 1000).rounded()), Int((world.y * 1000).rounded()), Int((world.z * 1000).rounded()))
+                    if seen.insert(key).inserted {
+                        result.append(world)
+                    }
+                }
+            }
+        }
+        return result
     }
 
     // MARK: - Shared smooth-shaded geometry

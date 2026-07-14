@@ -31,7 +31,8 @@ extension ViewportController {
         }
 
         grid.updateBounds(geometry: modelInstance.root)
-        snapVertices = gatherSnapVertices()
+        // Shared across viewports and lazily cached on the scene controller — cheap on a split.
+        snapVertices = sceneController.snapVertices
     }
 
     /// Applies this viewport's own geometry options (edge visibility, smooth shading) to its clone

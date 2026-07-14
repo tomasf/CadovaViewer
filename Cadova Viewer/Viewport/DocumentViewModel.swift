@@ -185,18 +185,18 @@ final class DocumentViewModel: ObservableObject {
         // On the next runloop tick — after the split has rendered at ratio 1.0 — animate it open to
         // 50/50. Animating in the same update would just render the final ratio with no motion.
         DispatchQueue.main.async {
+            // Build this viewport's clone of the model *before* the animation's clock starts. It's
+            // deferred off the first tick so the empty pane appears immediately, but doing it after
+            // `withAnimation` had already started would block the animation's opening frames and make
+            // it stutter. The `modelWasLoaded` sink covers the case where the model isn't loaded yet.
+            if !self.sceneController.parts.isEmpty {
+                viewport.applyLoadedModel()
+            }
             withAnimation(Self.paneAnimation) {
                 self.ratios[splitID] = 0.5
             } completion: {
                 self.animatingSplitID = nil
             }
-        }
-
-        // Build this viewport's clone of the model *after* the split has rendered, so the new pane
-        // appears immediately rather than waiting on the (potentially heavy) clone + snap-vertex
-        // work. The `modelWasLoaded` sink covers the case where the model isn't loaded yet.
-        if !sceneController.parts.isEmpty {
-            DispatchQueue.main.async { viewport.applyLoadedModel() }
         }
     }
 
