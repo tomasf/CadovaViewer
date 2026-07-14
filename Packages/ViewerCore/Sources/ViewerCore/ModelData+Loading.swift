@@ -3,6 +3,22 @@ import ThreeMF
 import SceneKit
 import AppKit
 
+// The synchronous products of processing a single component, assembled concurrently by
+// `ModelData.init` and then consumed on the calling task to build the scene graph.
+private struct ComponentProducts: Sendable {
+    let mainGeometry: SCNGeometry
+    let sharpEdgeLines: EdgeLines
+    let smoothEdgeLines: EdgeLines
+    let mesh: ThreeMF.Mesh
+    let emittedCorners: [Int32]
+    let stats: ModelData.Statistics
+    let transform: SCNMatrix4
+    let dominantColor: SIMD4<Float>?
+    let hasMaterial: Bool
+    let capVertices: [SIMD3<Float>]
+    let capIndices: [UInt32]
+}
+
 extension ModelData {
     public init(url: URL, includeEdges: Bool = true) async throws {
         let loader = ModelLoader(url: url)
@@ -12,20 +28,6 @@ extension ModelData {
         // node's transform and when measuring real-world area/volume/dimensions.
         let multiplier = loadedModel.rootModel.unit?.millimetersPerUnit ?? 1
         let unitScale = simd_double4x4(diagonal: SIMD4(Double(multiplier), Double(multiplier), Double(multiplier), 1))
-
-        struct ComponentProducts: Sendable {
-            let mainGeometry: SCNGeometry
-            let sharpEdgeLines: EdgeLines
-            let smoothEdgeLines: EdgeLines
-            let mesh: ThreeMF.Mesh
-            let emittedCorners: [Int32]
-            let stats: ModelData.Statistics
-            let transform: SCNMatrix4
-            let dominantColor: SIMD4<Float>?
-            let hasMaterial: Bool
-            let capVertices: [SIMD3<Float>]
-            let capIndices: [UInt32]
-        }
 
         // Edge lines are classified once per unique mesh, by each edge's own bordering triangles
         // (see `edgeGeometries(triangleColors:)`) — independent of which part instances the mesh,
@@ -42,60 +44,14 @@ extension ModelData {
         }
 
         let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
-            let products = await loadedItem.components.asyncMap { loadedComponent in
-                let property = PartialPropertyReference(groupID: loadedComponent.propertyGroupID, index: loadedComponent.propertyIndex)
-                let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
-                let model = loadedModel.models[loadedMesh.modelIndex]
-
-                let geometryResult = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
-
-                // Mesh coords → millimetres = unit scale ∘ this component's placement transform.
-                let worldTransform = unitScale * simd_double4x4(loadedComponent.scnMatrix)
-                let stats = loadedMesh.mesh.statistics(transform: worldTransform)
-
-                // World-space indexed mesh (same space as the scene) for the cross-section cap.
-                var capVertices: [SIMD3<Float>] = []
-                capVertices.reserveCapacity(loadedMesh.mesh.vertices.count)
-                for vertex in loadedMesh.mesh.vertices {
-                    let world = worldTransform * SIMD4(vertex.simd, 1)
-                    capVertices.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
-                }
-                var capIndices: [UInt32] = []
-                capIndices.reserveCapacity(loadedMesh.mesh.triangles.count * 3)
-                for triangle in loadedMesh.mesh.triangles {
-                    capIndices += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
-                }
-
-                if includeEdges && loadedComponent.meshIndex < indexedEdgeLines.count {
-                    let (sharp, smooth) = indexedEdgeLines[loadedComponent.meshIndex]
-                    return ComponentProducts(
-                        mainGeometry: geometryResult.geometry,
-                        sharpEdgeLines: sharp,
-                        smoothEdgeLines: smooth,
-                        mesh: loadedMesh.mesh,
-                        emittedCorners: geometryResult.emittedCorners,
-                        stats: stats,
-                        transform: loadedComponent.scnMatrix,
-                        dominantColor: geometryResult.dominantColor,
-                        hasMaterial: geometryResult.hasMaterial,
-                        capVertices: capVertices,
-                        capIndices: capIndices
-                    )
-                } else {
-                    return ComponentProducts(
-                        mainGeometry: geometryResult.geometry,
-                        sharpEdgeLines: .empty,
-                        smoothEdgeLines: .empty,
-                        mesh: loadedMesh.mesh,
-                        emittedCorners: geometryResult.emittedCorners,
-                        stats: stats,
-                        transform: loadedComponent.scnMatrix,
-                        dominantColor: geometryResult.dominantColor,
-                        hasMaterial: geometryResult.hasMaterial,
-                        capVertices: capVertices,
-                        capIndices: capIndices
-                    )
-                }
+            let products = loadedItem.components.map { loadedComponent in
+                Self.componentProducts(
+                    for: loadedComponent,
+                    loadedModel: loadedModel,
+                    unitScale: unitScale,
+                    includeEdges: includeEdges,
+                    indexedEdgeLines: indexedEdgeLines
+                )
             }
 
             var nodes = Part.Nodes()
@@ -199,6 +155,64 @@ extension ModelData {
         ) * Double(multiplier)
 
         self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize, hasAnyMaterials: parts.contains { $0.hasMaterial })
+    }
+
+    // Builds one component's geometry/edges/cap/stats. Extracted from the `components.asyncMap`
+    // closure and kept synchronous on purpose: the work does no `await`s, and inlining it into the
+    // async task closure gave that coroutine a large frame that the Swift/LLVM coroutine-frame
+    // splitter miscompiles (an `EXC_BAD_ACCESS` in `swift_task_dealloc` when tearing the task down,
+    // Release-only). A plain function has no coroutine frame, so it sidesteps the bug entirely while
+    // still running concurrently across components via `asyncMap`.
+    private static func componentProducts(
+        for loadedComponent: ModelLoader<URL>.LoadedModel.LoadedComponent,
+        loadedModel: ModelLoader<URL>.LoadedModel,
+        unitScale: simd_double4x4,
+        includeEdges: Bool,
+        indexedEdgeLines: [(sharp: EdgeLines, smooth: EdgeLines)]
+    ) -> ComponentProducts {
+        let property = PartialPropertyReference(groupID: loadedComponent.propertyGroupID, index: loadedComponent.propertyIndex)
+        let loadedMesh = loadedModel.meshes[loadedComponent.meshIndex]
+        let model = loadedModel.models[loadedMesh.modelIndex]
+
+        let geometryResult = model.geometry(for: loadedMesh.mesh, inheritedProperty: property)
+
+        // Mesh coords → millimetres = unit scale ∘ this component's placement transform.
+        let worldTransform = unitScale * simd_double4x4(loadedComponent.scnMatrix)
+        let stats = loadedMesh.mesh.statistics(transform: worldTransform)
+
+        // World-space indexed mesh (same space as the scene) for the cross-section cap.
+        var capVertices: [SIMD3<Float>] = []
+        capVertices.reserveCapacity(loadedMesh.mesh.vertices.count)
+        for vertex in loadedMesh.mesh.vertices {
+            let world = worldTransform * SIMD4(vertex.simd, 1)
+            capVertices.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
+        }
+        var capIndices: [UInt32] = []
+        capIndices.reserveCapacity(loadedMesh.mesh.triangles.count * 3)
+        for triangle in loadedMesh.mesh.triangles {
+            capIndices += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
+        }
+
+        let (sharpEdgeLines, smoothEdgeLines): (EdgeLines, EdgeLines)
+        if includeEdges && loadedComponent.meshIndex < indexedEdgeLines.count {
+            (sharpEdgeLines, smoothEdgeLines) = indexedEdgeLines[loadedComponent.meshIndex]
+        } else {
+            (sharpEdgeLines, smoothEdgeLines) = (.empty, .empty)
+        }
+
+        return ComponentProducts(
+            mainGeometry: geometryResult.geometry,
+            sharpEdgeLines: sharpEdgeLines,
+            smoothEdgeLines: smoothEdgeLines,
+            mesh: loadedMesh.mesh,
+            emittedCorners: geometryResult.emittedCorners,
+            stats: stats,
+            transform: loadedComponent.scnMatrix,
+            dominantColor: geometryResult.dominantColor,
+            hasMaterial: geometryResult.hasMaterial,
+            capVertices: capVertices,
+            capIndices: capIndices
+        )
     }
 }
 
