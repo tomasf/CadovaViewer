@@ -15,7 +15,9 @@ struct ViewerSceneView: NSViewRepresentable {
     }
 
     func updateNSView(_ sceneView: CustomSceneView, context: Context) {
-        context.coordinator.updateCameraProjection()
+        if !sceneView.isPaneResizeActive {
+            context.coordinator.updateCameraProjection()
+        }
     }
 }
 
@@ -71,6 +73,9 @@ class CustomSceneView: SCNView {
     let mouseRotationPivotSubject = CurrentValueSubject<SCNVector3?, Never>(nil)
     let contextMenuSubject = PassthroughSubject<NSEvent, Never>()
     var hoverTrackingArea: NSTrackingArea?
+    var isPaneResizeActive: Bool { paneResizeLiveResizeDepth > 0 }
+    private var paneResizeLiveResizeDepth = 0
+    private var paneResizeIsUsingHorizontalProjection = false
 
     override init(frame: NSRect, options: [String : Any]? = nil) {
         super.init(frame: frame, options: options)
@@ -83,5 +88,106 @@ class CustomSceneView: SCNView {
     override func layout() {
         super.layout()
         overlaySKScene?.size = bounds.size
+    }
+
+    func beginPaneResize(axis: SplitLayout.Axis) {
+        if paneResizeLiveResizeDepth == 0 {
+            super.viewWillStartLiveResize()
+            setProjectionDirectionForPaneResize(axis: axis)
+        }
+        paneResizeLiveResizeDepth += 1
+    }
+
+    func endPaneResize() {
+        guard paneResizeLiveResizeDepth > 0 else { return }
+        paneResizeLiveResizeDepth -= 1
+        if paneResizeLiveResizeDepth == 0 {
+            restoreProjectionDirectionAfterPaneResize()
+            super.viewDidEndLiveResize()
+        }
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let splitAnimationActive = viewportController?.documentViewModel?.animatingSplitID != nil
+        if !splitAnimationActive {
+            adjustCameraForResize(from: frame.size, to: newSize)
+        }
+
+        super.setFrameSize(newSize)
+        viewportController?.sceneViewSize = newSize
+    }
+
+    private func setProjectionDirectionForPaneResize(axis: SplitLayout.Axis) {
+        guard axis == .horizontal,
+              let camera = pointOfView?.camera,
+              !camera.usesOrthographicProjection else { return }
+
+        let verticalFieldOfView = currentVerticalFieldOfView(camera: camera, viewSize: bounds.size)
+        paneResizeIsUsingHorizontalProjection = true
+
+        SCNTransaction.begin()
+        SCNTransaction.disableActions = true
+        camera.projectionDirection = .horizontal
+        camera.fieldOfView = horizontalFieldOfView(forVerticalFieldOfView: verticalFieldOfView, viewSize: bounds.size)
+        SCNTransaction.commit()
+        setNeedsRedraw()
+    }
+
+    private func restoreProjectionDirectionAfterPaneResize() {
+        guard paneResizeIsUsingHorizontalProjection else { return }
+        paneResizeIsUsingHorizontalProjection = false
+
+        guard let camera = pointOfView?.camera,
+              !camera.usesOrthographicProjection else { return }
+
+        let verticalFieldOfView = currentVerticalFieldOfView(camera: camera, viewSize: bounds.size)
+
+        SCNTransaction.begin()
+        SCNTransaction.disableActions = true
+        camera.projectionDirection = .vertical
+        camera.fieldOfView = verticalFieldOfView
+        SCNTransaction.commit()
+        setNeedsRedraw()
+    }
+
+    private func currentVerticalFieldOfView(camera: SCNCamera, viewSize: NSSize) -> Double {
+        if camera.projectionDirection == .horizontal {
+            return verticalFieldOfView(forHorizontalFieldOfView: camera.fieldOfView, viewSize: viewSize)
+        }
+        return camera.fieldOfView
+    }
+
+    private func horizontalFieldOfView(forVerticalFieldOfView verticalFieldOfView: Double, viewSize: NSSize) -> Double {
+        let aspectRatio = max(Double(viewSize.width), 1) / max(Double(viewSize.height), 1)
+        return radiansToDegrees(2 * atan(tan(degreesToRadians(verticalFieldOfView) / 2) * aspectRatio))
+    }
+
+    private func verticalFieldOfView(forHorizontalFieldOfView horizontalFieldOfView: Double, viewSize: NSSize) -> Double {
+        let aspectRatio = max(Double(viewSize.width), 1) / max(Double(viewSize.height), 1)
+        return radiansToDegrees(2 * atan(tan(degreesToRadians(horizontalFieldOfView) / 2) / aspectRatio))
+    }
+
+    private func degreesToRadians(_ degrees: Double) -> Double {
+        degrees * .pi / 180
+    }
+
+    private func radiansToDegrees(_ radians: Double) -> Double {
+        radians * 180 / .pi
+    }
+
+    /// Orthographic cameras express their visible vertical span directly in points, so preserve the
+    /// apparent scale while the pane height changes. Perspective cameras keep a fixed field of view;
+    /// moving them during resize makes vertical split drags visibly settle after the drawable redraws.
+    private func adjustCameraForResize(from oldSize: NSSize, to newSize: NSSize) {
+        guard oldSize.height > 0, newSize.height > 0, oldSize.height != newSize.height,
+              let pointOfView, let camera = pointOfView.camera else { return }
+
+        let heightRatio = Double(newSize.height / oldSize.height)
+        guard camera.usesOrthographicProjection else { return }
+
+        SCNTransaction.begin()
+        SCNTransaction.disableActions = true
+        camera.orthographicScale *= heightRatio
+        SCNTransaction.commit()
     }
 }

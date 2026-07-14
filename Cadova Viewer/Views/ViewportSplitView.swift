@@ -21,6 +21,15 @@ struct ViewportSplitView: View {
                 axis: axis,
                 ratio: viewModel.ratio(for: splitID),
                 animating: viewModel.animatingSplitID == splitID,
+                onResizeActiveChanged: { [weak viewModel] active in
+                    viewModel?.viewports.values.forEach { viewport in
+                        if active {
+                            viewport.sceneView.beginPaneResize(axis: axis)
+                        } else {
+                            viewport.sceneView.endPaneResize()
+                        }
+                    }
+                },
                 first: { AnyView(layoutView(first)) },
                 second: { AnyView(layoutView(second)) }
             )
@@ -36,10 +45,13 @@ struct ResizableSplit<First: View, Second: View>: View {
     /// While true (this split is animating a pane open/closed) the per-pane minimum-size clamp is
     /// skipped so the ratio can reach 0 or 1 and a pane can fully grow-from / collapse-to zero.
     var animating: Bool = false
+    var onResizeActiveChanged: (Bool) -> Void = { _ in }
     @ViewBuilder var first: () -> First
     @ViewBuilder var second: () -> Second
 
     @State private var spaceID = UUID()
+    @State private var dragRatio: Double?
+    @State private var resizeActive = false
 
     var body: some View {
         GeometryReader { geo in
@@ -47,7 +59,8 @@ struct ResizableSplit<First: View, Second: View>: View {
             let total = horizontal ? geo.size.width : geo.size.height
             let available = max(total - ViewportLayoutMetrics.dividerThickness, 1)
             let minExtent = horizontal ? ViewportLayoutMetrics.minPaneWidth : ViewportLayoutMetrics.minPaneHeight
-            let effectiveRatio = animating ? min(max(ratio, 0), 1) : clampedRatio(ratio, available: available, minExtent: minExtent)
+            let proposedRatio = dragRatio ?? ratio
+            let effectiveRatio = animating ? min(max(proposedRatio, 0), 1) : clampedRatio(proposedRatio, available: available, minExtent: minExtent)
             let firstExtent = available * effectiveRatio
 
             stack(horizontal: horizontal) {
@@ -92,8 +105,30 @@ struct ResizableSplit<First: View, Second: View>: View {
             .gesture(
                 DragGesture(coordinateSpace: .named(spaceID))
                     .onChanged { value in
+                        if !resizeActive {
+                            resizeActive = true
+                            onResizeActiveChanged(true)
+                        }
                         let location = horizontal ? value.location.x : value.location.y
-                        ratio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
+                        dragRatio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
+                    }
+                    .onEnded { value in
+                        let location = horizontal ? value.location.x : value.location.y
+                        let finalRatio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            ratio = finalRatio
+                        }
+                        DispatchQueue.main.async {
+                            var transaction = Transaction()
+                            transaction.animation = nil
+                            withTransaction(transaction) {
+                                dragRatio = nil
+                                resizeActive = false
+                            }
+                            onResizeActiveChanged(false)
+                        }
                     }
             )
             .onHover { inside in
