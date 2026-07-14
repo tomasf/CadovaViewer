@@ -82,41 +82,32 @@ struct DocumentView: View {
         ViewportSplitView(viewModel: viewModel)
             .frame(minWidth: 500, minHeight: 300)
             .overlay(alignment: .bottom) {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Loading")
-                        .font(.body)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(.white.opacity(0.15))
-                }
-                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
-                .opacity(isLoading ? 1 : 0)
-                .padding()
-                .allowsHitTesting(false)
+                statusBubble(text: "Loading…", isVisible: isLoading)
             }
             .overlay(alignment: .bottom) {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Preparing…")
-                        .font(.body)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.regularMaterial, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(.white.opacity(0.15))
-                }
-                .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
-                .opacity(isSlicing ? 1 : 0)
-                .padding()
-                .allowsHitTesting(false)
+                statusBubble(text: "Preparing…", isVisible: isSlicing)
             }
+    }
+
+    /// A pill-shaped spinner + label used for transient document-level status (loading, slicing).
+    private func statusBubble(text: String, isVisible: Bool) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text(text)
+                .font(.body)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .overlay {
+            Capsule().strokeBorder(.white.opacity(0.15))
+        }
+        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
+        .opacity(isVisible ? 1 : 0)
+        .padding()
+        .allowsHitTesting(false)
     }
 
     @ToolbarContentBuilder
