@@ -52,6 +52,8 @@ struct ResizableSplit<First: View, Second: View>: View {
     @State private var spaceID = UUID()
     @State private var dragRatio: Double?
     @State private var resizeActive = false
+    @State private var hovering = false
+    @State private var cursorPushed = false
 
     var body: some View {
         GeometryReader { geo in
@@ -92,6 +94,29 @@ struct ResizableSplit<First: View, Second: View>: View {
         return min(max(ratio, minRatio), 1 - minRatio)
     }
 
+    /// Drives the resize cursor from both hover and active-drag state. Using push/pop directly from
+    /// `.onHover` flickers: while dragging, the divider moves to follow the cursor and SwiftUI
+    /// momentarily reports the pointer as outside, firing `onHover(false)` mid-drag — which would pop
+    /// the resize cursor back to the arrow between drag updates. Keeping the cursor pushed for as long
+    /// as either the pointer hovers *or* a drag is in progress avoids that, and the balanced
+    /// `cursorPushed` flag keeps the cursor stack from drifting. Re-`set()`ting while already pushed
+    /// re-asserts the cursor against AppKit's own per-move resets.
+    private func refreshCursor() {
+        let wantResize = hovering || resizeActive
+        let cursor = axis == .horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown
+        if wantResize {
+            if cursorPushed {
+                cursor.set()
+            } else {
+                cursor.push()
+                cursorPushed = true
+            }
+        } else if cursorPushed {
+            NSCursor.pop()
+            cursorPushed = false
+        }
+    }
+
     private func divider(horizontal: Bool, available: CGFloat, minExtent: CGFloat) -> some View {
         Rectangle()
             .fill(ViewportLayoutMetrics.backgroundColor)
@@ -109,6 +134,7 @@ struct ResizableSplit<First: View, Second: View>: View {
                             resizeActive = true
                             onResizeActiveChanged(true)
                         }
+                        refreshCursor()
                         let location = horizontal ? value.location.x : value.location.y
                         dragRatio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
                     }
@@ -128,15 +154,15 @@ struct ResizableSplit<First: View, Second: View>: View {
                                 resizeActive = false
                             }
                             onResizeActiveChanged(false)
+                            // The drag is over; the cursor now follows hover alone (pops if the
+                            // pointer has left the divider).
+                            refreshCursor()
                         }
                     }
             )
             .onHover { inside in
-                if inside {
-                    (horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
-                } else {
-                    NSCursor.pop()
-                }
+                hovering = inside
+                refreshCursor()
             }
     }
 }
