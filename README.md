@@ -16,6 +16,9 @@ It’s a lightweight, fast viewer that updates automatically as files change, id
 * SpaceMouse support: Navigate freely with 3DConnexion’s SpaceMouse.
 * macOS-native: Built with native APIs for smooth integration with the macOS ecosystem.
 
+<img width="1374" height="860" alt="Screenshot" src="https://github.com/user-attachments/assets/09a22b4b-8019-468b-b098-27d7844ce69e" />
+
+
 Cadova Viewer uses [ThreeMF](https://github.com/tomasf/ThreeMF) and [NavLibSwift](https://github.com/tomasf/NavLibSwift).
 
 ## Contributions
