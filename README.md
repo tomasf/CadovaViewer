@@ -7,7 +7,12 @@ It’s a lightweight, fast viewer that updates automatically as files change, id
 ## Features
 * Live reloading: Automatically refreshes when the 3MF file changes on disk.
 * Materials & Colors: Supports the core 3MF spec, plus the Production extension and colors from the 3MF Materials and Properties Extension, including PBR.
-* Object management: View all 3MF objects in a list, with toggleable visibility.
+* Split view: Divide the window into multiple independent panes, each with its own camera, cross-sections, and view options.
+* Cross-sections: Slice the model with interactive, undoable cut planes to inspect its interior.
+* Measurements: Read coordinates and distances directly on the model, with corner snapping and axis constraints.
+* Sidebar: Browse the model's parts and measurements, with thumbnails and visibility toggles.
+* Slicing: Send the whole model or individual parts to your preferred external slicer.
+* Quick Look: Preview 3MF files and see thumbnails directly in Finder.
 * SpaceMouse support: Navigate freely with 3DConnexion’s SpaceMouse.
 * macOS-native: Built with native APIs for smooth integration with the macOS ecosystem.
 
