@@ -3,6 +3,18 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.1.1</title>
+            <pubDate>Fri, 17 Jul 2026 00:48:26 +0200</pubDate>
+            <sparkle:version>11</sparkle:version>
+            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.1.1/CadovaViewer1.1.1.zip" length="9053583" type="application/octet-stream" sparkle:edSignature="zedOtWkVHc93562GSEsdjXvG6mWYwN9aU+dm/PN/ZGLxWQ+wHQR1lAqEdyB2mPJPlo/UoYBnyyBH47BrnY27BQ=="/>
+            <description><![CDATA[
+                <p>Splitting, closing, and resizing viewport panes is now smoother and faster, with animated transitions and more precise divider dragging.</p>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>1.1.0</title>
             <pubDate>Mon, 13 Jul 2026 22:39:40 +0200</pubDate>
             <sparkle:version>10</sparkle:version>
