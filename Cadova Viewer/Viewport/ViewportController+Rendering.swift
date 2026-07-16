@@ -17,7 +17,8 @@ extension ViewportController: SCNSceneRendererDelegate {
             cameraNode.transform = pending
         }
 
-        grid.updateScale(renderer: sceneView, viewSize: sceneViewSize)
+        let currentViewSize = sceneView.bounds.size
+        grid.updateScale(renderer: sceneView, viewSize: currentViewSize)
         measurementRenderer.updateScreenSizes(renderer: sceneView)
 
         // Track the active point-of-view node (SceneKit can swap it in). The headlight follows the
@@ -54,7 +55,7 @@ extension ViewportController: SCNSceneRendererDelegate {
             edgeNodes: modelInstance.edgeGeometryNodes,
             cameraNode: cameraNode,
             modelNode: modelInstance.root,
-            viewSize: sceneViewSize
+            viewSize: sceneView.bounds.size
         )
         // Edge lines are left at Metal's default 1-pixel line width (≈0.5pt on a 2× display).
     }

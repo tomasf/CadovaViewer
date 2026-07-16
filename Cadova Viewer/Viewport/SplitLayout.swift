@@ -29,6 +29,18 @@ enum SplitLayout: Codable, Equatable {
         }
     }
 
+    /// The split node with the given id — its axis and two child subtrees. Used by the divider drag
+    /// to walk the panes on either side of the dragged split. Returns nil if no such split exists.
+    func node(withSplitID id: UUID) -> (axis: Axis, first: SplitLayout, second: SplitLayout)? {
+        switch self {
+        case .leaf:
+            return nil
+        case .split(let splitID, let axis, let first, let second):
+            if splitID == id { return (axis, first, second) }
+            return first.node(withSplitID: id) ?? second.node(withSplitID: id)
+        }
+    }
+
     /// Replaces the `.leaf(id)` with `replacement`, returning the new tree.
     func replacingLeaf(_ id: UUID, with replacement: SplitLayout) -> SplitLayout {
         switch self {
@@ -38,6 +50,21 @@ enum SplitLayout: Codable, Equatable {
             return .split(id: splitID, axis: axis,
                           first.replacingLeaf(id, with: replacement),
                           second.replacingLeaf(id, with: replacement))
+        }
+    }
+
+    /// Finds the split node whose direct child is `.leaf(leafID)`, returning that split's id, its
+    /// axis, and whether the leaf is its first (vs second) child. Used to animate a pane's collapse
+    /// into its sibling before it's removed (the axis drives the same live-resize handling the
+    /// divider drag uses). Returns nil if the leaf isn't found (e.g. it's the only leaf).
+    func split(containing leafID: UUID) -> (id: UUID, closingIsFirst: Bool, axis: Axis)? {
+        switch self {
+        case .leaf:
+            return nil
+        case .split(let splitID, let axis, let first, let second):
+            if case .leaf(leafID) = first { return (splitID, true, axis) }
+            if case .leaf(leafID) = second { return (splitID, false, axis) }
+            return first.split(containing: leafID) ?? second.split(containing: leafID)
         }
     }
 

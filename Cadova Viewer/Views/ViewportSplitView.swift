@@ -20,6 +20,21 @@ struct ViewportSplitView: View {
             ResizableSplit(
                 axis: axis,
                 ratio: viewModel.ratio(for: splitID),
+                animating: viewModel.animatingSplitID == splitID,
+                onResizeActiveChanged: { [weak viewModel] active in
+                    viewModel?.viewports.values.forEach { viewport in
+                        if active {
+                            viewport.sceneView.beginPaneResize(axis: axis)
+                        } else {
+                            viewport.sceneView.endPaneResize()
+                        }
+                    }
+                },
+                onDragBegan: { [weak viewModel] in viewModel?.beginDividerDrag() },
+                onDragChanged: { [weak viewModel] proposedRatio, available in
+                    viewModel?.updateDividerDrag(splitID: splitID, proposedRatio: proposedRatio, available: available) ?? proposedRatio
+                },
+                onDragEnded: { [weak viewModel] in viewModel?.endDividerDrag() },
                 first: { AnyView(layoutView(first)) },
                 second: { AnyView(layoutView(second)) }
             )
@@ -32,10 +47,26 @@ struct ViewportSplitView: View {
 struct ResizableSplit<First: View, Second: View>: View {
     let axis: SplitLayout.Axis
     @Binding var ratio: Double
+    /// While true (this split is animating a pane open/closed) the per-pane minimum-size clamp is
+    /// skipped so the ratio can reach 0 or 1 and a pane can fully grow-from / collapse-to zero.
+    var animating: Bool = false
+    var onResizeActiveChanged: (Bool) -> Void = { _ in }
+    /// Called once when a divider drag begins (before the first `onDragChanged`).
+    var onDragBegan: () -> Void = {}
+    /// Given where the drag wants the divider (first pane's fraction of `available`) and the split's
+    /// available extent in points, returns the ratio to actually show for this split — clamped, and
+    /// with any interior-pane compensation already applied as a side effect. Defaults to a passthrough.
+    var onDragChanged: (_ proposedRatio: Double, _ available: CGFloat) -> Double = { proposedRatio, _ in proposedRatio }
+    /// Called once when the drag ends (after the final `onDragChanged`, after the ratio is committed).
+    var onDragEnded: () -> Void = {}
     @ViewBuilder var first: () -> First
     @ViewBuilder var second: () -> Second
 
     @State private var spaceID = UUID()
+    @State private var dragRatio: Double?
+    @State private var resizeActive = false
+    @State private var hovering = false
+    @State private var cursorPushed = false
 
     var body: some View {
         GeometryReader { geo in
@@ -43,15 +74,19 @@ struct ResizableSplit<First: View, Second: View>: View {
             let total = horizontal ? geo.size.width : geo.size.height
             let available = max(total - ViewportLayoutMetrics.dividerThickness, 1)
             let minExtent = horizontal ? ViewportLayoutMetrics.minPaneWidth : ViewportLayoutMetrics.minPaneHeight
-            let firstExtent = available * clampedRatio(ratio, available: available, minExtent: minExtent)
+            let proposedRatio = dragRatio ?? ratio
+            let effectiveRatio = animating ? min(max(proposedRatio, 0), 1) : clampedRatio(proposedRatio, available: available, minExtent: minExtent)
+            let firstExtent = available * effectiveRatio
 
             stack(horizontal: horizontal) {
                 first()
                     .frame(width: horizontal ? firstExtent : nil,
                            height: horizontal ? nil : firstExtent)
+                    .clipped()
                 divider(horizontal: horizontal, available: available, minExtent: minExtent)
                 second()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
             }
             .coordinateSpace(.named(spaceID))
         }
@@ -72,6 +107,29 @@ struct ResizableSplit<First: View, Second: View>: View {
         return min(max(ratio, minRatio), 1 - minRatio)
     }
 
+    /// Drives the resize cursor from both hover and active-drag state. Using push/pop directly from
+    /// `.onHover` flickers: while dragging, the divider moves to follow the cursor and SwiftUI
+    /// momentarily reports the pointer as outside, firing `onHover(false)` mid-drag — which would pop
+    /// the resize cursor back to the arrow between drag updates. Keeping the cursor pushed for as long
+    /// as either the pointer hovers *or* a drag is in progress avoids that, and the balanced
+    /// `cursorPushed` flag keeps the cursor stack from drifting. Re-`set()`ting while already pushed
+    /// re-asserts the cursor against AppKit's own per-move resets.
+    private func refreshCursor() {
+        let wantResize = hovering || resizeActive
+        let cursor = axis == .horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown
+        if wantResize {
+            if cursorPushed {
+                cursor.set()
+            } else {
+                cursor.push()
+                cursorPushed = true
+            }
+        } else if cursorPushed {
+            NSCursor.pop()
+            cursorPushed = false
+        }
+    }
+
     private func divider(horizontal: Bool, available: CGFloat, minExtent: CGFloat) -> some View {
         Rectangle()
             .fill(ViewportLayoutMetrics.backgroundColor)
@@ -85,16 +143,41 @@ struct ResizableSplit<First: View, Second: View>: View {
             .gesture(
                 DragGesture(coordinateSpace: .named(spaceID))
                     .onChanged { value in
+                        if !resizeActive {
+                            resizeActive = true
+                            onResizeActiveChanged(true)
+                            onDragBegan()
+                        }
+                        refreshCursor()
                         let location = horizontal ? value.location.x : value.location.y
-                        ratio = clampedRatio(Double(location) / Double(available), available: available, minExtent: minExtent)
+                        dragRatio = onDragChanged(Double(location) / Double(available), available)
+                    }
+                    .onEnded { value in
+                        let location = horizontal ? value.location.x : value.location.y
+                        let finalRatio = onDragChanged(Double(location) / Double(available), available)
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            ratio = finalRatio
+                        }
+                        onDragEnded()
+                        DispatchQueue.main.async {
+                            var transaction = Transaction()
+                            transaction.animation = nil
+                            withTransaction(transaction) {
+                                dragRatio = nil
+                                resizeActive = false
+                            }
+                            onResizeActiveChanged(false)
+                            // The drag is over; the cursor now follows hover alone (pops if the
+                            // pointer has left the divider).
+                            refreshCursor()
+                        }
                     }
             )
             .onHover { inside in
-                if inside {
-                    (horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
-                } else {
-                    NSCursor.pop()
-                }
+                hovering = inside
+                refreshCursor()
             }
     }
 }

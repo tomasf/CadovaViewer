@@ -23,6 +23,10 @@ final class DocumentViewModel: ObservableObject {
     @Published private(set) var layout: SplitLayout
     @Published private(set) var viewports: [UUID: ViewportController] = [:]
     @Published var ratios: [UUID: Double] = [:]
+    /// The split currently animating a pane open (on split) or closed (on close). While set, that
+    /// split ignores its min-size clamp so the pane can fully grow-from / collapse-to zero. Transient
+    /// UI state — not persisted with the document.
+    @Published private(set) var animatingSplitID: UUID?
     @Published var focusedViewportID: UUID {
         didSet { focusDidChange() }
     }
@@ -141,16 +145,67 @@ final class DocumentViewModel: ObservableObject {
     }
 
     func ratio(for splitID: UUID) -> Binding<Double> {
-        Binding(get: { [weak self] in self?.ratios[splitID] ?? 0.5 },
+        // During a drag the interior-pinning compensation is held in `dragOverrideRatios` rather than
+        // written into `@Published ratios`, so it doesn't fire `objectWillChange` (which would re-evaluate
+        // the whole document UI every frame and make the drag stutter). The dragged split's own ResizableSplit
+        // re-renders from its local drag state each frame, which rebuilds this subtree and re-reads this
+        // getter — so the override still shows live. See `updateDividerDrag`.
+        Binding(get: { [weak self] in self?.dragOverrideRatios[splitID] ?? self?.ratios[splitID] ?? 0.5 },
                 set: { [weak self] in
                     self?.ratios[splitID] = $0
                     self?.document?.invalidateRestorableState()
                 })
     }
 
+    // MARK: - Divider drag
+
+    /// The ratios captured when a divider drag begins. The interior panes are pinned to these sizes
+    /// for the whole drag, so every update recomputes the compensation from the same baseline and
+    /// can't drift. Nil when no drag is in progress.
+    private var dividerDragStartRatios: [UUID: Double]?
+
+    /// Live interior-pinning compensation for the in-progress divider drag, keyed by split id. Kept out
+    /// of `@Published ratios` on purpose (see `ratio(for:)`); merged into `ratios` once on release.
+    private var dragOverrideRatios: [UUID: Double] = [:]
+
+    func beginDividerDrag() {
+        dividerDragStartRatios = ratios
+    }
+
+    /// Handles one step of a divider drag so only the panes touching the divider resize. Stashes the
+    /// interior-pinning compensation in `dragOverrideRatios` (not `@Published ratios`, to avoid a
+    /// per-frame whole-UI re-evaluation) and returns the clamped ratio for the dragged split itself —
+    /// the split view previews that one locally and commits it through `ratio(for:)` on release.
+    func updateDividerDrag(splitID: UUID, proposedRatio: Double, available: CGFloat) -> Double {
+        let startRatios = dividerDragStartRatios ?? ratios
+        let axis = layout.node(withSplitID: splitID)?.axis
+        let minExtent = axis == .vertical ? ViewportLayoutMetrics.minPaneHeight : ViewportLayoutMetrics.minPaneWidth
+        guard let solution = DividerDragSolver.solve(
+            layout: layout, splitID: splitID, proposedRatio: proposedRatio, available: available,
+            ratios: startRatios, dividerThickness: ViewportLayoutMetrics.dividerThickness, minExtent: minExtent
+        ) else { return proposedRatio }
+        dragOverrideRatios = solution.updates
+        return solution.ratio
+    }
+
+    func endDividerDrag() {
+        dividerDragStartRatios = nil
+        // Commit the drag's final compensation in one @Published change, then drop the override.
+        if !dragOverrideRatios.isEmpty {
+            ratios.merge(dragOverrideRatios) { _, new in new }
+            dragOverrideRatios.removeAll()
+        }
+        document?.invalidateRestorableState()
+    }
+
     // MARK: - Split / close
 
+    /// Spring used to grow a new pane in (split) and collapse a pane into its sibling (close).
+    /// Matches the app's cross-section overlay spring for a consistent feel.
+    private static let paneAnimation: Animation = .spring(response: 0.32, dampingFraction: 0.88)
+
     func split(_ id: UUID, axis: SplitLayout.Axis) {
+        guard animatingSplitID == nil else { return }
         guard let document, let source = viewports[id] else { return }
 
         let newID = UUID()
@@ -166,27 +221,61 @@ final class DocumentViewModel: ObservableObject {
 
         let splitID = UUID()
         viewports[newID] = viewport
-        ratios[splitID] = 0.5
+        // Start with the new pane (the split's second child) collapsed so it grows in from the
+        // divider; `animatingSplitID` lets the split reach ratio 1.0 past its normal min-size clamp.
+        animatingSplitID = splitID
+        ratios[splitID] = 1.0
         layout = layout.replacingLeaf(id, with: .split(id: splitID, axis: axis, .leaf(id), .leaf(newID)))
         focusedViewportID = newID
 
-        // Build this viewport's clone of the model *after* the split has rendered, so the new pane
-        // appears immediately rather than waiting on the (potentially heavy) clone + snap-vertex
-        // work. The `modelWasLoaded` sink covers the case where the model isn't loaded yet.
-        if !sceneController.parts.isEmpty {
-            DispatchQueue.main.async { viewport.applyLoadedModel() }
+        // On the next runloop tick — after the split has rendered at ratio 1.0 — animate it open to
+        // 50/50. Animating in the same update would just render the final ratio with no motion.
+        DispatchQueue.main.async {
+            // Build this viewport's clone of the model *before* the animation's clock starts. It's
+            // deferred off the first tick so the empty pane appears immediately, but doing it after
+            // `withAnimation` had already started would block the animation's opening frames and make
+            // it stutter. The `modelWasLoaded` sink covers the case where the model isn't loaded yet.
+            if !self.sceneController.parts.isEmpty {
+                viewport.applyLoadedModel()
+            }
+            // Drive the animation through the same SceneKit live-resize path a divider drag uses, so
+            // the panes' 3D content resizes smoothly instead of jumping as their frames animate. The
+            // new pane starts collapsed, so its projection anchoring is skipped until it has size (see
+            // `setProjectionDirectionForPaneResize`); the depth-counted begin/end tolerates that.
+            self.viewports.values.forEach { $0.sceneView.beginPaneResize(axis: axis) }
+            withAnimation(Self.paneAnimation) {
+                self.ratios[splitID] = 0.5
+            } completion: {
+                self.viewports.values.forEach { $0.sceneView.endPaneResize() }
+                self.animatingSplitID = nil
+            }
         }
     }
 
     func close(_ id: UUID) {
-        guard viewports.count > 1, let newLayout = layout.removingLeaf(id) else { return }
-        let viewport = viewports.removeValue(forKey: id)
-        layout = newLayout
-        let validSplits = Set(layout.splitIDs)
-        ratios = ratios.filter { validSplits.contains($0.key) }
-        viewport?.tearDown()
-        if viewports[focusedViewportID] == nil {
-            focusedViewportID = layout.leafIDs[0]
+        guard animatingSplitID == nil else { return }
+        guard viewports.count > 1, let parent = layout.split(containing: id) else { return }
+
+        // Collapse the closing pane into its sibling first, then remove it once the animation ends.
+        // `animatingSplitID` lets the split's ratio reach the extreme past its normal min-size clamp.
+        animatingSplitID = parent.id
+        // Same live-resize path as a divider drag, so the sibling's 3D content resizes smoothly as it
+        // grows to fill the space instead of jumping (see `split(_:axis:)`).
+        viewports.values.forEach { $0.sceneView.beginPaneResize(axis: parent.axis) }
+        withAnimation(Self.paneAnimation) {
+            self.ratios[parent.id] = parent.closingIsFirst ? 0.0 : 1.0
+        } completion: {
+            self.viewports.values.forEach { $0.sceneView.endPaneResize() }
+            self.animatingSplitID = nil
+            guard let newLayout = self.layout.removingLeaf(id) else { return }
+            let viewport = self.viewports.removeValue(forKey: id)
+            self.layout = newLayout
+            let validSplits = Set(self.layout.splitIDs)
+            self.ratios = self.ratios.filter { validSplits.contains($0.key) }
+            viewport?.tearDown()
+            if self.viewports[self.focusedViewportID] == nil {
+                self.focusedViewportID = self.layout.leafIDs[0]
+            }
         }
     }
 
