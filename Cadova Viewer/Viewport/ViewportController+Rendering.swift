@@ -17,7 +17,7 @@ extension ViewportController: SCNSceneRendererDelegate {
             cameraNode.transform = pending
         }
 
-        let currentViewSize = sceneView.bounds.size
+        let currentViewSize = sceneViewSize
         grid.updateScale(renderer: sceneView, viewSize: currentViewSize)
         measurementRenderer.updateScreenSizes(renderer: sceneView)
 
@@ -55,7 +55,7 @@ extension ViewportController: SCNSceneRendererDelegate {
             edgeNodes: modelInstance.edgeGeometryNodes,
             cameraNode: cameraNode,
             modelNode: modelInstance.root,
-            viewSize: sceneView.bounds.size
+            viewSize: sceneViewSize
         )
         // Edge lines are left at Metal's default 1-pixel line width (≈0.5pt on a 2× display).
     }
