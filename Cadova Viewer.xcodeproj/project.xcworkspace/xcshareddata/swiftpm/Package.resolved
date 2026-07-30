@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/Nodal",
       "state" : {
-        "revision" : "275b8efd1d36d45154759a19e8cad709c2a36c64",
-        "version" : "0.4.1"
+        "revision" : "0ec74822bcf604f2e20d445e1e62e5e87abf8a3f",
+        "version" : "1.0.2"
       }
     },
     {
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/ThreeMF",
       "state" : {
-        "revision" : "d31fdea80c561b87983928b01fb8565cccde2382",
-        "version" : "0.2.2"
+        "revision" : "15765bd9e3859e2884385a79e6d2e34686b42fb1",
+        "version" : "0.2.5"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/Zip.git",
       "state" : {
-        "revision" : "89a20ecc82eddf3d1cb40b55e2143167ee4367d3",
-        "version" : "2.1.1"
+        "revision" : "3a22aaf3f449ceded0354695af96967d1df4e5e0",
+        "version" : "2.1.2"
       }
     }
   ],
