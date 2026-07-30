@@ -311,8 +311,14 @@ final class MeasurementRenderer {
     /// of zoom. Call once per rendered frame.
     func updateScreenSizes(renderer: SCNSceneRenderer) {
         guard let pointOfView = renderer.pointOfView else { return }
-        let worldTransform = pointOfView.worldTransform
-        let projection = pointOfView.camera?.projectionTransform ?? SCNMatrix4Identity
+        // Use the presentation node: during an animated camera move (e.g. a view preset
+        // transition), the model transform snaps to the destination immediately while the
+        // presentation transform animates toward it over several frames. Tracking the model
+        // transform here would only detect the camera "changing" on the first frame, freezing
+        // marker sizes at the pre-animation distance for the rest of the transition.
+        let presentation = pointOfView.presentation
+        let worldTransform = presentation.worldTransform
+        let projection = presentation.camera?.projectionTransform ?? SCNMatrix4Identity
 
         let (changedIDs, entries) = shared.withLock { state -> (Set<UUID>, [(UUID, MeasurementNodes)]) in
             // Sizing depends on the camera (constant on-screen size) and on each measurement's
