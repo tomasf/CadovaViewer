@@ -872,22 +872,6 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		C9A940772EA3E6E300D5BAB2 /* XCRemoteSwiftPackageReference "ThreeMF" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tomasf/ThreeMF";
-			requirement = {
-				kind = upToNextMinorVersion;
-				minimumVersion = 0.2.0;
-			};
-		};
-		C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/tomasf/Nodal";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.1;
-			};
-		};
 		C926DC252E1BF9BC00F38DB7 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -896,12 +880,28 @@
 				minimumVersion = 2.7.1;
 			};
 		};
+		C9A940772EA3E6E300D5BAB2 /* XCRemoteSwiftPackageReference "ThreeMF" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tomasf/ThreeMF";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.2.0;
+			};
+		};
 		C9A940C22EA3F43200D5BAB2 /* XCRemoteSwiftPackageReference "NavLibSwift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/tomasf/NavLibSwift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 3.0.0;
+			};
+		};
+		C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tomasf/Nodal";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
