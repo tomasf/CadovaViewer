@@ -239,7 +239,7 @@ public struct EdgeLines {
     fileprivate let needsLightColor: [Bool?]
 
     fileprivate static let darkColor = ThreeMF.Color(red: 0, green: 0, blue: 0).scnVector4
-    fileprivate static let lightColor = ThreeMF.Color(red: 160, green: 160, blue: 160).scnVector4
+    fileprivate static let lightColor = ThreeMF.Color(red: 140, green: 140, blue: 140).scnVector4
 
     static let empty = EdgeLines(positions: [], needsLightColor: [])
 
