@@ -339,12 +339,21 @@ final class MeasurementRenderer {
         let highlighted = controller.highlightedID
 
         for (id, entry) in entries {
-            let emphasis = (id == highlighted) ? 1.7 : 1.0
+            let isHighlighted = (id == highlighted)
+            let emphasis = isHighlighted ? 1.7 : 1.0
             let dotRadius = dotScreenRadius * emphasis
             let lineRadius = lineScreenRadius * emphasis
             let geometryChanged = changedIDs.contains(id)
 
             for child in entry.scalables {
+                // The highlighted measurement ignores depth testing so it stays fully visible
+                // even where the model would otherwise occlude it, rather than falling back to
+                // the faint dashed overlay used for occluded parts of non-highlighted ones.
+                if let material = child.geometry?.firstMaterial {
+                    material.readsFromDepthBuffer = !isHighlighted
+                    material.writesToDepthBuffer = !isHighlighted
+                }
+
                 // Scale via the node transform (not geometry radius) so changes apply in
                 // the same frame without a deferred mesh rebuild.
                 if child.geometry is SCNSphere {
