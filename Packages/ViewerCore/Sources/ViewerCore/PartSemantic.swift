@@ -14,6 +14,16 @@ public enum PartSemantic: String, Hashable, Sendable, Codable {
     case visual
 }
 
+extension PartSemantic {
+    public var displayName: String {
+        switch self {
+        case .solid: "Solid"
+        case .context: "Context"
+        case .visual: "Visual"
+        }
+    }
+}
+
 fileprivate extension ExpandedName {
     static let printable = ExpandedName(namespaceName: nil, localName: "printable")
     static let semantic = CadovaNamespace.semantic

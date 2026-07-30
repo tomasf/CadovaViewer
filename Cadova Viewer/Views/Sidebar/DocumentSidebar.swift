@@ -18,6 +18,7 @@ struct DocumentSidebar: View {
     @State private var measurementRows: [Measurement] = []
     @State private var lastMeasurementScrollSignature: MeasurementScrollSignature?
     @State private var measurementScrollToken = 0
+    @State private var partInfoData: PartInformationView.Model?
     /// The sidebar's own size, persisted app-wide.
     @AppStorage("documentSidebarSize") private var sidebarSize: DocumentSidebarSize = .large
 
@@ -42,6 +43,9 @@ struct DocumentSidebar: View {
                 sidebarBottomBar
             }
             .navigationTitle("Contents")
+            .sheet(item: $partInfoData) { infoModel in
+                PartInformationView(model: infoModel)
+            }
     }
 
     private var sidebarList: some View {
@@ -104,6 +108,10 @@ struct DocumentSidebar: View {
                     Divider()
                     Button(sliceTitle(for: ids)) {
                         viewModel.document?.sliceModel(parts: parts(for: ids))
+                    }
+                    Divider()
+                    Button("Get Info") {
+                        partInfoData = .init(parts: parts(for: ids))
                     }
                 }
             } primaryAction: { ids in
@@ -307,6 +315,7 @@ private struct PartRow: View {
         HStack(spacing: 8) {
             thumbnailView
             Text(part.name)
+                .italic(part.semantic != .solid)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)

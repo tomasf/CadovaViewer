@@ -6,42 +6,29 @@ import ViewerCore
 
 struct InformationView: View {
     let model: Model
-    @Environment(\.dismiss) var dismiss
 
     var body: some View {
-        VStack {
-            Form {
-                Section {
-                    LabeledContent("Name", value: model.document.displayName)
-                    LabeledContent("File Size", value: formattedFileSize)
-                }
+        InfoSheet {
+            Section {
+                LabeledContent("Name", value: model.document.displayName)
+                LabeledContent("File Size", value: formattedFileSize)
+            }
 
-                Section {
-                    LabeledContent("Dimensions") { Text(formattedDimensions) }
-                    LabeledContent("Volume") { Text(formattedVolume) }
-                    LabeledContent("Surface Area") { Text(formattedSurfaceArea) }
-                    LabeledContent("Parts") { Text("\(model.modelData.parts.count)") }
-                    LabeledContent("Vertices") { Text("\(model.modelData.statistics.vertexCount)") }
-                    LabeledContent("Triangles") { Text("\(model.modelData.statistics.triangleCount)") }
-                }
+            GeometryStatsSection(
+                dimensions: model.modelData.boundingBoxSize,
+                partCount: model.modelData.parts.count,
+                statistics: model.modelData.statistics
+            )
 
-                if !sortedMetadataGroups.isEmpty {
-                    Section() {
-                        ForEach(sortedMetadataGroups, id: \.0) { group, items in
-                            LabeledContent(label(for: group)) {
-                                Text(items.map(\.value).joined(separator: "\n"))
-                            }
+            if !sortedMetadataGroups.isEmpty {
+                Section {
+                    ForEach(sortedMetadataGroups, id: \.0) { group, items in
+                        LabeledContent(label(for: group)) {
+                            Text(items.map(\.value).joined(separator: "\n"))
                         }
                     }
                 }
             }
-            .formStyle(.grouped)
-
-            Button("Close") {
-                dismiss()
-            }
-            .keyboardShortcut(.defaultAction)
-            .padding(.bottom)
         }
     }
 
@@ -51,22 +38,6 @@ struct InformationView: View {
             return ""
         }
         return ByteCountFormatter().string(fromByteCount: Int64(size))
-    }
-
-    var formattedDimensions: String {
-        let size = model.modelData.boundingBoxSize
-        let format = FloatingPointFormatStyle<Double>.number.precision(.fractionLength(0...2))
-        return "\(size.x.formatted(format)) × \(size.y.formatted(format)) × \(size.z.formatted(format)) mm"
-    }
-
-    var formattedVolume: String {
-        let value = model.modelData.statistics.volume.formatted(.number.precision(.fractionLength(0)))
-        return "\(value) mm³"
-    }
-
-    var formattedSurfaceArea: String {
-        let value = model.modelData.statistics.surfaceArea.formatted(.number.precision(.fractionLength(0)))
-        return "\(value) mm²"
     }
 
     var sortedMetadataGroups: [(Metadata.Name, [Metadata])] {
