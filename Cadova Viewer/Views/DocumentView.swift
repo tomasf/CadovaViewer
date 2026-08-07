@@ -134,7 +134,7 @@ struct DocumentView: View {
                     Label("Measure", systemImage: "ruler")
                 }
                 .toggleStyle(.button)
-                .help("Measure a distance (turns off after one measurement)")
+                .help("Measure a distance (turns off after one measurement). Hold ⌘ to snap to corners, ⇧ to constrain to an axis, or ⌥ to center the measurement on the first point.")
             }
 
             spacer

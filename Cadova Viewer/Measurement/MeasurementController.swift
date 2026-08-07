@@ -61,11 +61,11 @@ final class MeasurementController: ObservableObject {
 
     // MARK: - Interaction
 
-    func hover(at worldPoint: SCNVector3?, sourceViewportID: UUID? = nil) {
+    func hover(at worldPoint: SCNVector3?, centered: Bool = false, sourceViewportID: UUID? = nil) {
         guard interactionMode == .measure else { return }
 
         if let index = inProgressIndex {
-            measurements[index].end = worldPoint
+            setInProgressPoints(end: worldPoint, centered: centered, at: index)
         } else if let worldPoint {
             if hoverPreview != nil {
                 hoverPreview?.start = worldPoint
@@ -78,19 +78,24 @@ final class MeasurementController: ObservableObject {
         didChange.send(.live(sourceViewportID: sourceViewportID))
     }
 
-    func commitPoint(at worldPoint: SCNVector3) {
+    func commitPoint(at worldPoint: SCNVector3, centered: Bool = false) {
         guard interactionMode == .measure else { return }
 
         if let index = inProgressIndex {
-            measurements[index].end = worldPoint
+            let anchor = inProgressAnchor
+            setInProgressPoints(end: worldPoint, centered: centered, at: index)
             measurements[index].phase = .complete
 
             // Undo of completing a measurement returns to the state after the first
-            // click: start point fixed, endpoint not yet set.
+            // click: anchor fixed, endpoint not yet set. Centering moved the start off the
+            // anchor, so put it back rather than snapshotting the mirrored point.
             var before = measurements
+            before[index].start = anchor ?? before[index].start
             before[index].end = nil
             before[index].phase = .lengthInProgress
             registerUndo(toRestore: Snapshot(measurements: before, nextColorIndex: nextColorIndex), actionName: "Set Measurement Endpoint")
+
+            inProgressAnchor = nil
 
             // A measurement is a one-shot action: once it's finished, drop back to view mode so the
             // pointer goes straight back to orbiting. (Safe to do here — the measurement is now
@@ -102,6 +107,7 @@ final class MeasurementController: ObservableObject {
             let measurement = Measurement(colorIndex: nextColorIndex, start: worldPoint, end: nil, phase: .lengthInProgress)
             nextColorIndex += 1
             measurements.append(measurement)
+            inProgressAnchor = worldPoint
             registerUndo(toRestore: before, actionName: "Set Measurement Start Point")
         }
         didChange.send(.structural)
@@ -113,7 +119,17 @@ final class MeasurementController: ObservableObject {
         if let index = inProgressIndex {
             measurements.remove(at: index)
         }
+        inProgressAnchor = nil
         didChange.send(.structural)
+    }
+
+    /// Places the moving end of the in-progress measurement at `index`. Normally the start stays
+    /// on the anchor (the first clicked point); when `centered`, the start is mirrored through the
+    /// anchor instead, so the two endpoints sit at equal distances from it in opposite directions.
+    private func setInProgressPoints(end worldPoint: SCNVector3?, centered: Bool, at index: Int) {
+        guard let anchor = inProgressAnchor else { return }
+        measurements[index].end = worldPoint
+        measurements[index].start = centered ? (worldPoint?.mirrored(about: anchor) ?? anchor) : anchor
     }
 
     func delete(_ id: Measurement.ID) {
@@ -143,6 +159,7 @@ final class MeasurementController: ObservableObject {
     func loadRestorableState(_ state: RestorableState) {
         measurements = state.measurements
         nextColorIndex = state.nextColorIndex
+        inProgressAnchor = nil // only completed measurements are persisted
         hoverPreview = nil
         highlightedID = nil
         didChange.send(.structural)
@@ -153,11 +170,11 @@ final class MeasurementController: ObservableObject {
         return last
     }
 
-    /// The fixed start point of the in-progress length measurement, if any. Used by the
-    /// viewport to constrain the moving end point to an axis.
-    var inProgressStart: SCNVector3? {
-        inProgressIndex.map { measurements[$0].start }
-    }
+    /// The fixed first point of the in-progress length measurement, if any: the origin of the
+    /// axis constraint and the point a centered measurement is symmetric about. Tracked
+    /// separately from the measurement's `start` because centering moves `start` off it (see
+    /// `setInProgressPoints`).
+    private(set) var inProgressAnchor: SCNVector3?
 
     private func clearHoverPreview() {
         guard hoverPreview != nil else { return }
@@ -186,6 +203,9 @@ final class MeasurementController: ObservableObject {
 
         measurements = snapshot.measurements
         nextColorIndex = snapshot.nextColorIndex
+        // A restored in-progress measurement always has its endpoint unset, so its `start` is
+        // the anchor — centering only ever moves `start` once an endpoint exists.
+        inProgressAnchor = inProgressIndex.map { measurements[$0].start }
         hoverPreview = nil
         if let id = highlightedID, !measurements.contains(where: { $0.id == id }) {
             highlightedID = nil

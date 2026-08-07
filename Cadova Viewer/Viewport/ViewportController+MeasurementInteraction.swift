@@ -4,8 +4,9 @@ import simd
 import ViewerCore
 
 /// Translates pointer input into world-space points for the measurement tool: plain surface
-/// hits, Option-snapping to feature-edge corners, and Shift axis-constraint. The
-/// `MeasurementController` owns the measurement state; this is purely the hit-testing half.
+/// hits, Command-snapping to feature-edge corners, Shift axis-constraint, and the Option
+/// centering flag. The `MeasurementController` owns the measurement state; this is purely the
+/// hit-testing half.
 extension ViewportController {
     func scheduleHoverPointUpdate() {
         guard !hoverPointUpdateScheduled else { return }
@@ -22,7 +23,7 @@ extension ViewportController {
         // scaling in updateAtTime applies to the freshly placed/moved dots.
         if measurementController.interactionMode == .measure {
             let worldPoint = measurementController.isPointerOverList ? nil : hoverPoint.flatMap { measurementPoint(atViewPoint: $0) }
-            measurementController.hover(at: worldPoint, sourceViewportID: viewportID)
+            measurementController.hover(at: worldPoint, centered: measurementIsCentered, sourceViewportID: viewportID)
         }
 
         updateCrossSectionGizmoHover(at: hoverPoint)
@@ -34,24 +35,32 @@ extension ViewportController {
     func handleMeasurementClick(at point: CGPoint) {
         guard measurementController.interactionMode == .measure else { return }
         if let worldPoint = measurementPoint(atViewPoint: point) {
-            measurementController.commitPoint(at: worldPoint)
+            measurementController.commitPoint(at: worldPoint, centered: measurementIsCentered)
             sceneView.setNeedsRedraw()
         }
     }
 
-    /// The world point for the measurement under the cursor. With Shift held while a
-    /// length measurement is in progress, the point is constrained to an axis through the
-    /// start point (projected from the cursor ray, so it needn't lie on the model);
-    /// otherwise it's the model surface hit (nil if the cursor misses the model).
+    /// The world point for the measurement under the cursor. With Command held it's the nearest
+    /// visible corner; with Shift held while a length measurement is in progress, the point is
+    /// constrained to an axis through the anchor (projected from the cursor ray, so it needn't
+    /// lie on the model); otherwise it's the model surface hit (nil if the cursor misses the
+    /// model).
     private func measurementPoint(atViewPoint point: CGPoint) -> SCNVector3? {
         let modifiers = NSEvent.modifierFlags
-        if modifiers.contains(.option), let vertex = nearestSnapVertex(toViewPoint: point) {
+        if modifiers.contains(.command), let vertex = nearestSnapVertex(toViewPoint: point) {
             return vertex
         }
-        if modifiers.contains(.shift), let start = measurementController.inProgressStart {
-            return axisConstrainedPoint(atViewPoint: point, from: start)
+        if modifiers.contains(.shift), let anchor = measurementController.inProgressAnchor {
+            return axisConstrainedPoint(atViewPoint: point, from: anchor)
         }
         return surfaceWorldPoint(atViewPoint: point)
+    }
+
+    /// Whether the in-progress measurement should be centered on its anchor (Option), placing
+    /// its two endpoints at equal distances from the first clicked point. Read live, so pressing
+    /// or releasing Option re-shapes the measurement without moving the cursor.
+    private var measurementIsCentered: Bool {
+        NSEvent.modifierFlags.contains(.option)
     }
 
     /// Nearest *visible* corner vertex (sharp-edge endpoint) whose screen projection is

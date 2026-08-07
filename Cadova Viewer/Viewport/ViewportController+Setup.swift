@@ -58,7 +58,12 @@ extension ViewportController {
         // app-wide (a local monitor, not the scene view's `flagsChanged`) so it works even when the
         // canvas isn't the first responder.
         modifierFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.updateCrossSectionOverlays()
+            guard let self else { return event }
+            updateCrossSectionOverlays()
+            // Snapping (Command) and centering (Option) change the measurement point without the
+            // cursor moving, so re-evaluate the hover. Only the viewport the pointer is in does:
+            // elsewhere `hoverPoint` is nil, and refreshing would clear the shared in-progress end.
+            if hoverPoint != nil { scheduleHoverPointUpdate() }
             return event
         }
         measurementRenderer.onVisualChange = { [weak self] in

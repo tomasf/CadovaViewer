@@ -17,7 +17,7 @@ struct MeasurementControllerTests {
         #expect(controller.measurements.count == 1)
         #expect(controller.measurements[0].phase == .lengthInProgress)
         #expect(controller.measurements[0].end == nil)
-        #expect(controller.inProgressStart == SCNVector3(1, 0, 0))
+        #expect(controller.inProgressAnchor == SCNVector3(1, 0, 0))
     }
 
     @Test func `committing the second point completes the measurement`() {
@@ -27,7 +27,7 @@ struct MeasurementControllerTests {
         #expect(controller.measurements.count == 1)
         #expect(controller.measurements[0].phase == .complete)
         #expect(controller.measurements[0].end == SCNVector3(0, 5, 0))
-        #expect(controller.inProgressStart == nil)
+        #expect(controller.inProgressAnchor == nil)
     }
 
     @Test func `hover before the first click shows a preview`() {
@@ -43,6 +43,51 @@ struct MeasurementControllerTests {
         controller.commitPoint(at: SCNVector3(0, 0, 0))
         controller.hover(at: SCNVector3(3, 0, 0))
         #expect(controller.measurements[0].end == SCNVector3(3, 0, 0))
+    }
+
+    // MARK: - Centering
+
+    @Test func `a centered hover mirrors the start about the anchor`() {
+        let controller = makeController()
+        controller.commitPoint(at: SCNVector3(0, 0, 0))
+        controller.hover(at: SCNVector3(0, 5, 0), centered: true)
+        #expect(controller.measurements[0].start == SCNVector3(0, -5, 0))
+        #expect(controller.measurements[0].end == SCNVector3(0, 5, 0))
+        #expect(controller.measurements[0].length == 10)
+    }
+
+    @Test func `dropping centering puts the start back on the anchor`() {
+        let controller = makeController()
+        controller.commitPoint(at: SCNVector3(1, 2, 3))
+        controller.hover(at: SCNVector3(1, 7, 3), centered: true)
+        controller.hover(at: SCNVector3(1, 7, 3))
+        #expect(controller.measurements[0].start == SCNVector3(1, 2, 3))
+        #expect(controller.measurements[0].end == SCNVector3(1, 7, 3))
+    }
+
+    @Test func `a centered hover without a point leaves the start on the anchor`() {
+        let controller = makeController()
+        controller.commitPoint(at: SCNVector3(1, 2, 3))
+        controller.hover(at: nil, centered: true)
+        #expect(controller.measurements[0].start == SCNVector3(1, 2, 3))
+        #expect(controller.measurements[0].end == nil)
+    }
+
+    @Test func `a centered second click completes with the mirrored start`() {
+        let controller = makeController()
+        controller.commitPoint(at: SCNVector3(0, 0, 0))
+        controller.commitPoint(at: SCNVector3(2, 0, 0), centered: true)
+        #expect(controller.measurements[0].phase == .complete)
+        #expect(controller.measurements[0].start == SCNVector3(-2, 0, 0))
+        #expect(controller.measurements[0].end == SCNVector3(2, 0, 0))
+        #expect(controller.inProgressAnchor == nil)
+    }
+
+    @Test func `centering only applies once a measurement is in progress`() {
+        let controller = makeController()
+        controller.hover(at: SCNVector3(2, 2, 2), centered: true)
+        #expect(controller.hoverPreview?.start == SCNVector3(2, 2, 2))
+        #expect(controller.hoverPreview?.end == nil)
     }
 
     @Test func `leaving measure mode cancels the in-progress measurement`() {
@@ -110,6 +155,23 @@ struct MeasurementControllerTests {
         #expect(controller.measurements.count == 1)
         #expect(controller.measurements[0].phase == .lengthInProgress)
         #expect(controller.measurements[0].end == nil)
+    }
+
+    @Test func `undoing a centered measurement returns the start to the anchor`() {
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        let controller = makeController()
+        controller.undoManager = undo
+
+        group(undo) { controller.commitPoint(at: SCNVector3(0, 0, 0)) }
+        group(undo) { controller.commitPoint(at: SCNVector3(0, 5, 0), centered: true) }
+        #expect(controller.measurements[0].start == SCNVector3(0, -5, 0))
+
+        undo.undo()
+        #expect(controller.measurements[0].phase == .lengthInProgress)
+        #expect(controller.measurements[0].start == SCNVector3(0, 0, 0))
+        #expect(controller.measurements[0].end == nil)
+        #expect(controller.inProgressAnchor == SCNVector3(0, 0, 0))
     }
 
     @Test func `redo re-applies an undone deletion`() {

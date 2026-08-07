@@ -278,15 +278,16 @@ class ViewportController: NSObject, ObservableObject {
 
     var observers: Set<AnyCancellable> = []
 
-    /// Local monitor for modifier-key (Shift) changes, so the cross-section gizmo can switch plane/world
-    /// space regardless of which view has focus. Removed in `tearDown`.
+    /// Local monitor for modifier-key changes, so the cross-section gizmo can switch plane/world space
+    /// (Shift) and the measurement hover can pick up snapping (Command) and centering (Option)
+    /// regardless of which view has focus. Removed in `tearDown`.
     var modifierFlagsMonitor: Any?
 
     // Backing storage for the measurement snap grid; the logic lives in
     // ViewportController+MeasurementInteraction (extensions can't hold stored properties).
 
     /// World-space corner vertices (endpoints of the model's sharp/feature edges) that
-    /// the measurement tool can snap to when Option is held. Rebuilt on model load.
+    /// the measurement tool can snap to when Command is held. Rebuilt on model load.
     var snapVertices: [SCNVector3] = []
 
     /// Screen-space bucket of `snapVertices` so hover lookups don't re-project every corner.
