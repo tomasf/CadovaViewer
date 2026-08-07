@@ -290,15 +290,28 @@ class ViewportController: NSObject, ObservableObject {
     /// the measurement tool can snap to when Command is held. Rebuilt on model load.
     var snapVertices: [SCNVector3] = []
 
-    /// Screen-space bucket of `snapVertices` so hover lookups don't re-project every corner.
-    /// Rebuilt only when the camera/viewport changes.
-    var snapGridCells: [SIMD2<Int>: [(vertex: SCNVector3, screen: CGPoint)]] = [:]
-    /// Must stay >= the snap threshold in `nearestSnapVertex`: the 3x3 cell search only finds
-    /// vertices within one cell of the cursor.
+    /// Screen-space bucket of `snapVertices` (by index) so hover lookups don't re-project every
+    /// corner. Rebuilt only when something the projections depend on changes.
+    var snapGridCells: [SIMD2<Int>: [(index: Int, screen: CGPoint)]] = [:]
+    /// Cell size in view points. Free to tune: `nearestSnapVertex` searches outward a ring of cells
+    /// at a time, so this trades cells visited per ring against vertices examined per cell.
     let snapGridCellSize = 44.0
+    /// The range of occupied cells, so the outward search knows when it has seen the whole grid.
+    /// Nil when no corner projects at all.
+    var snapGridCellBounds: (min: SIMD2<Int>, max: SIMD2<Int>)?
     var snapGridWorldTransform = SCNMatrix4Identity
     var snapGridProjection = SCNMatrix4Identity
     var snapGridViewSize = CGSize.zero
+
+    /// Whether each corner in `snapVertices` is unoccluded, filled in on demand and thrown away
+    /// with the grid. Each answer costs a scene hit test, and hovering around a cluster of corners
+    /// asks about the same handful over and over, so memoizing them is what keeps snapping
+    /// responsive. See `ViewportController+MeasurementInteraction`.
+    var snapVertexVisibility: [Bool?] = []
+    /// The rest of the scene state the grid and the visibility cache are built against — part
+    /// visibility and cross-sections change what's occluded without moving the camera.
+    var snapGridHiddenPartIDs: Set<ModelData.Part.ID> = []
+    var snapGridCrossSections: [CrossSection] = []
 
     let showInfoCallbackSignals = PassthroughSubject<Void, Never>()
     var showInfoSignal: AnyPublisher<Void, Never> { showInfoCallbackSignals.eraseToAnyPublisher() }
