@@ -11,7 +11,7 @@ struct ModelDataLiveLinkTests {
         parts: [
             LiveLinkMessage.Part(
                 name: "Triangle",
-                isPrintable: true,
+                semantic: "solid",
                 vertices: [0, 0, 0, 4, 0, 0, 0, 3, 0],
                 triangles: [0, 1, 2],
                 triangleMaterialIndices: [0],
@@ -37,10 +37,34 @@ struct ModelDataLiveLinkTests {
         #expect(modelData.hasAnyMaterials)
     }
 
-    @Test func `a non-printable part is treated as visual, not solid`() {
+    /// The whole reason to carry the full semantic instead of an isPrintable bool: a .context part
+    /// must come through as .context, not collapse into the same bucket as .visual — that's exactly
+    /// the distinction a bool couldn't represent.
+    @Test func `each PartSemantic case round-trips distinctly`() {
+        func semantic(for rawValue: String) -> PartSemantic {
+            let part = LiveLinkMessage.Part(
+                name: "P", semantic: rawValue,
+                vertices: Self.triangleMessage.parts[0].vertices,
+                triangles: Self.triangleMessage.parts[0].triangles,
+                triangleMaterialIndices: Self.triangleMessage.parts[0].triangleMaterialIndices,
+                defaultMaterialIndex: nil, materials: []
+            )
+            let message = LiveLinkMessage(token: UUID(), path: "/tmp/t.3mf", parts: [part])
+            return ModelData(liveLink: message, includeEdges: false).parts[0].semantic
+        }
+
+        #expect(semantic(for: "solid") == .solid)
+        #expect(semantic(for: "context") == .context)
+        #expect(semantic(for: "visual") == .visual)
+        // An unrecognized value falls back to .solid, matching ThreeMF.Item.semantic's own fallback
+        // for a missing/unparseable cadova:semantic attribute when loading a file.
+        #expect(semantic(for: "something-a-future-Cadova-invented") == .solid)
+    }
+
+    @Test func `edge nodes are only built for a solid part`() {
         var visualPart = Self.triangleMessage.parts[0]
         visualPart = LiveLinkMessage.Part(
-            name: visualPart.name, isPrintable: false,
+            name: visualPart.name, semantic: "visual",
             vertices: visualPart.vertices, triangles: visualPart.triangles,
             triangleMaterialIndices: visualPart.triangleMaterialIndices,
             defaultMaterialIndex: visualPart.defaultMaterialIndex, materials: visualPart.materials
@@ -49,7 +73,6 @@ struct ModelDataLiveLinkTests {
         let modelData = ModelData(liveLink: message, includeEdges: true)
 
         #expect(modelData.parts[0].semantic == .visual)
-        // Edge nodes are only built for solid parts.
         #expect(modelData.parts[0].nodes.sharpEdges == nil)
     }
 }

@@ -55,9 +55,10 @@ extension ModelData {
 
             let dominantColor = geometryResult.dominantColor
             let unknownEdgesNeedLightColor = dominantColor.map(isDarkColor) ?? false
-            // LiveLink only carries whether a part is printable, not the full solid/context/visual
-            // distinction 3MF supports — a non-printable part is treated as purely visual here.
-            let semantic: PartSemantic = livePart.isPrintable ? .solid : .visual
+            // Same fallback the file-loading path uses for an unrecognized/missing cadova:semantic
+            // attribute (see ThreeMF.Item.semantic in PartSemantic.swift), so an unknown value here
+            // degrades the same way a file with the same unknown value would.
+            let semantic = PartSemantic(rawValue: livePart.semantic) ?? .solid
 
             if includeEdges && semantic == .solid {
                 let sharpEdgesGroupNode = SCNNode()
