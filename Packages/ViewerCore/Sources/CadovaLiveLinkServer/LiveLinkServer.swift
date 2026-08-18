@@ -66,7 +66,12 @@ public final class LiveLinkServer: @unchecked Sendable {
             close(fd)
             throw BindFailed(errno: errno)
         }
-        guard listen(fd, 8) == 0 else {
+        // Each connection is short-lived (one message, then closed), so this only needs to absorb
+        // a burst of near-simultaneous pushes, not sustained concurrent load — but 8 is too tight:
+        // measured ECONNREFUSED on the client side with as few as 12 genuinely simultaneous
+        // connections (e.g. a Project building many parts/models at once, each pushing around the
+        // same instant), well within realistic usage.
+        guard listen(fd, 64) == 0 else {
             close(fd)
             throw BindFailed(errno: errno)
         }
