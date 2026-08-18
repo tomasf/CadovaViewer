@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import CadovaLiveLink
+import CadovaLiveLinkCore
 @testable import ViewerCore
 
 struct ModelDataLiveLinkTests {

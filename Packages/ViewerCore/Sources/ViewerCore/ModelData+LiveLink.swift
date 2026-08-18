@@ -1,7 +1,7 @@
 import Foundation
 import ThreeMF
 import SceneKit
-import CadovaLiveLink
+import CadovaLiveLinkCore
 import simd
 
 extension ModelData {

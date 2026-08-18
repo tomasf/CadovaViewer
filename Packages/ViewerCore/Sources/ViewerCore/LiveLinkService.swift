@@ -1,5 +1,6 @@
 import Foundation
-import CadovaLiveLink
+import CadovaLiveLinkCore
+import CadovaLiveLinkServer
 
 /// Owns the app's single `LiveLinkServer`, started once at launch and stopped at termination.
 /// Doesn't know about `NSDocument`/`NSDocumentController` itself — the app wires `onModelUpdate` to

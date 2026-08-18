@@ -28,7 +28,8 @@ let package = Package(
                 .product(name: "Nodal", package: "Nodal"),
                 .product(name: "Zip", package: "Zip"),
                 .product(name: "Manifold", package: "manifold-swift"),
-                .product(name: "CadovaLiveLink", package: "Cadova"),
+                .product(name: "CadovaLiveLinkCore", package: "Cadova"),
+                .product(name: "CadovaLiveLinkServer", package: "Cadova"),
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
@@ -50,6 +51,7 @@ let package = Package(
                 "ViewerCore",
                 .product(name: "ThreeMF", package: "ThreeMF"),
                 .product(name: "Manifold", package: "manifold-swift"),
+                .product(name: "CadovaLiveLinkCore", package: "Cadova"),
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
