@@ -23,8 +23,9 @@ extension ModelData {
         let parts: [Part] = message.parts.enumerated().map { itemIndex, livePart in
             let (model, mesh) = Self.threeMFModel(for: livePart)
             let geometryResult = model.geometry(for: mesh, inheritedProperty: noInheritance)
-            let transform = livePart.transform.map(Self.scnMatrix) ?? SCNMatrix4Identity
-            let worldTransform = simd_double4x4(transform)
+            // Cadova writes every part's mesh in world coordinates (no per-part transform to
+            // apply), matching how ModelData(url:) sees a plain 3MF item with no matrix either.
+            let worldTransform = matrix_identity_double4x4
 
             let (sharpEdgeLines, smoothEdgeLines): (EdgeLines, EdgeLines)
             if includeEdges {
@@ -70,7 +71,6 @@ extension ModelData {
 
                 let sharpNodeContainer = SCNNode()
                 sharpNodeContainer.name = "Sharp edges transformer"
-                sharpNodeContainer.transform = transform
                 sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
                 let sharpNode = SCNNode(geometry: sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor))
                 sharpNode.name = "Sharp edges geometry"
@@ -78,7 +78,6 @@ extension ModelData {
 
                 let smoothNodeContainer = SCNNode()
                 smoothNodeContainer.name = "Smooth edges transformer"
-                smoothNodeContainer.transform = transform
                 smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
                 let smoothNode = SCNNode(geometry: smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor))
                 smoothNode.name = "Smooth edges geometry"
@@ -87,7 +86,6 @@ extension ModelData {
 
             let modelNode = SCNNode(geometry: geometryResult.geometry)
             modelNode.name = "Main geometry"
-            modelNode.transform = transform
             nodes.model.addChildNode(modelNode)
             let modelGeometryVariants = [ModelGeometryVariant(
                 node: modelNode,
@@ -197,18 +195,5 @@ extension ModelData {
 
         let model = ThreeMF.Model(unit: .millimeter, resources: resources)
         return (model, mesh)
-    }
-
-    /// Converts a `LiveLinkMessage.Part.transform` (a plain row-major flatten of a column-vector
-    /// affine 4x4 — `flat[4*row + col]`) into an `SCNMatrix4`. SceneKit uses the transposed,
-    /// row-vector convention, the same transpose `ThreeMFConversions.swift`'s
-    /// `Matrix3D.scnMatrix` already performs for the file-loading path.
-    private static func scnMatrix(_ flat: [Double]) -> SCNMatrix4 {
-        SCNMatrix4(
-            m11: CGFloat(flat[0]), m12: CGFloat(flat[4]), m13: CGFloat(flat[8]), m14: 0,
-            m21: CGFloat(flat[1]), m22: CGFloat(flat[5]), m23: CGFloat(flat[9]), m24: 0,
-            m31: CGFloat(flat[2]), m32: CGFloat(flat[6]), m33: CGFloat(flat[10]), m34: 0,
-            m41: CGFloat(flat[3]), m42: CGFloat(flat[7]), m43: CGFloat(flat[11]), m44: 1
-        )
     }
 }

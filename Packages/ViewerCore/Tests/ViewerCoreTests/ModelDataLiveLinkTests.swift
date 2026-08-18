@@ -12,7 +12,6 @@ struct ModelDataLiveLinkTests {
             LiveLinkMessage.Part(
                 name: "Triangle",
                 isPrintable: true,
-                transform: nil,
                 vertices: [0, 0, 0, 4, 0, 0, 0, 3, 0],
                 triangles: [0, 1, 2],
                 triangleMaterialIndices: [0],
@@ -41,7 +40,7 @@ struct ModelDataLiveLinkTests {
     @Test func `a non-printable part is treated as visual, not solid`() {
         var visualPart = Self.triangleMessage.parts[0]
         visualPart = LiveLinkMessage.Part(
-            name: visualPart.name, isPrintable: false, transform: visualPart.transform,
+            name: visualPart.name, isPrintable: false,
             vertices: visualPart.vertices, triangles: visualPart.triangles,
             triangleMaterialIndices: visualPart.triangleMaterialIndices,
             defaultMaterialIndex: visualPart.defaultMaterialIndex, materials: visualPart.materials
@@ -52,26 +51,5 @@ struct ModelDataLiveLinkTests {
         #expect(modelData.parts[0].semantic == .visual)
         // Edge nodes are only built for solid parts.
         #expect(modelData.parts[0].nodes.sharpEdges == nil)
-    }
-
-    @Test func `a translation transform offsets the geometry`() {
-        // Row-major flatten of a column-vector affine transform translating by (10, 20, 30).
-        var flat = [Double](repeating: 0, count: 16)
-        flat[0] = 1; flat[5] = 1; flat[10] = 1; flat[15] = 1
-        flat[3] = 10; flat[7] = 20; flat[11] = 30
-
-        let translatedPart = LiveLinkMessage.Part(
-            name: "Translated", isPrintable: true, transform: flat,
-            vertices: [0, 0, 0], triangles: [], triangleMaterialIndices: [],
-            defaultMaterialIndex: nil, materials: []
-        )
-        let message = LiveLinkMessage(token: UUID(), path: "/tmp/t.3mf", parts: [translatedPart])
-        let modelData = ModelData(liveLink: message, includeEdges: false)
-
-        let modelNode = modelData.parts[0].nodes.model.childNodes[0]
-        let worldPosition = modelNode.simdWorldPosition
-        #expect(abs(worldPosition.x - 10) < 0.001)
-        #expect(abs(worldPosition.y - 20) < 0.001)
-        #expect(abs(worldPosition.z - 30) < 0.001)
     }
 }
