@@ -1,9 +1,22 @@
 import Cocoa
 import SwiftUI
+import ViewerCore
 
 @main
 class AppDelegate: NSObject, NSApplicationDelegate {
     var preferencesWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        LiveLinkService.shared.onModelUpdate = { url, modelData, token in
+            guard let document = NSDocumentController.shared.document(for: url) as? Document else { return }
+            document.applyLiveLinkUpdate(modelData: modelData, token: token)
+        }
+        LiveLinkService.shared.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        LiveLinkService.shared.stop()
+    }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !hasVisibleWindows {

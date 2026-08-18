@@ -19,6 +19,11 @@ class Document: NSDocument, NSWindowDelegate {
     private var loadTask: Task<Void, Never>?
     private var loadGeneration = 0
 
+    /// The token of the last LiveLink push applied to this document, if any. Compared against the
+    /// `cadova:livelinktoken` 3MF metadata of a subsequent on-disk change in `presentedItemDidChange`,
+    /// so a write that already arrived over LiveLink doesn't also trigger a redundant full reload.
+    private var lastAppliedLiveLinkToken: UUID?
+
     var modelStream: AnyPublisher<ModelData, Never> {
         modelSubject.compactMap { $0 }.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
@@ -162,6 +167,21 @@ class Document: NSDocument, NSWindowDelegate {
         }
     }
 
+    /// Applies a LiveLink push directly, without touching disk. Used when this document's file is
+    /// the target of an incoming push — see `LiveLinkService` and `AppDelegate`, which look up the
+    /// open `Document` for the push's path and call this. Cadova still always writes the file to
+    /// disk too; `presentedItemDidChange` recognizes that subsequent write via `token` and skips
+    /// reloading it again.
+    @MainActor
+    func applyLiveLinkUpdate(modelData: ModelData, token: UUID) {
+        loadGeneration += 1
+        loadTask?.cancel()
+
+        lastAppliedLiveLinkToken = token
+        sendModelData(modelData)
+        sendLoadingStatus(false)
+    }
+
     /// Slices the given candidate `parts` of the model in the preferred slicer, keeping the slicing
     /// indicator up while the filtered copy is written. Pass all parts for a full slice, or the visible
     /// subset for "Slice Visible Parts". Routed through the document so every trigger (toolbar, parts
@@ -240,9 +260,27 @@ class Document: NSDocument, NSWindowDelegate {
             return // Item on disk was unchanged
         }
 
+        if let lastAppliedLiveLinkToken, Self.onDiskLiveLinkToken(at: fileURL) == lastAppliedLiveLinkToken.uuidString {
+            // This write is the one we already applied via LiveLink — acknowledge it without paying
+            // for a full reload. Any failure to read/parse the token below just falls through to the
+            // normal reload, so this is purely a speed optimization, never load-bearing for correctness.
+            self.fileModificationDate = diskModificationDate
+            return
+        }
+
         Task { @MainActor [weak self] in
             self?.startLoadingModel(from: fileURL, fileModificationDate: diskModificationDate, presentsZipErrors: false)
         }
+    }
+
+    /// Reads just the root model's metadata (unzip + top-level XML decode, skipping mesh/geometry
+    /// entirely) to look up the `cadova:livelinktoken` value, if any. Much cheaper than a full
+    /// `ModelData(url:)` load, which is the whole point of checking it here.
+    private static func onDiskLiveLinkToken(at url: URL) -> String? {
+        guard let reader = try? ThreeMF.PackageReader(url: url) else { return nil }
+        defer { reader.invalidate() }
+        guard let model = try? reader.model() else { return nil }
+        return model.metadata.first { $0.name == .custom(ModelData.liveLinkTokenMetadataName) }?.value
     }
 
     enum Error: Swift.Error {

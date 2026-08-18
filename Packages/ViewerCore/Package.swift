@@ -11,10 +11,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/tomasf/ThreeMF", .upToNextMinor(from: "0.2.0")),
-        .package(url: "https://github.com/tomasf/Nodal", .upToNextMajor(from: "1.0.1")),
+        .package(url: "https://github.com/tomasf/Nodal", .upToNextMajor(from: "1.0.2")),
         .package(url: "https://github.com/tomasf/Zip.git", from: "2.1.0"),
         .package(url: "https://github.com/tomasf/manifold-swift.git", .upToNextMajor(from: "1.1.0")),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        // TODO: switch to the tagged https://github.com/tomasf/Cadova.git once LiveLink ships in a
+        // release; a local path dependency is a placeholder for developing against the unreleased
+        // `livelink` branch in the sibling checkout.
+        .package(path: "../../../Cadova"),
     ],
     targets: [
         .target(
@@ -24,6 +28,7 @@ let package = Package(
                 .product(name: "Nodal", package: "Nodal"),
                 .product(name: "Zip", package: "Zip"),
                 .product(name: "Manifold", package: "manifold-swift"),
+                .product(name: "CadovaLiveLink", package: "Cadova"),
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
