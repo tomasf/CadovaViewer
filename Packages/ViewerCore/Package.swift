@@ -15,10 +15,6 @@ let package = Package(
         .package(url: "https://github.com/tomasf/Zip.git", from: "2.1.0"),
         .package(url: "https://github.com/tomasf/manifold-swift.git", .upToNextMajor(from: "1.1.0")),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
-        // TODO: switch to the tagged https://github.com/tomasf/Cadova.git once LiveLink ships in a
-        // release; a local path dependency is a placeholder for developing against the unreleased
-        // `livelink` branch in the sibling checkout.
-        .package(path: "../../../Cadova"),
     ],
     targets: [
         .target(
@@ -28,12 +24,22 @@ let package = Package(
                 .product(name: "Nodal", package: "Nodal"),
                 .product(name: "Zip", package: "Zip"),
                 .product(name: "Manifold", package: "manifold-swift"),
-                .product(name: "CadovaLiveLinkCore", package: "Cadova"),
-                .product(name: "CadovaLiveLinkServer", package: "Cadova"),
+                "CadovaLiveLinkCore",
+                "CadovaLiveLinkServer",
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
             ]
+        ),
+        // Deliberately not a dependency on the Cadova package — Cadova Viewer never needs the rest
+        // of Cadova (Manifold/C++, geometry engine), just the LiveLink wire format and listener, so
+        // these are a local, unshared copy rather than a cross-package dependency. See LiveLinkMessage
+        // and LiveLinkFraming in Cadova's own CadovaLiveLinkCore for the sending side's matching copy
+        // — keep the two in sync by hand if the wire format ever changes.
+        .target(name: "CadovaLiveLinkCore"),
+        .target(
+            name: "CadovaLiveLinkServer",
+            dependencies: ["CadovaLiveLinkCore"]
         ),
         .executableTarget(
             name: "cadova-render",
@@ -51,7 +57,7 @@ let package = Package(
                 "ViewerCore",
                 .product(name: "ThreeMF", package: "ThreeMF"),
                 .product(name: "Manifold", package: "manifold-swift"),
-                .product(name: "CadovaLiveLinkCore", package: "Cadova"),
+                "CadovaLiveLinkCore",
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
