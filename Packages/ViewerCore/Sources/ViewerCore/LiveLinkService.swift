@@ -3,16 +3,21 @@ import CadovaLiveLinkCore
 import CadovaLiveLinkServer
 
 /// Owns the app's single `LiveLinkServer`, started once at launch and stopped at termination.
-/// Doesn't know about `NSDocument`/`NSDocumentController` itself — the app wires `onModelUpdate` to
-/// look up an open document for the given path and apply the given `ModelData`. Deliberately keeps
-/// `CadovaLiveLink` (the wire protocol) out of `onModelUpdate`'s signature, so app-target code never
-/// needs its own dependency on that package — only `ViewerCore`, which already has one, does.
+/// Doesn't know about `NSDocument`/`NSDocumentController` itself — the app wires `hasOpenDocument`
+/// and `onModelUpdate` to look up an open document for a given path. Deliberately keeps
+/// `CadovaLiveLink` (the wire protocol) out of both signatures, so app-target code never needs its
+/// own dependency on that package — only `ViewerCore`, which already has one, does.
 @MainActor
 public final class LiveLinkService {
     public static let shared = LiveLinkService()
 
-    /// Called on the main actor for every message received while the server is running, already
-    /// converted to `ModelData`. Set this before calling `start()`.
+    /// Checked on the main actor for every message received, before it's converted to `ModelData` —
+    /// that conversion builds real `SCNGeometry`, edge lines, and a cap solid, proportional to mesh
+    /// size, which is wasted work for a push nothing will ever use. Set this before calling `start()`.
+    public var hasOpenDocument: (@MainActor (_ path: URL) -> Bool)?
+
+    /// Called on the main actor for every message received for a path `hasOpenDocument` said yes to,
+    /// already converted to `ModelData`. Set this before calling `start()`.
     public var onModelUpdate: (@MainActor (_ path: URL, _ modelData: ModelData, _ token: UUID) -> Void)?
 
     private var server: LiveLinkServer?
@@ -27,10 +32,11 @@ public final class LiveLinkService {
         guard server == nil else { return }
 
         let server = LiveLinkServer { [weak self] message in
-            let modelData = ModelData(liveLink: message)
             let url = URL(fileURLWithPath: message.path)
             Task { @MainActor in
-                self?.onModelUpdate?(url, modelData, message.token)
+                guard let self, self.hasOpenDocument?(url) == true else { return }
+                let modelData = await Task.detached { ModelData(liveLink: message) }.value
+                self.onModelUpdate?(url, modelData, message.token)
             }
         }
 

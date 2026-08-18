@@ -7,6 +7,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var preferencesWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LiveLinkService.shared.hasOpenDocument = { url in
+            NSDocumentController.shared.document(for: url) is Document
+        }
         LiveLinkService.shared.onModelUpdate = { url, modelData, token in
             guard let document = NSDocumentController.shared.document(for: url) as? Document else { return }
             document.applyLiveLinkUpdate(modelData: modelData, token: token)
