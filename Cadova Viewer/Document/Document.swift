@@ -174,6 +174,7 @@ class Document: NSDocument, NSWindowDelegate {
     /// reloading it again.
     @MainActor
     func applyLiveLinkUpdate(modelData: ModelData, token: UUID) {
+        Swift.print("LiveLink: applied push (token \(token))")
         loadGeneration += 1
         loadTask?.cancel()
 
@@ -264,6 +265,7 @@ class Document: NSDocument, NSWindowDelegate {
             // This write is the one we already applied via LiveLink — acknowledge it without paying
             // for a full reload. Any failure to read/parse the token below just falls through to the
             // normal reload, so this is purely a speed optimization, never load-bearing for correctness.
+            Swift.print("LiveLink: skipping reload, on-disk file matches already-applied token \(lastAppliedLiveLinkToken)")
             self.fileModificationDate = diskModificationDate
             return
         }
