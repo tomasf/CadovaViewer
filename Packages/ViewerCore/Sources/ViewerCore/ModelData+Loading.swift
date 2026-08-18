@@ -2,6 +2,7 @@ import Foundation
 import ThreeMF
 import SceneKit
 import AppKit
+import Dispatch
 
 // The synchronous products of processing a single component, assembled concurrently by
 // `ModelData.init` and then consumed on the calling task to build the scene graph.
@@ -43,98 +44,30 @@ extension ModelData {
             indexedEdgeLines = []
         }
 
-        let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
-            let products = loadedItem.components.map { loadedComponent in
-                Self.componentProducts(
-                    for: loadedComponent,
+        // Built with `DispatchQueue.concurrentPerform` rather than `asyncMap` on purpose: each
+        // iteration returns a `Part`, another large mixed-layout `Sendable` struct (SceneKit node
+        // refs, arrays of geometry-bearing structs, optionals) — the same shape that made
+        // `componentProducts` miscompile above. Dispatch's callback isn't a Swift coroutine, so
+        // routing `Part` through a plain buffer write instead of an `async` return sidesteps the bug
+        // regardless of struct complexity.
+        let items = Array(loadedModel.items.enumerated())
+        let parts: [Part]
+        if items.isEmpty {
+            parts = []
+        } else {
+            let storage = PartStorage(count: items.count)
+            DispatchQueue.concurrentPerform(iterations: items.count) { index in
+                let (itemIndex, loadedItem) = items[index]
+                storage[index] = Self.part(
+                    itemIndex: itemIndex,
+                    loadedItem: loadedItem,
                     loadedModel: loadedModel,
                     unitScale: unitScale,
                     includeEdges: includeEdges,
                     indexedEdgeLines: indexedEdgeLines
                 )
             }
-
-            var nodes = Part.Nodes()
-            nodes.container.name = "Item \(itemIndex)"
-
-            // The part's cap colour is the dominant colour of its heaviest component (most triangles).
-            // Also the fallback for edges whose bordering faces rely on this inherited colour rather
-            // than an explicit one of their own, since the mesh alone can't classify those.
-            let dominantColor = products
-                .filter { $0.dominantColor != nil }
-                .max { $0.stats.triangleCount < $1.stats.triangleCount }?
-                .dominantColor
-            let unknownEdgesNeedLightColor = dominantColor.map(isDarkColor) ?? false
-
-            if includeEdges && loadedItem.item.semantic == .solid {
-                let sharpEdgesGroupNode = SCNNode()
-                let smoothEdgesGroupNode = SCNNode()
-                nodes.sharpEdges = sharpEdgesGroupNode
-                nodes.smoothEdges = smoothEdgesGroupNode
-                sharpEdgesGroupNode.name = "Sharp edges"
-                smoothEdgesGroupNode.name = "Smooth edges"
-                nodes.container.addChildNode(sharpEdgesGroupNode)
-                nodes.container.addChildNode(smoothEdgesGroupNode)
-
-                for product in products {
-                    let sharpNodeContainer = SCNNode()
-                    sharpNodeContainer.name = "Sharp edges transformer"
-                    sharpNodeContainer.transform = product.transform
-                    sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
-
-                    let sharpGeometry = product.sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
-                    let sharpNode = SCNNode(geometry: sharpGeometry)
-                    sharpNode.name = "Sharp edges geometry"
-                    sharpNodeContainer.addChildNode(sharpNode)
-
-                    let smoothNodeContainer = SCNNode()
-                    smoothNodeContainer.name = "Smooth edges transformer"
-                    smoothNodeContainer.transform = product.transform
-                    smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
-
-                    let smoothGeometry = product.smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
-                    let smoothNode = SCNNode(geometry: smoothGeometry)
-                    smoothNode.name = "Smooth edges geometry"
-                    smoothNodeContainer.addChildNode(smoothNode)
-                }
-            }
-
-            var modelGeometryVariants: [ModelGeometryVariant] = []
-            for product in products {
-                let modelNode = SCNNode(geometry: product.mainGeometry)
-                modelNode.name = "Main geometry"
-                modelNode.transform = product.transform
-                nodes.model.addChildNode(modelNode)
-                modelGeometryVariants.append(ModelGeometryVariant(
-                    node: modelNode,
-                    flat: product.mainGeometry,
-                    mesh: product.mesh,
-                    emittedCorners: product.emittedCorners
-                ))
-            }
-
-            // Concatenate the components' indexed meshes (offsetting indices) into one solid for caps.
-            var capVertices: [SIMD3<Float>] = []
-            var capIndices: [UInt32] = []
-            for product in products {
-                let offset = UInt32(capVertices.count)
-                capVertices += product.capVertices
-                capIndices += product.capIndices.map { $0 + offset }
-            }
-            let capSolid = capVertices.isEmpty ? nil : PartSolid(vertices: capVertices, indices: capIndices)
-
-            return Part(
-                nodes: nodes,
-                itemIndex: itemIndex,
-                name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
-                id: loadedItem.item.partNumber,
-                semantic: loadedItem.item.semantic,
-                stats: Statistics(products.map(\.stats)),
-                modelGeometryVariants: modelGeometryVariants,
-                dominantColor: dominantColor,
-                hasMaterial: products.contains { $0.hasMaterial },
-                capSolid: capSolid
-            )
+            parts = storage.parts
         }
 
         let container = SCNNode()
@@ -214,6 +147,136 @@ extension ModelData {
             capIndices: capIndices
         )
     }
+
+    // Builds one item's `Part` — its scene nodes, geometry variants, and cross-section cap — from
+    // its components' already-computed `componentProducts`. Kept synchronous and called from
+    // `DispatchQueue.concurrentPerform` for the same reason `componentProducts` is: it does no
+    // `await`s, and this used to run as the body of an `asyncMap` closure returning `Part` directly,
+    // which risks the same coroutine-frame miscompile documented there.
+    private static func part(
+        itemIndex: Int,
+        loadedItem: ModelLoader<URL>.LoadedModel.LoadedItem,
+        loadedModel: ModelLoader<URL>.LoadedModel,
+        unitScale: simd_double4x4,
+        includeEdges: Bool,
+        indexedEdgeLines: [(sharp: EdgeLines, smooth: EdgeLines)]
+    ) -> Part {
+        let products = loadedItem.components.map { loadedComponent in
+            Self.componentProducts(
+                for: loadedComponent,
+                loadedModel: loadedModel,
+                unitScale: unitScale,
+                includeEdges: includeEdges,
+                indexedEdgeLines: indexedEdgeLines
+            )
+        }
+
+        var nodes = Part.Nodes()
+        nodes.container.name = "Item \(itemIndex)"
+
+        // The part's cap colour is the dominant colour of its heaviest component (most triangles).
+        // Also the fallback for edges whose bordering faces rely on this inherited colour rather
+        // than an explicit one of their own, since the mesh alone can't classify those.
+        let dominantColor = products
+            .filter { $0.dominantColor != nil }
+            .max { $0.stats.triangleCount < $1.stats.triangleCount }?
+            .dominantColor
+        let unknownEdgesNeedLightColor = dominantColor.map(isDarkColor) ?? false
+
+        if includeEdges && loadedItem.item.semantic == .solid {
+            let sharpEdgesGroupNode = SCNNode()
+            let smoothEdgesGroupNode = SCNNode()
+            nodes.sharpEdges = sharpEdgesGroupNode
+            nodes.smoothEdges = smoothEdgesGroupNode
+            sharpEdgesGroupNode.name = "Sharp edges"
+            smoothEdgesGroupNode.name = "Smooth edges"
+            nodes.container.addChildNode(sharpEdgesGroupNode)
+            nodes.container.addChildNode(smoothEdgesGroupNode)
+
+            for product in products {
+                let sharpNodeContainer = SCNNode()
+                sharpNodeContainer.name = "Sharp edges transformer"
+                sharpNodeContainer.transform = product.transform
+                sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
+
+                let sharpGeometry = product.sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
+                let sharpNode = SCNNode(geometry: sharpGeometry)
+                sharpNode.name = "Sharp edges geometry"
+                sharpNodeContainer.addChildNode(sharpNode)
+
+                let smoothNodeContainer = SCNNode()
+                smoothNodeContainer.name = "Smooth edges transformer"
+                smoothNodeContainer.transform = product.transform
+                smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
+
+                let smoothGeometry = product.smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
+                let smoothNode = SCNNode(geometry: smoothGeometry)
+                smoothNode.name = "Smooth edges geometry"
+                smoothNodeContainer.addChildNode(smoothNode)
+            }
+        }
+
+        var modelGeometryVariants: [ModelGeometryVariant] = []
+        for product in products {
+            let modelNode = SCNNode(geometry: product.mainGeometry)
+            modelNode.name = "Main geometry"
+            modelNode.transform = product.transform
+            nodes.model.addChildNode(modelNode)
+            modelGeometryVariants.append(ModelGeometryVariant(
+                node: modelNode,
+                flat: product.mainGeometry,
+                mesh: product.mesh,
+                emittedCorners: product.emittedCorners
+            ))
+        }
+
+        // Concatenate the components' indexed meshes (offsetting indices) into one solid for caps.
+        var capVertices: [SIMD3<Float>] = []
+        var capIndices: [UInt32] = []
+        for product in products {
+            let offset = UInt32(capVertices.count)
+            capVertices += product.capVertices
+            capIndices += product.capIndices.map { $0 + offset }
+        }
+        let capSolid = capVertices.isEmpty ? nil : PartSolid(vertices: capVertices, indices: capIndices)
+
+        return Part(
+            nodes: nodes,
+            itemIndex: itemIndex,
+            name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
+            id: loadedItem.item.partNumber,
+            semantic: loadedItem.item.semantic,
+            stats: Statistics(products.map(\.stats)),
+            modelGeometryVariants: modelGeometryVariants,
+            dominantColor: dominantColor,
+            hasMaterial: products.contains { $0.hasMaterial },
+            capSolid: capSolid
+        )
+    }
+}
+
+// Backing storage for `ModelData.init`'s per-item `Part` build. Each `DispatchQueue.concurrentPerform`
+// iteration writes to a distinct index, so concurrent access is safe despite the lack of locking —
+// `@unchecked Sendable` reflects that externally-enforced disjointness rather than internal safety.
+private final class PartStorage: @unchecked Sendable {
+    private let buffer: UnsafeMutableBufferPointer<ModelData.Part?>
+
+    init(count: Int) {
+        buffer = .allocate(capacity: count)
+        buffer.initialize(repeating: nil)
+    }
+
+    deinit {
+        buffer.deinitialize()
+        buffer.deallocate()
+    }
+
+    subscript(index: Int) -> ModelData.Part? {
+        get { buffer[index] }
+        set { buffer[index] = newValue }
+    }
+
+    var parts: [ModelData.Part] { buffer.map { $0! } }
 }
 
 extension simd_double4x4 {
