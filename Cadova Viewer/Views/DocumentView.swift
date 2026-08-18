@@ -54,17 +54,17 @@ struct DocumentView: View {
                 .colorScheme(.dark)
         }
         .toolbar(id: "document") { toolbar }
-        .onReceive(viewModel.document!.loadingStream) { status in
+        .onReceive(viewModel.loadingStream) { status in
             withAnimation(.easeInOut) {
                 isLoading = status
             }
         }
-        .onReceive(viewModel.document!.slicingStream) { status in
+        .onReceive(viewModel.slicingStream) { status in
             withAnimation(.easeInOut) {
                 isSlicing = status
             }
         }
-        .onReceive(viewModel.document!.modelStream.receive(on: DispatchQueue.main)) { modelData in
+        .onReceive(viewModel.modelStream.receive(on: DispatchQueue.main)) { modelData in
             self.modelData = modelData
         }
         .onReceive(focused.showInfoSignal) { _ in

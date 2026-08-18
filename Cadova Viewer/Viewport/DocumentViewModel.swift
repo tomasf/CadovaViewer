@@ -20,6 +20,14 @@ final class DocumentViewModel: ObservableObject {
     private var navLibActive = false
     weak var document: Document?
 
+    /// The document's status/model publishers, captured at init. `document` is weak and goes nil once
+    /// the document deallocates (window closing), but SwiftUI can still evaluate `DocumentView.body`
+    /// after that — reading these off the document there would force-unwrap nil. They're plain
+    /// publishers over the document's subjects, so holding them doesn't keep the document alive.
+    let loadingStream: AnyPublisher<Bool, Never>
+    let slicingStream: AnyPublisher<Bool, Never>
+    let modelStream: AnyPublisher<ModelData, Never>
+
     @Published private(set) var layout: SplitLayout
     @Published private(set) var viewports: [UUID: ViewportController] = [:]
     @Published var ratios: [UUID: Double] = [:]
@@ -70,6 +78,9 @@ final class DocumentViewModel: ObservableObject {
 
     init(document: Document) {
         self.document = document
+        loadingStream = document.loadingStream
+        slicingStream = document.slicingStream
+        modelStream = document.modelStream
         sceneController = SceneController(document: document)
 
         let id = UUID()
