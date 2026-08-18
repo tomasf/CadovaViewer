@@ -1,0 +1,78 @@
+{
+  "originHash" : "50a3072d61953eb9596735fe3d5c9b8a6e8589cfaff195acc8574ea9aa7fedc4",
+  "pins" : [
+    {
+      "identity" : "apus",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Apus.git",
+      "state" : {
+        "revision" : "3ccc37d65daada2a675ddcc3d8a534e5db94726d",
+        "version" : "0.1.4"
+      }
+    },
+    {
+      "identity" : "manifold-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/manifold-swift.git",
+      "state" : {
+        "revision" : "59fa5c3e567df75fd9bb6aacb57d52fd5b3074ec",
+        "version" : "1.1.1"
+      }
+    },
+    {
+      "identity" : "navlibswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/NavLibSwift.git",
+      "state" : {
+        "revision" : "37eeaced91ce18427f5d39a9f16457b373cf09f2",
+        "version" : "3.0.0"
+      }
+    },
+    {
+      "identity" : "nodal",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Nodal",
+      "state" : {
+        "revision" : "0ec74822bcf604f2e20d445e1e62e5e87abf8a3f",
+        "version" : "1.0.2"
+      }
+    },
+    {
+      "identity" : "pelagos",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Pelagos.git",
+      "state" : {
+        "revision" : "40118bfad25b83d46bf2a9b25327ba7189108880",
+        "version" : "0.1.4"
+      }
+    },
+    {
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle",
+      "state" : {
+        "revision" : "21d8df80440b1ca3b65fa82e40782f1e5a9e6ba2",
+        "version" : "2.9.0"
+      }
+    },
+    {
+      "identity" : "threemf",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/ThreeMF",
+      "state" : {
+        "revision" : "15765bd9e3859e2884385a79e6d2e34686b42fb1",
+        "version" : "0.2.5"
+      }
+    },
+    {
+      "identity" : "zip",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/Zip.git",
+      "state" : {
+        "revision" : "3a22aaf3f449ceded0354695af96967d1df4e5e0",
+        "version" : "2.1.2"
+      }
+    }
+  ],
+  "version" : 3
+}
