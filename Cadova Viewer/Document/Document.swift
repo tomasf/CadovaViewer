@@ -8,6 +8,7 @@ import Combine
 import ThreeMF
 import Zip
 import ViewerCore
+import Synchronization
 
 class Document: NSDocument, NSWindowDelegate {
     private let modelSubject: CurrentValueSubject<ModelData?, Never> = .init(nil)
@@ -79,26 +80,34 @@ class Document: NSDocument, NSWindowDelegate {
         sendLoadingStatus(true)
 
         let start = CFAbsoluteTimeGetCurrent()
+
+        // `worker` hands its `ModelData` back through `resultBox` rather than as its own return
+        // value. `ModelData` carries `[Part]` — the same large, mixed-layout `Sendable` shape that
+        // makes Swift/LLVM's coroutine-frame splitter miscompile async code returning it (see the
+        // fix in ModelData+Loading.swift); a `Task<ModelData, _>` crossing an `await` boundary is
+        // exactly that pattern. Reducing both tasks to `Void` and passing the value through a
+        // `Mutex`-guarded box sidesteps it.
+        let resultBox = ModelLoadResultBox()
         let worker = Task.detached(priority: .userInitiated) {
-            try Task.checkCancellation()
-            let modelData = try await ModelData(url: url)
-            try Task.checkCancellation()
-            return modelData
+            do {
+                try Task.checkCancellation()
+                let modelData = try await ModelData(url: url)
+                try Task.checkCancellation()
+                resultBox.set(.success(modelData))
+            } catch {
+                resultBox.set(.failure(error))
+            }
         }
 
         loadTask = Task { [weak self] in
-            let result: Result<ModelData, Swift.Error>
-
+            await worker.value
             do {
-                let modelData = try await worker.value
                 try Task.checkCancellation()
-                result = .success(modelData)
-            } catch is CancellationError {
+            } catch {
                 worker.cancel()
                 return
-            } catch {
-                result = .failure(error)
             }
+            guard let result = resultBox.take() else { return }
 
             await MainActor.run {
                 self?.finishLoadingModel(
@@ -108,6 +117,23 @@ class Document: NSDocument, NSWindowDelegate {
                     fileModificationDate: fileModificationDate,
                     presentsZipErrors: presentsZipErrors
                 )
+            }
+        }
+    }
+
+    // Backing storage for handing a loaded `ModelData` from `worker` to `loadTask` without either
+    // task returning it directly (see the comment in `startLoadingModel`).
+    private final class ModelLoadResultBox: @unchecked Sendable {
+        private let storage = Mutex<Result<ModelData, Swift.Error>?>(nil)
+
+        func set(_ result: Result<ModelData, Swift.Error>) {
+            storage.withLock { $0 = result }
+        }
+
+        func take() -> Result<ModelData, Swift.Error>? {
+            storage.withLock { value in
+                defer { value = nil }
+                return value
             }
         }
     }
