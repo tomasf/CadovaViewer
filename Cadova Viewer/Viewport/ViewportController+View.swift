@@ -120,20 +120,23 @@ extension ViewportController {
     }
 
     func cameraView(for preset: ViewPreset) -> CameraView {
-        var (min, max) = sceneController.modelBoundingBox
-        var sphere = sceneController.modelBoundingSphere
+        let box = visiblePartsWorldBoundingBox
+        let center = (box.min + box.max) / 2
+        return cameraView(axis: preset.axis, boundingBox: box, center: center)
+    }
 
+    /// The world-space bounding box used to frame the standard view presets: the combined bounds
+    /// of this viewport's *visible* parts, so hidden parts don't skew the framing. Falls back to
+    /// the whole model's cached bounds if nothing resolves (e.g. every part hidden).
+    private var visiblePartsWorldBoundingBox: (min: SIMD3<Double>, max: SIMD3<Double>) {
+        if let box = combinedWorldBoundingBox(ofPartIDs: visibleParts) {
+            return box
+        }
+        var (min, max) = sceneController.modelBoundingBox
         if min == max {
             (min, max) = modelInstance.root.boundingBox
         }
-        if sphere.radius <= 0 || !sphere.radius.isFinite {
-            sphere = modelInstance.root.boundingSphere
-        }
-
-        let center = SIMD3<Double>(sphere.center)
-        return cameraView(axis: preset.axis,
-                          boundingBox: (SIMD3<Double>(min), SIMD3<Double>(max)),
-                          center: center)
+        return (SIMD3<Double>(min), SIMD3<Double>(max))
     }
 
     /// Frames a world-space bounding box from the given outward `axis`, looking at `center`, with
