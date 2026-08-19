@@ -43,7 +43,12 @@ extension ViewportController {
             self?.hoverPoint = point
         }
         sceneView.onCancel = { [weak self] in
-            self?.measurementController.cancelInProgress()
+            guard let self else { return }
+            if measurementController.interactionMode == .measure {
+                measurementController.interactionMode = .view
+            } else {
+                measurementController.cancelInProgress()
+            }
         }
         sceneView.beginGizmoDrag = { [weak self] point in
             self?.beginCrossSectionGizmoDrag(at: point) ?? false
