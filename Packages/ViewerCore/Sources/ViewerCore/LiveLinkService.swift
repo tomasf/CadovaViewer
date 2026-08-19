@@ -18,7 +18,7 @@ public final class LiveLinkService {
 
     /// Called on the main actor for every message received for a path `hasOpenDocument` said yes to,
     /// already converted to `ModelData`. Set this before calling `start()`.
-    public var onModelUpdate: (@MainActor (_ path: URL, _ modelData: ModelData, _ token: UUID) -> Void)?
+    public var onModelUpdate: (@MainActor (_ path: URL, _ modelData: ModelData, _ buildUUID: UUID) -> Void)?
 
     private var server: LiveLinkServer?
 
@@ -36,7 +36,7 @@ public final class LiveLinkService {
             Task { @MainActor in
                 guard let self, self.hasOpenDocument?(url) == true else { return }
                 let modelData = await Task.detached { ModelData(liveLink: message) }.value
-                self.onModelUpdate?(url, modelData, message.token)
+                self.onModelUpdate?(url, modelData, message.buildUUID)
             }
         }
 
@@ -52,10 +52,4 @@ public final class LiveLinkService {
         server?.stop()
         server = nil
     }
-}
-
-public extension ModelData {
-    /// The 3MF `<metadata name="...">` name a LiveLink token is stored under, re-exposed here so
-    /// app-target code can check it without a direct dependency on the CadovaLiveLink package.
-    static let liveLinkTokenMetadataName = LiveLinkMessage.tokenMetadataName
 }

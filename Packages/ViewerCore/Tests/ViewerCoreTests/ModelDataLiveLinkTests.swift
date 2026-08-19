@@ -6,7 +6,7 @@ import CadovaLiveLinkCore
 struct ModelDataLiveLinkTests {
     // A single flat triangle in the XY plane, 3-4-5-ish for an easy area check.
     static let triangleMessage = LiveLinkMessage(
-        token: UUID(),
+        buildUUID: UUID(),
         path: "/tmp/livelink-test.3mf",
         parts: [
             LiveLinkMessage.Part(
@@ -49,7 +49,7 @@ struct ModelDataLiveLinkTests {
                 triangleMaterialIndices: Self.triangleMessage.parts[0].triangleMaterialIndices,
                 defaultMaterialIndex: nil, materials: []
             )
-            let message = LiveLinkMessage(token: UUID(), path: "/tmp/t.3mf", parts: [part])
+            let message = LiveLinkMessage(buildUUID: UUID(), path: "/tmp/t.3mf", parts: [part])
             return ModelData(liveLink: message, includeEdges: false).parts[0].semantic
         }
 
@@ -69,7 +69,7 @@ struct ModelDataLiveLinkTests {
             triangleMaterialIndices: visualPart.triangleMaterialIndices,
             defaultMaterialIndex: visualPart.defaultMaterialIndex, materials: visualPart.materials
         )
-        let message = LiveLinkMessage(token: UUID(), path: Self.triangleMessage.path, parts: [visualPart])
+        let message = LiveLinkMessage(buildUUID: UUID(), path: Self.triangleMessage.path, parts: [visualPart])
         let modelData = ModelData(liveLink: message, includeEdges: true)
 
         #expect(modelData.parts[0].semantic == .visual)
