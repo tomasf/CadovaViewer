@@ -5,7 +5,9 @@ import AppKit
 
 // The synchronous products of processing a single component, assembled concurrently by
 // `ModelData.init` and then consumed on the calling task to build the scene graph.
-private struct ComponentProducts: Sendable {
+// `@unchecked`: each instance is written by exactly one concurrent task and only read afterward
+// on the calling task, so the `SCNGeometry`/`EdgeLines` handoff is safe despite not being `Sendable`.
+private struct ComponentProducts: @unchecked Sendable {
     let mainGeometry: SCNGeometry
     let sharpEdgeLines: EdgeLines
     let smoothEdgeLines: EdgeLines

@@ -4,7 +4,9 @@ import SceneKit
 import AppKit
 
 /// The result of building a mesh's (flat) `SCNGeometry`.
-public struct MeshGeometryResult: Sendable {
+/// `@unchecked`: same single-owner handoff contract as `ModelData.rootNode` — `geometry` is built
+/// once and not mutated concurrently with later reads.
+public struct MeshGeometryResult: @unchecked Sendable {
     public let geometry: SCNGeometry
     /// `emittedCorners[i]` is the packed `triangleIndex * 3 + corner` that the i-th emitted vertex
     /// came from. Lets smooth per-vertex normals be computed later, aligned to the vertex source,

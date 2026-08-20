@@ -133,9 +133,10 @@ final class SceneController: ObservableObject {
                     group.addTask { _ = variant.smoothGeometry() }
                 }
             }
+            guard let self else { return }
             await MainActor.run {
-                self?.smoothGeometryBuildState = .done
-                self?.smoothGeometryDidBuildSignal.send()
+                self.smoothGeometryBuildState = .done
+                self.smoothGeometryDidBuildSignal.send()
             }
         }
     }

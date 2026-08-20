@@ -3,7 +3,10 @@ import ThreeMF
 import SceneKit
 import AppKit
 
-public struct ModelData: Sendable {
+/// `@unchecked`: `rootNode` (an `SCNNode`) is built once during loading, then handed off — nothing
+/// mutates it concurrently with reads afterward, so the cross-thread handoff is safe even though
+/// `SCNNode` itself isn't `Sendable`.
+public struct ModelData: @unchecked Sendable {
     public let rootNode: SCNNode
     public let parts: [Part]
     public let metadata: [ThreeMF.Metadata]
@@ -76,7 +79,9 @@ public struct ModelData: Sendable {
             self.capSolid = capSolid
         }
 
-        public struct Nodes: Sendable {
+        /// `@unchecked`: same single-owner handoff contract as `ModelData.rootNode` — these nodes
+        /// are built during loading and not mutated concurrently with later reads.
+        public struct Nodes: @unchecked Sendable {
             public var container: SCNNode
             public var model: SCNNode
             public var sharpEdges: SCNNode?
