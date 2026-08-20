@@ -1,4 +1,5 @@
 import Foundation
+import Dispatch
 import ThreeMF
 import SceneKit
 import AppKit
@@ -159,6 +160,10 @@ extension ModelData {
         self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize, hasAnyMaterials: parts.contains { $0.hasMaterial })
     }
 
+    /// Below this many vertices/triangles, chunking overhead isn't worth it for the cap-solid
+    /// flatten below — same reasoning as `ThreeMFModel.chunkedGeometryTriangleThreshold`.
+    private static let chunkedCapThreshold = 20_000
+
     // Builds one component's geometry/edges/cap/stats. Extracted from the `components.asyncMap`
     // closure and kept synchronous on purpose: the work does no `await`s, and inlining it into the
     // async task closure gave that coroutine a large frame that the Swift/LLVM coroutine-frame
@@ -182,18 +187,35 @@ extension ModelData {
         let worldTransform = unitScale * simd_double4x4(loadedComponent.scnMatrix)
         let stats = loadedMesh.mesh.statistics(transform: worldTransform)
 
-        // World-space indexed mesh (same space as the scene) for the cross-section cap.
-        var capVertices: [SIMD3<Float>] = []
-        capVertices.reserveCapacity(loadedMesh.mesh.vertices.count)
-        for vertex in loadedMesh.mesh.vertices {
-            let world = worldTransform * SIMD4(vertex.simd, 1)
-            capVertices.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
+        // World-space indexed mesh (same space as the scene) for the cross-section cap. Chunked
+        // like geometry/edge-line building, but simpler: no vertices are dropped and cap indices
+        // reference vertex indices directly, so concatenating chunks in original order needs no
+        // offsetting at all.
+        let vertexChunks = loadedMesh.mesh.vertices.count.chunkedRanges(threshold: Self.chunkedCapThreshold)
+        let vertexStorage = ChunkStorage<[SIMD3<Float>]>(count: vertexChunks.count)
+        DispatchQueue.concurrentPerform(iterations: vertexChunks.count) { chunkIndex in
+            var chunk: [SIMD3<Float>] = []
+            chunk.reserveCapacity(vertexChunks[chunkIndex].count)
+            for i in vertexChunks[chunkIndex] {
+                let world = worldTransform * SIMD4(loadedMesh.mesh.vertices[i].simd, 1)
+                chunk.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
+            }
+            vertexStorage[chunkIndex] = chunk
         }
-        var capIndices: [UInt32] = []
-        capIndices.reserveCapacity(loadedMesh.mesh.triangles.count * 3)
-        for triangle in loadedMesh.mesh.triangles {
-            capIndices += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
+        let capVertices = vertexStorage.results.flatMap { $0 }
+
+        let triangleChunks = loadedMesh.mesh.triangles.count.chunkedRanges(threshold: Self.chunkedCapThreshold)
+        let indexStorage = ChunkStorage<[UInt32]>(count: triangleChunks.count)
+        DispatchQueue.concurrentPerform(iterations: triangleChunks.count) { chunkIndex in
+            var chunk: [UInt32] = []
+            chunk.reserveCapacity(triangleChunks[chunkIndex].count * 3)
+            for i in triangleChunks[chunkIndex] {
+                let triangle = loadedMesh.mesh.triangles[i]
+                chunk += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
+            }
+            indexStorage[chunkIndex] = chunk
         }
+        let capIndices = indexStorage.results.flatMap { $0 }
 
         let (sharpEdgeLines, smoothEdgeLines): (EdgeLines, EdgeLines)
         if includeEdges && loadedComponent.meshIndex < indexedEdgeLines.count {

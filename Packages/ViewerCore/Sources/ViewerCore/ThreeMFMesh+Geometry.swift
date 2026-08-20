@@ -29,16 +29,26 @@ extension Mesh {
             return SIMD3(v.x, v.y, v.z)
         }
 
-        var area = 0.0
-        var signedVolume = 0.0
-        for t in triangles {
-            let a = point(t.v1)
-            let b = point(t.v2)
-            let c = point(t.v3)
-            area += 0.5 * simd_length(simd_cross(b - a, c - a))
-            signedVolume += simd_dot(a, simd_cross(b, c)) / 6.0
+        // A pure per-triangle reduction with a trivial (sum two doubles) merge, unlike the edge
+        // adjacency map — so this scales with available cores far better than edge extraction does.
+        let chunks = triangles.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
+        let storage = AreaVolumeChunkStorage(count: chunks.count)
+        DispatchQueue.concurrentPerform(iterations: chunks.count) { chunkIndex in
+            var area = 0.0
+            var signedVolume = 0.0
+            for i in chunks[chunkIndex] {
+                let t = triangles[i]
+                let a = point(t.v1)
+                let b = point(t.v2)
+                let c = point(t.v3)
+                area += 0.5 * simd_length(simd_cross(b - a, c - a))
+                signedVolume += simd_dot(a, simd_cross(b, c)) / 6.0
+            }
+            storage[chunkIndex] = (area, signedVolume)
         }
-        return (area, abs(signedVolume))
+
+        let totals = storage.results.reduce((area: 0.0, volume: 0.0)) { ($0.area + $1.area, $0.volume + $1.volume) }
+        return (totals.area, abs(totals.volume))
     }
 
     /// Builds this mesh's sharp and smooth edge lines, classifying each edge as needing a light or
@@ -89,49 +99,66 @@ extension Mesh {
                 v2 = a
             }
         }
+
+        /// Decodes an edge packed by `extractEdgeSegments()` as `UInt64(v1) << 32 | UInt64(v2)`
+        /// (`v1 <= v2` already, since that's how the key was packed).
+        init(rawKey: UInt64) {
+            v1 = Int(rawKey >> 32)
+            v2 = Int(rawKey & 0xFFFF_FFFF)
+        }
+    }
+
+    fileprivate struct EdgeKeyEntry {
+        /// `v1`/`v2` (`v1 <= v2`) packed as `UInt64(v1) << 32 | UInt64(v2)`, so sorting by this
+        /// value groups every occurrence of the same edge into one contiguous run — see `Edge
+        /// .init(rawKey:)`.
+        let key: UInt64
+        let face: Int32
     }
 
     /// Below this many triangles/edges, chunking overhead isn't worth it — each phase below just
     /// runs as a single chunk, equivalent to a plain serial pass.
     private static let chunkedEdgeThreshold = 20_000
 
-    /// Builds the edge→bordering-triangle adjacency map and classifies each edge as a sharp
-    /// feature or a smooth one, both in chunked phases (see `Int.chunkedRanges(threshold:)`):
+    /// Builds the edge→bordering-triangle adjacency and classifies each edge as a sharp feature or
+    /// a smooth one.
     ///
-    /// 1. Each chunk of triangles builds its own partial adjacency map; the maps are merged after.
-    ///    This is order-independent — an edge ends up with the same *set* of bordering triangle
-    ///    indices regardless of merge order, and classification below only checks `faces.count`
-    ///    and, for count 2, a symmetric dot product, so which face lands at `faces[0]` vs
-    ///    `faces[1]` never changes the result.
-    /// 2. Each triangle's face normal is computed independently — no shared state at all.
-    /// 3. Each chunk of adjacency-map entries is classified independently into feature/smooth
-    ///    lists; the lists are concatenated after. Order-independent for the same reason as (1):
-    ///    `EdgeLines`/`edgeLines(_:)` below treat these as an unordered set of line segments.
+    /// Previously this built a `[Edge: [Int]]` dictionary per chunk and merged the dictionaries —
+    /// correct, but a per-chunk dictionary merge means re-hashing and re-inserting every key a
+    /// second time, which turned out to cost about as much as chunking saved (see the LiveLink
+    /// performance investigation this came out of). This version instead:
+    ///
+    /// 1. Packs each triangle's 3 edges as `(key, face)` pairs into per-chunk arrays — no
+    ///    dictionary, so both the fill and the merge (`flatMap`, a plain concatenation) are cheap.
+    /// 2. Sorts the merged array by key, an ordinary comparison sort over integers, so every
+    ///    occurrence of the same edge lands in one contiguous run — no hashing at all.
+    /// 3. Walks the sorted runs once, classifying each by run length (a non-manifold edge, 3+
+    ///    bordering triangles, is dropped — matching the previous dictionary-based behavior) and,
+    ///    for a 2-triangle run, a symmetric dot product against `triangleNormals` (computed
+    ///    independently in parallel, as before) — so which face lands first within a run never
+    ///    affects the result.
     private func extractEdgeSegments() -> (sharp: [(edge: Edge, faces: [Int])], smooth: [(edge: Edge, faces: [Int])]) {
         let triangleChunks = triangles.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
-        let edgeMapStorage = EdgeMapChunkStorage(count: triangleChunks.count)
+        let entryStorage = EdgeEntryChunkStorage(count: triangleChunks.count)
         DispatchQueue.concurrentPerform(iterations: triangleChunks.count) { chunkIndex in
-            var partial: [Edge: [Int]] = [:]
+            var entries: [EdgeKeyEntry] = []
+            entries.reserveCapacity(triangleChunks[chunkIndex].count * 3)
             for faceIndex in triangleChunks[chunkIndex] {
                 let triangle = triangles[faceIndex]
-                let edges = [
-                    Edge(triangle.v1, triangle.v2),
-                    Edge(triangle.v2, triangle.v3),
-                    Edge(triangle.v3, triangle.v1)
-                ]
-                for edge in edges {
-                    partial[edge, default: []].append(faceIndex)
+                for (a, b) in [(triangle.v1, triangle.v2), (triangle.v2, triangle.v3), (triangle.v3, triangle.v1)] {
+                    let lo = UInt64(Swift.min(a, b))
+                    let hi = UInt64(Swift.max(a, b))
+                    entries.append(EdgeKeyEntry(key: (lo << 32) | hi, face: Int32(faceIndex)))
                 }
             }
-            edgeMapStorage[chunkIndex] = partial
+            // Sorted here, per chunk, while chunks still run concurrently — a plain
+            // `entries.sort()` over the flattened whole (~3x the triangle count) turned out to
+            // cost more than chunking saved elsewhere, since it's a single-threaded O(n log n)
+            // pass with no chunk boundaries left to parallelize across.
+            entries.sort { $0.key < $1.key }
+            entryStorage[chunkIndex] = entries
         }
-
-        var edgeToTriangles: [Edge: [Int]] = [:]
-        for partial in edgeMapStorage.results {
-            for (edge, faces) in partial {
-                edgeToTriangles[edge, default: []].append(contentsOf: faces)
-            }
-        }
+        let entries = Self.mergeSortedByKey(entryStorage.results)
 
         func normal(of triangle: Triangle) -> SIMD3<Double> {
             let a = vertices[triangle.v1].simd
@@ -151,36 +178,73 @@ extension Mesh {
         let maxSmoothAngleDegrees = 30.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
 
-        let entries = Array(edgeToTriangles)
-        let entryChunks = entries.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
-        let classificationStorage = EdgeClassificationChunkStorage(count: entryChunks.count)
-        DispatchQueue.concurrentPerform(iterations: entryChunks.count) { chunkIndex in
-            var feature: [(edge: Edge, faces: [Int])] = []
-            var smooth: [(edge: Edge, faces: [Int])] = []
-            for i in entryChunks[chunkIndex] {
-                let (edge, faces) = entries[i]
-                if faces.count == 1 {
-                    smooth.append((edge, faces))
-                } else if faces.count == 2 {
-                    let dot = simd_dot(triangleNormals[faces[0]], triangleNormals[faces[1]])
-                    if dot < angleThreshold {
-                        feature.append((edge, faces))
-                    } else {
-                        smooth.append((edge, faces))
-                    }
-                }
-            }
-            classificationStorage[chunkIndex] = (feature, smooth)
-        }
-
         var featureEdges: [(edge: Edge, faces: [Int])] = []
         var smoothEdges: [(edge: Edge, faces: [Int])] = []
-        for (feature, smooth) in classificationStorage.results {
-            featureEdges += feature
-            smoothEdges += smooth
+
+        var i = 0
+        while i < entries.count {
+            let key = entries[i].key
+            var j = i + 1
+            while j < entries.count && entries[j].key == key { j += 1 }
+
+            if j - i == 1 {
+                smoothEdges.append((Edge(rawKey: key), [Int(entries[i].face)]))
+            } else if j - i == 2 {
+                let f0 = Int(entries[i].face)
+                let f1 = Int(entries[i + 1].face)
+                let dot = simd_dot(triangleNormals[f0], triangleNormals[f1])
+                let edge = Edge(rawKey: key)
+                if dot < angleThreshold {
+                    featureEdges.append((edge, [f0, f1]))
+                } else {
+                    smoothEdges.append((edge, [f0, f1]))
+                }
+            }
+            i = j
         }
 
         return (featureEdges, smoothEdges)
+    }
+
+    /// Merges already-sorted-by-key arrays into one sorted array, via a pairwise merge tree:
+    /// each round merges neighboring pairs (concurrently — the merges in a round are independent
+    /// of each other), halving the array count, until one remains. A 2-way merge is a single O(n)
+    /// linear scan, so the whole tree costs O(n log P) for P input arrays, against O(n log n) for
+    /// sorting the flattened whole — the gap that matters once P (the chunk count) is much smaller
+    /// than n (3x the triangle count).
+    private static func mergeSortedByKey(_ arrays: [[EdgeKeyEntry]]) -> [EdgeKeyEntry] {
+        var round = arrays
+        while round.count > 1 {
+            let pairCount = round.count / 2
+            let storage = ChunkStorage<[EdgeKeyEntry]>(count: pairCount + round.count % 2)
+            DispatchQueue.concurrentPerform(iterations: pairCount) { i in
+                storage[i] = merge2(round[i * 2], round[i * 2 + 1])
+            }
+            if round.count % 2 == 1 {
+                storage[pairCount] = round[round.count - 1]
+            }
+            round = storage.results
+        }
+        return round.first ?? []
+    }
+
+    /// Merges two arrays already sorted by `key` into one sorted array.
+    private static func merge2(_ a: [EdgeKeyEntry], _ b: [EdgeKeyEntry]) -> [EdgeKeyEntry] {
+        var result: [EdgeKeyEntry] = []
+        result.reserveCapacity(a.count + b.count)
+        var i = 0, j = 0
+        while i < a.count && j < b.count {
+            if a[i].key <= b[j].key {
+                result.append(a[i])
+                i += 1
+            } else {
+                result.append(b[j])
+                j += 1
+            }
+        }
+        result.append(contentsOf: a[i...])
+        result.append(contentsOf: b[j...])
+        return result
     }
 
     /// Crease-aware smooth normals, one per triangle corner, indexed by `triangleIndex * 3 + corner`.
@@ -324,6 +388,6 @@ func isDarkColor(_ color: SIMD4<Float>) -> Bool {
     0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z < 0.05
 }
 
-private typealias EdgeMapChunkStorage = ChunkStorage<[Mesh.Edge: [Int]]>
+private typealias EdgeEntryChunkStorage = ChunkStorage<[Mesh.EdgeKeyEntry]>
 private typealias NormalChunkStorage = ChunkStorage<SIMD3<Double>>
-private typealias EdgeClassificationChunkStorage = ChunkStorage<(feature: [(edge: Mesh.Edge, faces: [Int])], smooth: [(edge: Mesh.Edge, faces: [Int])])>
+private typealias AreaVolumeChunkStorage = ChunkStorage<(area: Double, volume: Double)>
