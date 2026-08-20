@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "5C3B9F1E-6C9C-4B77-9C33-9E2D9E3E9A11",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:Cadova Viewer.xcodeproj",
+        "identifier" : "CCAA00012F00000000000001",
+        "name" : "Cadova ViewerTests"
+      }
+    }
+  ],
+  "version" : 1
+}
