@@ -14,7 +14,7 @@ let package = Package(
         .package(url: "https://github.com/tomasf/Nodal", .upToNextMajor(from: "1.0.2")),
         .package(url: "https://github.com/tomasf/Zip.git", from: "2.1.0"),
         .package(url: "https://github.com/tomasf/manifold-swift.git", .upToNextMajor(from: "1.1.0")),
-        .package(url: "https://github.com/tomasf/CadovaLiveLink.git", .upToNextMinor(from: "0.1.0")),
+        .package(url: "https://github.com/tomasf/CadovaLiveLink.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
     ],
     targets: [
