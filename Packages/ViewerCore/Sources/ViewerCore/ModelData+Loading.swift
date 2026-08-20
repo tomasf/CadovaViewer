@@ -211,7 +211,9 @@ extension ModelData {
             chunk.reserveCapacity(triangleChunks[chunkIndex].count * 3)
             for i in triangleChunks[chunkIndex] {
                 let triangle = loadedMesh.mesh.triangles[i]
-                chunk += [UInt32(triangle.v1), UInt32(triangle.v2), UInt32(triangle.v3)]
+                chunk.append(UInt32(triangle.v1))
+                chunk.append(UInt32(triangle.v2))
+                chunk.append(UInt32(triangle.v3))
             }
             indexStorage[chunkIndex] = chunk
         }
