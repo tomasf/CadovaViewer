@@ -17,10 +17,10 @@ extension ModelData {
     /// component per part, so forcing it through that shape would add real complexity for no
     /// benefit — and `componentProducts` below documents that loading path as deliberately
     /// sensitive to how it's structured, not something to casually reshape.
-    public init(liveLink message: LiveLinkMessage, includeEdges: Bool = true) {
+    public init(liveLink message: LiveLinkMessage, includeEdges: Bool = true) async {
         let noInheritance = PartialPropertyReference(groupID: nil, index: nil)
 
-        let parts: [Part] = message.parts.enumerated().map { itemIndex, livePart in
+        let parts: [Part] = await Array(message.parts.enumerated()).asyncMap { itemIndex, livePart in
             let (model, mesh) = Self.threeMFModel(for: livePart)
             let geometryResult = model.geometry(for: mesh, inheritedProperty: noInheritance)
             // Cadova writes every part's mesh in world coordinates (no per-part transform to

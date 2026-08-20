@@ -23,8 +23,8 @@ struct ModelDataLiveLinkTests {
         metadata: .init(title: "Triangle Model")
     )
 
-    @Test func `builds one part per message part with the right geometry stats`() {
-        let modelData = ModelData(liveLink: Self.triangleMessage, includeEdges: false)
+    @Test func `builds one part per message part with the right geometry stats`() async {
+        let modelData = await ModelData(liveLink: Self.triangleMessage, includeEdges: false)
 
         #expect(modelData.parts.count == 1)
         let part = modelData.parts[0]
@@ -44,8 +44,8 @@ struct ModelDataLiveLinkTests {
     /// The whole reason to carry the full semantic instead of an isPrintable bool: a .context part
     /// must come through as .context, not collapse into the same bucket as .visual — that's exactly
     /// the distinction a bool couldn't represent.
-    @Test func `each PartSemantic case round-trips distinctly`() {
-        func semantic(for rawValue: String) -> PartSemantic {
+    @Test func `each PartSemantic case round-trips distinctly`() async {
+        func semantic(for rawValue: String) async -> PartSemantic {
             let part = LiveLinkMessage.Part(
                 id: "p", name: "P", semantic: rawValue,
                 vertices: Self.triangleMessage.parts[0].vertices,
@@ -54,18 +54,18 @@ struct ModelDataLiveLinkTests {
                 defaultMaterialIndex: nil, materials: []
             )
             let message = LiveLinkMessage(buildUUID: UUID(), path: "/tmp/t.3mf", parts: [part], metadata: .init())
-            return ModelData(liveLink: message, includeEdges: false).parts[0].semantic
+            return await ModelData(liveLink: message, includeEdges: false).parts[0].semantic
         }
 
-        #expect(semantic(for: "solid") == .solid)
-        #expect(semantic(for: "context") == .context)
-        #expect(semantic(for: "visual") == .visual)
+        #expect(await semantic(for: "solid") == .solid)
+        #expect(await semantic(for: "context") == .context)
+        #expect(await semantic(for: "visual") == .visual)
         // An unrecognized value falls back to .solid, matching ThreeMF.Item.semantic's own fallback
         // for a missing/unparseable cadova:semantic attribute when loading a file.
-        #expect(semantic(for: "something-a-future-Cadova-invented") == .solid)
+        #expect(await semantic(for: "something-a-future-Cadova-invented") == .solid)
     }
 
-    @Test func `edge nodes are only built for a solid part`() {
+    @Test func `edge nodes are only built for a solid part`() async {
         var visualPart = Self.triangleMessage.parts[0]
         visualPart = LiveLinkMessage.Part(
             id: visualPart.id, name: visualPart.name, semantic: "visual",
@@ -74,7 +74,7 @@ struct ModelDataLiveLinkTests {
             defaultMaterialIndex: visualPart.defaultMaterialIndex, materials: visualPart.materials
         )
         let message = LiveLinkMessage(buildUUID: UUID(), path: Self.triangleMessage.path, parts: [visualPart], metadata: .init())
-        let modelData = ModelData(liveLink: message, includeEdges: true)
+        let modelData = await ModelData(liveLink: message, includeEdges: true)
 
         #expect(modelData.parts[0].semantic == .visual)
         #expect(modelData.parts[0].nodes.sharpEdges == nil)

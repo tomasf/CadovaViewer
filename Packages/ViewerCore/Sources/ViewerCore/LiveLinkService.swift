@@ -35,7 +35,7 @@ public final class LiveLinkService {
             let url = URL(fileURLWithPath: message.path)
             Task { @MainActor in
                 guard let self, self.hasOpenDocument?(url) == true else { return }
-                let modelData = await Task.detached { ModelData(liveLink: message) }.value
+                let modelData = await Task.detached { await ModelData(liveLink: message) }.value
                 self.onModelUpdate?(url, modelData, message.buildUUID)
             }
         }
