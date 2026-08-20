@@ -159,8 +159,9 @@ extension ModelData {
     }
 
     /// Below this many vertices/triangles, chunking overhead isn't worth it for the cap-solid
-    /// flatten below — same reasoning as `ThreeMFModel.chunkedGeometryTriangleThreshold`.
-    private static let chunkedCapThreshold = 20_000
+    /// flatten — same reasoning as `ThreeMFModel.chunkedGeometryTriangleThreshold`. Shared with
+    /// `ModelData.init(liveLink:)`'s matching flatten, since both build the same shape of data.
+    static let chunkedCapThreshold = 20_000
 
     // Builds one component's geometry/edges/cap/stats. Extracted from the `components.asyncMap`
     // closure and kept synchronous on purpose: the work does no `await`s, and inlining it into the
