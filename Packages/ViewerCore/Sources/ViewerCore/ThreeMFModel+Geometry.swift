@@ -1,5 +1,4 @@
 import Foundation
-import Dispatch
 import ThreeMF
 import SceneKit
 import AppKit
@@ -33,24 +32,19 @@ extension ThreeMF.Model {
     /// Builds the (flat) geometry for a mesh, alongside its emission order, dominant colour, and
     /// whether it has any real material (see `MeshGeometryResult`).
     ///
-    /// Above `chunkedGeometryTriangleThreshold`, this splits `mesh.triangles` into contiguous
-    /// chunks processed concurrently via `DispatchQueue.concurrentPerform`, then merges the chunk
-    /// results back in original order — see `ChunkResult` and the merge loop below. This matters
-    /// because per-mesh parallelism (in `ModelData.init(url:)`/`init(liveLink:)`) is only as good
-    /// as the load balance across meshes: a model dominated by a few huge meshes among many small
-    /// ones leaves most cores idle waiting on the big ones, since each mesh previously ran on a
-    /// single core regardless of size.
+    /// This used to also split `mesh.triangles` into chunks processed concurrently via
+    /// `DispatchQueue.concurrentPerform`, on top of the per-mesh `asyncMap` parallelism already in
+    /// `ModelData.init(url:)`/`init(liveLink:)` — the idea being that a model dominated by a few
+    /// huge meshes among many small ones leaves most cores idle waiting on the big ones. That part
+    /// was real in a Debug build, where the per-triangle work itself was slow enough that dispatch
+    /// overhead was negligible by comparison. Benchmarked in Release (what actually ships) against
+    /// a real 1.93M-triangle, 49-part model, it was a net loss — `-O` optimizes the per-triangle
+    /// work down far enough that `concurrentPerform`'s per-chunk dispatch and merge cost more than
+    /// they saved (0.644s chunked vs. 0.569s serial for this whole function). The one-time
+    /// allocation cleanup below (hoisting `defaultColorValues`, individual `.append`s instead of
+    /// literal-then-`append(contentsOf:)`) is the part of that investigation that held up in
+    /// Release and is kept; the chunking is not.
     public func geometry(for mesh: ThreeMF.Mesh, inheritedProperty: PartialPropertyReference) -> MeshGeometryResult {
-        let chunks = mesh.triangles.count.chunkedRanges(threshold: Self.chunkedGeometryTriangleThreshold)
-        let storage = ChunkResultStorage(count: chunks.count)
-        DispatchQueue.concurrentPerform(iterations: chunks.count) { chunkIndex in
-            storage[chunkIndex] = self.chunkResult(
-                for: mesh,
-                triangleRange: chunks[chunkIndex],
-                inheritedProperty: inheritedProperty
-            )
-        }
-
         var colors: [SCNVector4] = []
         var positions: [SCNVector3] = []
         var emittedCorners: [Int32] = []
@@ -59,24 +53,53 @@ extension ThreeMF.Model {
         var colorSumPerMaterial: [PBRMaterial?: SIMD4<Double>] = [:]
         var hasMaterial = false
 
-        // Chunks are merged in order, so the concatenated positions/colors/emittedCorners exactly
-        // match what a single serial pass would have produced — only the per-material index lists
-        // need adjusting, by the running position count before each chunk.
-        for chunk in storage.results {
-            let offset = Int32(positions.count)
-            positions += chunk.positions
-            colors += chunk.colors
-            emittedCorners += chunk.emittedCorners
-            for (key, indices) in chunk.elementPerMaterial {
-                elementPerMaterial[key, default: []].append(contentsOf: indices.map { $0 + offset })
+        positions.reserveCapacity(mesh.triangles.count * 3)
+        colors.reserveCapacity(mesh.triangles.count * 3)
+        emittedCorners.reserveCapacity(mesh.triangles.count * 3)
+
+        // Hoisted out of the loop: `material?.colorValues ?? [.white, .white, .white]` previously
+        // allocated a fresh 3-element array on every triangle that isn't `.vertexColors` (i.e.
+        // every PBR-materialed triangle, not just untextured ones) — a real cost at a few hundred
+        // thousand triangles per mesh.
+        let defaultColorValues: [ThreeMF.Color] = [.white, .white, .white]
+
+        for (triangleIndex, triangle) in mesh.triangles.enumerated() {
+            let material = material(for: triangle, inheritedProperty: inheritedProperty)
+            guard material?.isFullyTransparent != true else {
+                continue
             }
-            for (key, count) in chunk.triangleCountPerMaterial {
-                triangleCountPerMaterial[key, default: 0] += count
+            if material != nil {
+                hasMaterial = true
             }
-            for (key, sum) in chunk.colorSumPerMaterial {
-                colorSumPerMaterial[key, default: .zero] += sum
+
+            let base = Int32(positions.count)
+            positions.append(mesh.vertices[triangle.v1].scnVector3)
+            positions.append(mesh.vertices[triangle.v2].scnVector3)
+            positions.append(mesh.vertices[triangle.v3].scnVector3)
+            let cornerBase = Int32(triangleIndex * 3)
+            emittedCorners.append(cornerBase)
+            emittedCorners.append(cornerBase + 1)
+            emittedCorners.append(cornerBase + 2)
+
+            let materialKey: PBRMaterial?
+            if case .pbr (let pbrMaterial) = material {
+                materialKey = pbrMaterial
+            } else {
+                materialKey = nil
             }
-            hasMaterial = hasMaterial || chunk.hasMaterial
+            // A single dictionary access (one hash + lookup) beats three, even at the cost of one
+            // small array literal to hand to `append(contentsOf:)`.
+            elementPerMaterial[materialKey, default: []].append(contentsOf: [base, base + 1, base + 2])
+            triangleCountPerMaterial[materialKey, default: 0] += 1
+
+            let colorValues = material?.colorValues ?? defaultColorValues
+            var cornerColorSum = SIMD4<Double>.zero
+            for value in colorValues {
+                let c = value.scnVector4
+                colors.append(c)
+                cornerColorSum += SIMD4(c.x, c.y, c.z, c.w)
+            }
+            colorSumPerMaterial[materialKey, default: .zero] += cornerColorSum
         }
 
         let dominantColor = dominantColor(
@@ -111,73 +134,6 @@ extension ThreeMF.Model {
         return MeshGeometryResult(geometry: geometry, emittedCorners: emittedCorners, dominantColor: dominantColor, hasMaterial: hasMaterial)
     }
 
-    /// Below this many triangles, chunking overhead (task setup, dictionary merging) isn't worth
-    /// it — `geometry(for:inheritedProperty:)` just processes the whole mesh as one chunk.
-    private static let chunkedGeometryTriangleThreshold = 20_000
-
-    /// One chunk's worth of `geometry(for:inheritedProperty:)`'s per-triangle processing — same
-    /// logic as a serial pass over `triangleRange`, just scoped to that range so it can run
-    /// alongside other chunks. `cornerBase` uses the triangle's real (global) index, so
-    /// `emittedCorners` needs no adjustment when chunks are concatenated; only `elementPerMaterial`'s
-    /// indices (local to this chunk's `positions`) need offsetting, done by the caller.
-    private func chunkResult(
-        for mesh: ThreeMF.Mesh,
-        triangleRange: Range<Int>,
-        inheritedProperty: PartialPropertyReference
-    ) -> ChunkResult {
-        var result = ChunkResult()
-        result.positions.reserveCapacity(triangleRange.count * 3)
-        result.colors.reserveCapacity(triangleRange.count * 3)
-        result.emittedCorners.reserveCapacity(triangleRange.count * 3)
-
-        // Hoisted out of the loop: `material?.colorValues ?? [.white, .white, .white]` previously
-        // allocated a fresh 3-element array on every triangle that isn't `.vertexColors` (i.e.
-        // every PBR-materialed triangle, not just untextured ones) — a real cost at a few hundred
-        // thousand triangles per mesh.
-        let defaultColorValues: [ThreeMF.Color] = [.white, .white, .white]
-
-        for triangleIndex in triangleRange {
-            let triangle = mesh.triangles[triangleIndex]
-            let material = material(for: triangle, inheritedProperty: inheritedProperty)
-            guard material?.isFullyTransparent != true else {
-                continue
-            }
-            if material != nil {
-                result.hasMaterial = true
-            }
-
-            let base = Int32(result.positions.count)
-            result.positions.append(mesh.vertices[triangle.v1].scnVector3)
-            result.positions.append(mesh.vertices[triangle.v2].scnVector3)
-            result.positions.append(mesh.vertices[triangle.v3].scnVector3)
-            let cornerBase = Int32(triangleIndex * 3)
-            result.emittedCorners.append(cornerBase)
-            result.emittedCorners.append(cornerBase + 1)
-            result.emittedCorners.append(cornerBase + 2)
-
-            let materialKey: PBRMaterial?
-            if case .pbr (let pbrMaterial) = material {
-                materialKey = pbrMaterial
-            } else {
-                materialKey = nil
-            }
-            // A single dictionary access (one hash + lookup) beats three, even at the cost of one
-            // small array literal to hand to `append(contentsOf:)`.
-            result.elementPerMaterial[materialKey, default: []].append(contentsOf: [base, base + 1, base + 2])
-            result.triangleCountPerMaterial[materialKey, default: 0] += 1
-
-            let colorValues = material?.colorValues ?? defaultColorValues
-            var cornerColorSum = SIMD4<Double>.zero
-            for value in colorValues {
-                let c = value.scnVector4
-                result.colors.append(c)
-                cornerColorSum += SIMD4(c.x, c.y, c.z, c.w)
-            }
-            result.colorSumPerMaterial[materialKey, default: .zero] += cornerColorSum
-        }
-        return result
-    }
-
     /// The colour of whichever material group covers the most triangles, as linear RGBA. PBR groups
     /// use their diffuse colour; the vertex-colour group (`nil` key) averages its corner colours.
     private func dominantColor(
@@ -205,8 +161,7 @@ extension ThreeMF.Model {
     /// edges by their neighbouring faces rather than by a single colour for the whole part.
     public func explicitTriangleColors(for mesh: ThreeMF.Mesh) -> [SIMD4<Float>?] {
         let noInheritance = PartialPropertyReference(groupID: nil, index: nil)
-
-        func color(for triangle: ThreeMF.Mesh.Triangle) -> SIMD4<Float>? {
+        return mesh.triangles.map { triangle in
             switch material(for: triangle, inheritedProperty: noInheritance) {
             case .pbr(let pbrMaterial):
                 let c = pbrMaterial.diffuse.scnVector4
@@ -223,31 +178,9 @@ extension ThreeMF.Model {
                 return nil
             }
         }
-
-        let chunks = mesh.triangles.count.chunkedRanges(threshold: Self.chunkedGeometryTriangleThreshold)
-        let storage = TriangleColorChunkStorage(count: chunks.count)
-        DispatchQueue.concurrentPerform(iterations: chunks.count) { chunkIndex in
-            storage[chunkIndex] = chunks[chunkIndex].map { color(for: mesh.triangles[$0]) }
-        }
-        return storage.results.flatMap { $0 }
     }
 }
 
 public enum ThreeMFError: Swift.Error {
     case missingObject
 }
-
-/// One chunk's partial output from `ThreeMF.Model.geometry(for:inheritedProperty:)`, merged with
-/// its siblings (in chunk order) into the final `MeshGeometryResult`.
-private struct ChunkResult {
-    var positions: [SCNVector3] = []
-    var colors: [SCNVector4] = []
-    var emittedCorners: [Int32] = []
-    var elementPerMaterial: [PBRMaterial?: [Int32]] = [:]
-    var triangleCountPerMaterial: [PBRMaterial?: Int] = [:]
-    var colorSumPerMaterial: [PBRMaterial?: SIMD4<Double>] = [:]
-    var hasMaterial = false
-}
-
-private typealias ChunkResultStorage = ChunkStorage<ChunkResult>
-private typealias TriangleColorChunkStorage = ChunkStorage<[SIMD4<Float>?]>
