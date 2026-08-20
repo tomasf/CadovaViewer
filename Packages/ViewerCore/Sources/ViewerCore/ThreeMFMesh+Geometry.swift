@@ -1,4 +1,5 @@
 import Foundation
+import Dispatch
 import ThreeMF
 import SceneKit
 import AppKit
@@ -90,16 +91,45 @@ extension Mesh {
         }
     }
 
+    /// Below this many triangles/edges, chunking overhead isn't worth it — each phase below just
+    /// runs as a single chunk, equivalent to a plain serial pass.
+    private static let chunkedEdgeThreshold = 20_000
+
+    /// Builds the edge→bordering-triangle adjacency map and classifies each edge as a sharp
+    /// feature or a smooth one, both in chunked phases (see `Int.chunkedRanges(threshold:)`):
+    ///
+    /// 1. Each chunk of triangles builds its own partial adjacency map; the maps are merged after.
+    ///    This is order-independent — an edge ends up with the same *set* of bordering triangle
+    ///    indices regardless of merge order, and classification below only checks `faces.count`
+    ///    and, for count 2, a symmetric dot product, so which face lands at `faces[0]` vs
+    ///    `faces[1]` never changes the result.
+    /// 2. Each triangle's face normal is computed independently — no shared state at all.
+    /// 3. Each chunk of adjacency-map entries is classified independently into feature/smooth
+    ///    lists; the lists are concatenated after. Order-independent for the same reason as (1):
+    ///    `EdgeLines`/`edgeLines(_:)` below treat these as an unordered set of line segments.
     private func extractEdgeSegments() -> (sharp: [(edge: Edge, faces: [Int])], smooth: [(edge: Edge, faces: [Int])]) {
+        let triangleChunks = triangles.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
+        let edgeMapStorage = EdgeMapChunkStorage(count: triangleChunks.count)
+        DispatchQueue.concurrentPerform(iterations: triangleChunks.count) { chunkIndex in
+            var partial: [Edge: [Int]] = [:]
+            for faceIndex in triangleChunks[chunkIndex] {
+                let triangle = triangles[faceIndex]
+                let edges = [
+                    Edge(triangle.v1, triangle.v2),
+                    Edge(triangle.v2, triangle.v3),
+                    Edge(triangle.v3, triangle.v1)
+                ]
+                for edge in edges {
+                    partial[edge, default: []].append(faceIndex)
+                }
+            }
+            edgeMapStorage[chunkIndex] = partial
+        }
+
         var edgeToTriangles: [Edge: [Int]] = [:]
-        for (faceIndex, triangle) in triangles.enumerated() {
-            let edges = [
-                Edge(triangle.v1, triangle.v2),
-                Edge(triangle.v2, triangle.v3),
-                Edge(triangle.v3, triangle.v1)
-            ]
-            for edge in edges {
-                edgeToTriangles[edge, default: []].append(faceIndex)
+        for partial in edgeMapStorage.results {
+            for (edge, faces) in partial {
+                edgeToTriangles[edge, default: []].append(contentsOf: faces)
             }
         }
 
@@ -112,27 +142,42 @@ extension Mesh {
             return simd_normalize(simd_cross(ab, ac))
         }
 
-        let triangleNormals = triangles.map { normal(of: $0) }
+        let normalStorage = NormalChunkStorage(count: triangles.count)
+        DispatchQueue.concurrentPerform(iterations: triangles.count) { i in
+            normalStorage[i] = normal(of: triangles[i])
+        }
+        let triangleNormals = normalStorage.results
 
         let maxSmoothAngleDegrees = 30.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
-        var featureEdges: [(edge: Edge, faces: [Int])] = []
-        var smoothEdges: [(edge: Edge, faces: [Int])] = []
 
-        for (edge, faces) in edgeToTriangles {
-            if faces.count == 1 {
-                smoothEdges.append((edge, faces))
-
-            } else if faces.count == 2 {
-                let n1 = triangleNormals[faces[0]]
-                let n2 = triangleNormals[faces[1]]
-                let dot = simd_dot(n1, n2)
-                if dot < angleThreshold {
-                    featureEdges.append((edge, faces))
-                } else {
-                    smoothEdges.append((edge, faces))
+        let entries = Array(edgeToTriangles)
+        let entryChunks = entries.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
+        let classificationStorage = EdgeClassificationChunkStorage(count: entryChunks.count)
+        DispatchQueue.concurrentPerform(iterations: entryChunks.count) { chunkIndex in
+            var feature: [(edge: Edge, faces: [Int])] = []
+            var smooth: [(edge: Edge, faces: [Int])] = []
+            for i in entryChunks[chunkIndex] {
+                let (edge, faces) = entries[i]
+                if faces.count == 1 {
+                    smooth.append((edge, faces))
+                } else if faces.count == 2 {
+                    let dot = simd_dot(triangleNormals[faces[0]], triangleNormals[faces[1]])
+                    if dot < angleThreshold {
+                        feature.append((edge, faces))
+                    } else {
+                        smooth.append((edge, faces))
+                    }
                 }
             }
+            classificationStorage[chunkIndex] = (feature, smooth)
+        }
+
+        var featureEdges: [(edge: Edge, faces: [Int])] = []
+        var smoothEdges: [(edge: Edge, faces: [Int])] = []
+        for (feature, smooth) in classificationStorage.results {
+            featureEdges += feature
+            smoothEdges += smooth
         }
 
         return (featureEdges, smoothEdges)
@@ -278,3 +323,7 @@ public struct EdgeLines {
 func isDarkColor(_ color: SIMD4<Float>) -> Bool {
     0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z < 0.05
 }
+
+private typealias EdgeMapChunkStorage = ChunkStorage<[Mesh.Edge: [Int]]>
+private typealias NormalChunkStorage = ChunkStorage<SIMD3<Double>>
+private typealias EdgeClassificationChunkStorage = ChunkStorage<(feature: [(edge: Mesh.Edge, faces: [Int])], smooth: [(edge: Mesh.Edge, faces: [Int])])>
