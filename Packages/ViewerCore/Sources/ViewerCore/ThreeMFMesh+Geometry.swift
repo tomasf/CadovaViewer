@@ -215,11 +215,15 @@ extension Mesh {
             return simd_normalize(simd_cross(ab, ac))
         }
 
-        let normalStorage = NormalChunkStorage(count: triangles.count)
-        DispatchQueue.concurrentPerform(iterations: triangles.count) { i in
-            normalStorage[i] = normal(of: triangles[i])
+        // One `concurrentPerform` iteration per triangle (rather than per chunk, like every other
+        // phase here) turned out to be a real cost on its own: hundreds of thousands of GCD
+        // dispatch calls for a few FLOPs of actual work each, dispatch overhead dwarfing the math.
+        let normalChunks = triangles.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
+        let normalStorage = NormalChunkStorage(count: normalChunks.count)
+        DispatchQueue.concurrentPerform(iterations: normalChunks.count) { chunkIndex in
+            normalStorage[chunkIndex] = normalChunks[chunkIndex].map { normal(of: triangles[$0]) }
         }
-        let triangleNormals = normalStorage.results
+        let triangleNormals = normalStorage.results.flatMap { $0 }
 
         let maxSmoothAngleDegrees = 30.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
@@ -435,6 +439,6 @@ func isDarkColor(_ color: SIMD4<Float>) -> Bool {
 }
 
 private typealias EdgeEntryChunkStorage = ChunkStorage<[Mesh.EdgeKeyEntry]>
-private typealias NormalChunkStorage = ChunkStorage<SIMD3<Double>>
+private typealias NormalChunkStorage = ChunkStorage<[SIMD3<Double>]>
 private typealias AreaVolumeChunkStorage = ChunkStorage<(area: Double, volume: Double)>
 private typealias EdgeLineChunkStorage = ChunkStorage<([SCNVector3], [Bool?])>
