@@ -1,8 +1,8 @@
 import Foundation
 import CadovaLiveLinkCore
-import CadovaLiveLinkServer
+import CadovaLiveLinkHost
 
-/// Owns the app's single `LiveLinkServer`, started once at launch and stopped at termination.
+/// Owns the app's single `LiveLinkHost`, started once at launch and stopped at termination.
 /// Doesn't know about `NSDocument`/`NSDocumentController` itself — the app wires `hasOpenDocument`
 /// and `onModelUpdate` to look up an open document for a given path. Deliberately keeps
 /// `CadovaLiveLink` (the wire protocol) out of both signatures, so app-target code never needs its
@@ -20,7 +20,7 @@ public final class LiveLinkService {
     /// already converted to `ModelData`. Set this before calling `start()`.
     public var onModelUpdate: (@MainActor (_ path: URL, _ modelData: ModelData, _ buildUUID: UUID) -> Void)?
 
-    private var server: LiveLinkServer?
+    private var server: LiveLinkHost?
 
     private init() {}
 
@@ -31,7 +31,7 @@ public final class LiveLinkService {
     public func start() {
         guard server == nil else { return }
 
-        let server = LiveLinkServer { [weak self] message in
+        let server = LiveLinkHost { [weak self] message in
             let url = URL(fileURLWithPath: message.path)
             Task { @MainActor in
                 guard let self, self.hasOpenDocument?(url) == true else { return }

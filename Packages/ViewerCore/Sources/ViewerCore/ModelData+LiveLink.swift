@@ -125,7 +125,7 @@ extension ModelData {
         self = Self(
             rootNode: container,
             parts: parts,
-            metadata: [],
+            metadata: message.metadata.threeMFMetadata,
             boundingBoxSize: boundingBoxSize,
             hasAnyMaterials: parts.contains { $0.hasMaterial }
         )
@@ -196,5 +196,20 @@ extension ModelData {
 
         let model = ThreeMF.Model(unit: .millimeter, resources: resources)
         return (model, mesh)
+    }
+}
+
+/// Mirrors Cadova's `Metadata.threeMFMetadata` on the sending side, so a LiveLink push's
+/// metadata maps onto the same `ThreeMF.Metadata.Name` cases a full file load would produce.
+fileprivate extension LiveLinkMessage.Metadata {
+    var threeMFMetadata: [ThreeMF.Metadata] {
+        [
+            title.map { .init(name: .title, value: $0) },
+            description.map { .init(name: .description, value: $0) },
+            author.map { .init(name: .designer, value: $0) },
+            license.map { .init(name: .licenseTerms, value: $0) },
+            date.map { .init(name: .creationDate, value: $0) },
+            application.map { .init(name: .application, value: $0) }
+        ].compactMap { $0 }
     }
 }

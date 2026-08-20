@@ -28,8 +28,8 @@ let package = Package(
                 // Cadova Viewer never needs the rest of Cadova (Manifold/C++, geometry engine) —
                 // just the LiveLink wire format and listener, shared with Cadova itself via this
                 // package. CadovaLiveLinkCore isn't its own product, but is visible transitively
-                // through CadovaLiveLinkServer.
-                .product(name: "CadovaLiveLinkServer", package: "CadovaLiveLink"),
+                // through CadovaLiveLinkHost.
+                .product(name: "CadovaLiveLinkHost", package: "CadovaLiveLink"),
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
@@ -51,7 +51,7 @@ let package = Package(
                 "ViewerCore",
                 .product(name: "ThreeMF", package: "ThreeMF"),
                 .product(name: "Manifold", package: "manifold-swift"),
-                .product(name: "CadovaLiveLinkServer", package: "CadovaLiveLink"),
+                .product(name: "CadovaLiveLinkHost", package: "CadovaLiveLink"),
             ],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)

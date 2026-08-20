@@ -18,7 +18,8 @@ struct ModelDataLiveLinkTests {
                 defaultMaterialIndex: 0,
                 materials: [.init(color: .init(red: 255, green: 0, blue: 0, alpha: 255))]
             )
-        ]
+        ],
+        metadata: .init(title: "Triangle Model")
     )
 
     @Test func `builds one part per message part with the right geometry stats`() {
@@ -35,6 +36,7 @@ struct ModelDataLiveLinkTests {
         #expect(part.dominantColor != nil)
         #expect(modelData.rootNode.childNodes.count == 1)
         #expect(modelData.hasAnyMaterials)
+        #expect(modelData.metadata.first { $0.name == .title }?.value == "Triangle Model")
     }
 
     /// The whole reason to carry the full semantic instead of an isPrintable bool: a .context part
@@ -49,7 +51,7 @@ struct ModelDataLiveLinkTests {
                 triangleMaterialIndices: Self.triangleMessage.parts[0].triangleMaterialIndices,
                 defaultMaterialIndex: nil, materials: []
             )
-            let message = LiveLinkMessage(buildUUID: UUID(), path: "/tmp/t.3mf", parts: [part])
+            let message = LiveLinkMessage(buildUUID: UUID(), path: "/tmp/t.3mf", parts: [part], metadata: .init())
             return ModelData(liveLink: message, includeEdges: false).parts[0].semantic
         }
 
@@ -69,7 +71,7 @@ struct ModelDataLiveLinkTests {
             triangleMaterialIndices: visualPart.triangleMaterialIndices,
             defaultMaterialIndex: visualPart.defaultMaterialIndex, materials: visualPart.materials
         )
-        let message = LiveLinkMessage(buildUUID: UUID(), path: Self.triangleMessage.path, parts: [visualPart])
+        let message = LiveLinkMessage(buildUUID: UUID(), path: Self.triangleMessage.path, parts: [visualPart], metadata: .init())
         let modelData = ModelData(liveLink: message, includeEdges: true)
 
         #expect(modelData.parts[0].semantic == .visual)
