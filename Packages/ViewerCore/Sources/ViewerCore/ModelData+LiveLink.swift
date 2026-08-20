@@ -1,5 +1,4 @@
 import Foundation
-import Dispatch
 import ThreeMF
 import SceneKit
 import CadovaLiveLinkCore
@@ -38,38 +37,20 @@ extension ModelData {
 
             let stats = mesh.statistics(transform: worldTransform)
 
-            // World-space indexed mesh for the cross-section cap. Chunked the same way as the
-            // matching loop in ModelData(url:)'s componentProducts — see that one for why: no
-            // vertices are dropped and indices reference vertex indices directly, so concatenating
-            // chunks in order needs no offsetting, and individual appends avoid a fresh small array
-            // allocation per vertex/triangle.
-            let vertexChunks = mesh.vertices.count.chunkedRanges(threshold: Self.chunkedCapThreshold)
-            let vertexStorage = ChunkStorage<[SIMD3<Float>]>(count: vertexChunks.count)
-            DispatchQueue.concurrentPerform(iterations: vertexChunks.count) { chunkIndex in
-                var chunk: [SIMD3<Float>] = []
-                chunk.reserveCapacity(vertexChunks[chunkIndex].count)
-                for i in vertexChunks[chunkIndex] {
-                    let world = worldTransform * SIMD4(mesh.vertices[i].simd, 1)
-                    chunk.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
-                }
-                vertexStorage[chunkIndex] = chunk
+            // World-space indexed mesh for the cross-section cap.
+            var capVertices: [SIMD3<Float>] = []
+            capVertices.reserveCapacity(mesh.vertices.count)
+            for vertex in mesh.vertices {
+                let world = worldTransform * SIMD4(vertex.simd, 1)
+                capVertices.append(SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)))
             }
-            let capVertices = vertexStorage.results.flatMap { $0 }
-
-            let triangleChunks = mesh.triangles.count.chunkedRanges(threshold: Self.chunkedCapThreshold)
-            let indexStorage = ChunkStorage<[UInt32]>(count: triangleChunks.count)
-            DispatchQueue.concurrentPerform(iterations: triangleChunks.count) { chunkIndex in
-                var chunk: [UInt32] = []
-                chunk.reserveCapacity(triangleChunks[chunkIndex].count * 3)
-                for i in triangleChunks[chunkIndex] {
-                    let triangle = mesh.triangles[i]
-                    chunk.append(UInt32(triangle.v1))
-                    chunk.append(UInt32(triangle.v2))
-                    chunk.append(UInt32(triangle.v3))
-                }
-                indexStorage[chunkIndex] = chunk
+            var capIndices: [UInt32] = []
+            capIndices.reserveCapacity(mesh.triangles.count * 3)
+            for triangle in mesh.triangles {
+                capIndices.append(UInt32(triangle.v1))
+                capIndices.append(UInt32(triangle.v2))
+                capIndices.append(UInt32(triangle.v3))
             }
-            let capIndices = indexStorage.results.flatMap { $0 }
             let capSolid = capVertices.isEmpty ? nil : PartSolid(vertices: capVertices, indices: capIndices)
 
             var nodes = Part.Nodes()
