@@ -59,7 +59,7 @@ extension Mesh {
         let positions: [SCNVector3] = vertices.map(\.scnVector3)
         let (sharpEdges, smoothEdges) = extractEdgeSegments()
 
-        func edgeLines(_ edges: [(edge: Edge, faces: [Int])]) -> EdgeLines {
+        func edgeLines(_ edges: [(edge: Edge, faces: BorderingFaces)]) -> EdgeLines {
             guard !edges.isEmpty else { return .empty }
 
             let chunks = edges.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
@@ -79,18 +79,19 @@ extension Mesh {
                     // Only commit to a known verdict when every bordering face has an explicit
                     // colour of its own; a face relying on the part's inherited colour makes the
                     // edge's true colour unknowable from the mesh alone, so it's left for the
-                    // part-level fallback. Written as a plain loop rather than `faces.compactMap {
-                    // triangleColors[$0] }` to avoid allocating a throwaway array per edge —
-                    // `faces` has at most 2 elements, but there can be well over a million edges.
+                    // part-level fallback.
                     var allExplicit = true
                     var anyDark = false
-                    for face in faces {
-                        guard let color = triangleColors[face] else {
+                    if let color = triangleColors[Int(faces.first)] {
+                        if isDarkColor(color) { anyDark = true }
+                    } else {
+                        allExplicit = false
+                    }
+                    if allExplicit, let second = faces.second {
+                        if let color = triangleColors[Int(second)] {
+                            if isDarkColor(color) { anyDark = true }
+                        } else {
                             allExplicit = false
-                            break
-                        }
-                        if isDarkColor(color) {
-                            anyDark = true
                         }
                     }
                     needsLightColor.append(allExplicit ? anyDark : nil)
@@ -135,6 +136,24 @@ extension Mesh {
         let face: Int32
     }
 
+    /// An edge's 1 or 2 bordering triangles — a fixed pair rather than `[Int]`, since a non-manifold
+    /// edge (3+) is dropped before this is ever constructed, and there can be well over a million
+    /// edges in a large mesh: an `[Int]` per edge would mean that many avoidable heap allocations.
+    fileprivate struct BorderingFaces {
+        let first: Int32
+        let second: Int32?
+
+        init(_ first: Int32) {
+            self.first = first
+            self.second = nil
+        }
+
+        init(_ first: Int32, _ second: Int32) {
+            self.first = first
+            self.second = second
+        }
+    }
+
     /// Below this many triangles/edges, chunking overhead isn't worth it — each phase below just
     /// runs as a single chunk, equivalent to a plain serial pass.
     private static let chunkedEdgeThreshold = 20_000
@@ -156,7 +175,7 @@ extension Mesh {
     ///    for a 2-triangle run, a symmetric dot product against `triangleNormals` (computed
     ///    independently in parallel, as before) — so which face lands first within a run never
     ///    affects the result.
-    private func extractEdgeSegments() -> (sharp: [(edge: Edge, faces: [Int])], smooth: [(edge: Edge, faces: [Int])]) {
+    private func extractEdgeSegments() -> (sharp: [(edge: Edge, faces: BorderingFaces)], smooth: [(edge: Edge, faces: BorderingFaces)]) {
         let triangleChunks = triangles.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
         let entryStorage = EdgeEntryChunkStorage(count: triangleChunks.count)
         DispatchQueue.concurrentPerform(iterations: triangleChunks.count) { chunkIndex in
@@ -205,8 +224,8 @@ extension Mesh {
         let maxSmoothAngleDegrees = 30.0
         let angleThreshold = cos(maxSmoothAngleDegrees * .pi / 180.0)
 
-        var featureEdges: [(edge: Edge, faces: [Int])] = []
-        var smoothEdges: [(edge: Edge, faces: [Int])] = []
+        var featureEdges: [(edge: Edge, faces: BorderingFaces)] = []
+        var smoothEdges: [(edge: Edge, faces: BorderingFaces)] = []
 
         var i = 0
         while i < entries.count {
@@ -215,16 +234,16 @@ extension Mesh {
             while j < entries.count && entries[j].key == key { j += 1 }
 
             if j - i == 1 {
-                smoothEdges.append((Edge(rawKey: key), [Int(entries[i].face)]))
+                smoothEdges.append((Edge(rawKey: key), BorderingFaces(entries[i].face)))
             } else if j - i == 2 {
-                let f0 = Int(entries[i].face)
-                let f1 = Int(entries[i + 1].face)
-                let dot = simd_dot(triangleNormals[f0], triangleNormals[f1])
+                let f0 = entries[i].face
+                let f1 = entries[i + 1].face
+                let dot = simd_dot(triangleNormals[Int(f0)], triangleNormals[Int(f1)])
                 let edge = Edge(rawKey: key)
                 if dot < angleThreshold {
-                    featureEdges.append((edge, [f0, f1]))
+                    featureEdges.append((edge, BorderingFaces(f0, f1)))
                 } else {
-                    smoothEdges.append((edge, [f0, f1]))
+                    smoothEdges.append((edge, BorderingFaces(f0, f1)))
                 }
             }
             i = j
