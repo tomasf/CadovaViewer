@@ -128,6 +128,12 @@ extension ThreeMF.Model {
         result.colors.reserveCapacity(triangleRange.count * 3)
         result.emittedCorners.reserveCapacity(triangleRange.count * 3)
 
+        // Hoisted out of the loop: `material?.colorValues ?? [.white, .white, .white]` previously
+        // allocated a fresh 3-element array on every triangle that isn't `.vertexColors` (i.e.
+        // every PBR-materialed triangle, not just untextured ones) — a real cost at a few hundred
+        // thousand triangles per mesh.
+        let defaultColorValues: [ThreeMF.Color] = [.white, .white, .white]
+
         for triangleIndex in triangleRange {
             let triangle = mesh.triangles[triangleIndex]
             let material = material(for: triangle, inheritedProperty: inheritedProperty)
@@ -138,14 +144,14 @@ extension ThreeMF.Model {
                 result.hasMaterial = true
             }
 
-            let vertexIndices = (result.positions.count..<result.positions.count + 3).map(Int32.init)
-            result.positions += [
-                mesh.vertices[triangle.v1].scnVector3,
-                mesh.vertices[triangle.v2].scnVector3,
-                mesh.vertices[triangle.v3].scnVector3
-            ]
+            let base = Int32(result.positions.count)
+            result.positions.append(mesh.vertices[triangle.v1].scnVector3)
+            result.positions.append(mesh.vertices[triangle.v2].scnVector3)
+            result.positions.append(mesh.vertices[triangle.v3].scnVector3)
             let cornerBase = Int32(triangleIndex * 3)
-            result.emittedCorners += [cornerBase, cornerBase + 1, cornerBase + 2]
+            result.emittedCorners.append(cornerBase)
+            result.emittedCorners.append(cornerBase + 1)
+            result.emittedCorners.append(cornerBase + 2)
 
             let materialKey: PBRMaterial?
             if case .pbr (let pbrMaterial) = material {
@@ -153,13 +159,19 @@ extension ThreeMF.Model {
             } else {
                 materialKey = nil
             }
-            result.elementPerMaterial[materialKey, default: []].append(contentsOf: vertexIndices)
+            // A single dictionary access (one hash + lookup) beats three, even at the cost of one
+            // small array literal to hand to `append(contentsOf:)`.
+            result.elementPerMaterial[materialKey, default: []].append(contentsOf: [base, base + 1, base + 2])
             result.triangleCountPerMaterial[materialKey, default: 0] += 1
 
-            let colorValues = material?.colorValues ?? [.white, .white, .white]
-            let cornerColors = colorValues.map(\.scnVector4)
-            result.colors += cornerColors
-            result.colorSumPerMaterial[materialKey, default: .zero] += cornerColors.reduce(.zero) { $0 + SIMD4($1.x, $1.y, $1.z, $1.w) }
+            let colorValues = material?.colorValues ?? defaultColorValues
+            var cornerColorSum = SIMD4<Double>.zero
+            for value in colorValues {
+                let c = value.scnVector4
+                result.colors.append(c)
+                cornerColorSum += SIMD4(c.x, c.y, c.z, c.w)
+            }
+            result.colorSumPerMaterial[materialKey, default: .zero] += cornerColorSum
         }
         return result
     }
@@ -191,7 +203,8 @@ extension ThreeMF.Model {
     /// edges by their neighbouring faces rather than by a single colour for the whole part.
     public func explicitTriangleColors(for mesh: ThreeMF.Mesh) -> [SIMD4<Float>?] {
         let noInheritance = PartialPropertyReference(groupID: nil, index: nil)
-        return mesh.triangles.map { triangle in
+
+        func color(for triangle: ThreeMF.Mesh.Triangle) -> SIMD4<Float>? {
             switch material(for: triangle, inheritedProperty: noInheritance) {
             case .pbr(let pbrMaterial):
                 let c = pbrMaterial.diffuse.scnVector4
@@ -208,6 +221,13 @@ extension ThreeMF.Model {
                 return nil
             }
         }
+
+        let chunks = mesh.triangles.count.chunkedRanges(threshold: Self.chunkedGeometryTriangleThreshold)
+        let storage = TriangleColorChunkStorage(count: chunks.count)
+        DispatchQueue.concurrentPerform(iterations: chunks.count) { chunkIndex in
+            storage[chunkIndex] = chunks[chunkIndex].map { color(for: mesh.triangles[$0]) }
+        }
+        return storage.results.flatMap { $0 }
     }
 }
 
@@ -228,3 +248,4 @@ private struct ChunkResult {
 }
 
 private typealias ChunkResultStorage = ChunkStorage<ChunkResult>
+private typealias TriangleColorChunkStorage = ChunkStorage<[SIMD4<Float>?]>

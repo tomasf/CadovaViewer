@@ -143,13 +143,21 @@ extension Mesh {
         DispatchQueue.concurrentPerform(iterations: triangleChunks.count) { chunkIndex in
             var entries: [EdgeKeyEntry] = []
             entries.reserveCapacity(triangleChunks[chunkIndex].count * 3)
+            // Edge pairs are appended individually rather than looped over a `[(Int, Int)]`
+            // literal — that literal is a fresh heap-allocated array on every triangle, real
+            // overhead at a few hundred thousand triangles per mesh (see the geometry-construction
+            // allocation cleanup this mirrors).
+            func appendEdge(_ a: Int, _ b: Int, face: Int32, to entries: inout [EdgeKeyEntry]) {
+                let lo = UInt64(Swift.min(a, b))
+                let hi = UInt64(Swift.max(a, b))
+                entries.append(EdgeKeyEntry(key: (lo << 32) | hi, face: face))
+            }
             for faceIndex in triangleChunks[chunkIndex] {
                 let triangle = triangles[faceIndex]
-                for (a, b) in [(triangle.v1, triangle.v2), (triangle.v2, triangle.v3), (triangle.v3, triangle.v1)] {
-                    let lo = UInt64(Swift.min(a, b))
-                    let hi = UInt64(Swift.max(a, b))
-                    entries.append(EdgeKeyEntry(key: (lo << 32) | hi, face: Int32(faceIndex)))
-                }
+                let face = Int32(faceIndex)
+                appendEdge(triangle.v1, triangle.v2, face: face, to: &entries)
+                appendEdge(triangle.v2, triangle.v3, face: face, to: &entries)
+                appendEdge(triangle.v3, triangle.v1, face: face, to: &entries)
             }
             // Sorted here, per chunk, while chunks still run concurrently — a plain
             // `entries.sort()` over the flattened whole (~3x the triangle count) turned out to
