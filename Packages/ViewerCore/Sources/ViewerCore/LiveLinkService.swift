@@ -16,6 +16,12 @@ public final class LiveLinkService {
     /// size, which is wasted work for a push nothing will ever use. Set this before calling `start()`.
     public var hasOpenDocument: (@MainActor (_ path: URL) -> Bool)?
 
+    /// Called on the main actor once `hasOpenDocument` says yes, before the (potentially multi-
+    /// second, for a large model) `ModelData` conversion begins — mirrors the file-loading path
+    /// showing its loading indicator before parsing starts, not just once new geometry is ready.
+    /// Set this before calling `start()`.
+    public var onLoadingStarted: (@MainActor (_ path: URL) -> Void)?
+
     /// Called on the main actor for every message received for a path `hasOpenDocument` said yes to,
     /// already converted to `ModelData`. Set this before calling `start()`.
     public var onModelUpdate: (@MainActor (_ path: URL, _ modelData: ModelData, _ buildUUID: UUID) -> Void)?
@@ -35,6 +41,7 @@ public final class LiveLinkService {
             let url = URL(fileURLWithPath: message.path)
             Task { @MainActor in
                 guard let self, self.hasOpenDocument?(url) == true else { return }
+                self.onLoadingStarted?(url)
                 let modelData = await Task.detached { await ModelData(liveLink: message) }.value
                 self.onModelUpdate?(url, modelData, message.buildUUID)
             }

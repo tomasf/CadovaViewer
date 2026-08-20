@@ -10,6 +10,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         LiveLinkService.shared.hasOpenDocument = { url in
             NSDocumentController.shared.document(for: url) is Document
         }
+        LiveLinkService.shared.onLoadingStarted = { url in
+            guard let document = NSDocumentController.shared.document(for: url) as? Document else { return }
+            document.beginLiveLinkLoad()
+        }
         LiveLinkService.shared.onModelUpdate = { url, modelData, buildUUID in
             guard let document = NSDocumentController.shared.document(for: url) as? Document else { return }
             document.applyLiveLinkUpdate(modelData: modelData, buildUUID: buildUUID)

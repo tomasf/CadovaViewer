@@ -168,6 +168,15 @@ class Document: NSDocument, NSWindowDelegate {
         }
     }
 
+    /// Shows the loading indicator for an incoming LiveLink push, the same way `startLoadingModel`
+    /// does for the file-loading path — called before `ModelData(liveLink:)` starts building (see
+    /// `LiveLinkService.onLoadingStarted`), since that conversion is proportional to mesh size and
+    /// can take multiple seconds for a large model, not an instant swap.
+    @MainActor
+    func beginLiveLinkLoad() {
+        sendLoadingStatus(true)
+    }
+
     /// Applies a LiveLink push directly, without touching disk. Used when this document's file is
     /// the target of an incoming push — see `LiveLinkService` and `AppDelegate`, which look up the
     /// open `Document` for the push's path and call this. Cadova still always writes the file to
