@@ -60,27 +60,46 @@ extension Mesh {
         let (sharpEdges, smoothEdges) = extractEdgeSegments()
 
         func edgeLines(_ edges: [(edge: Edge, faces: [Int])]) -> EdgeLines {
-            var linePositions: [SCNVector3] = []
-            linePositions.reserveCapacity(edges.count * 2)
-            var needsLightColor: [Bool?] = []
-            needsLightColor.reserveCapacity(edges.count)
+            guard !edges.isEmpty else { return .empty }
 
-            for (edge, faces) in edges {
-                linePositions.append(positions[edge.v1])
-                linePositions.append(positions[edge.v2])
+            let chunks = edges.count.chunkedRanges(threshold: Self.chunkedEdgeThreshold)
+            let storage = EdgeLineChunkStorage(count: chunks.count)
+            DispatchQueue.concurrentPerform(iterations: chunks.count) { chunkIndex in
+                let range = chunks[chunkIndex]
+                var linePositions: [SCNVector3] = []
+                linePositions.reserveCapacity(range.count * 2)
+                var needsLightColor: [Bool?] = []
+                needsLightColor.reserveCapacity(range.count)
 
-                // Only commit to a known verdict when every bordering face has an explicit colour
-                // of its own; a face relying on the part's inherited colour makes the edge's true
-                // colour unknowable from the mesh alone, so it's left for the part-level fallback.
-                let neighboringColors = faces.compactMap { triangleColors[$0] }
-                if !neighboringColors.isEmpty && neighboringColors.count == faces.count {
-                    needsLightColor.append(neighboringColors.contains { isDarkColor($0) })
-                } else {
-                    needsLightColor.append(nil)
+                for i in range {
+                    let (edge, faces) = edges[i]
+                    linePositions.append(positions[edge.v1])
+                    linePositions.append(positions[edge.v2])
+
+                    // Only commit to a known verdict when every bordering face has an explicit
+                    // colour of its own; a face relying on the part's inherited colour makes the
+                    // edge's true colour unknowable from the mesh alone, so it's left for the
+                    // part-level fallback. Written as a plain loop rather than `faces.compactMap {
+                    // triangleColors[$0] }` to avoid allocating a throwaway array per edge —
+                    // `faces` has at most 2 elements, but there can be well over a million edges.
+                    var allExplicit = true
+                    var anyDark = false
+                    for face in faces {
+                        guard let color = triangleColors[face] else {
+                            allExplicit = false
+                            break
+                        }
+                        if isDarkColor(color) {
+                            anyDark = true
+                        }
+                    }
+                    needsLightColor.append(allExplicit ? anyDark : nil)
                 }
+                storage[chunkIndex] = (linePositions, needsLightColor)
             }
 
-            return EdgeLines(positions: linePositions, needsLightColor: needsLightColor)
+            let results = storage.results
+            return EdgeLines(positions: results.flatMap { $0.0 }, needsLightColor: results.flatMap { $0.1 })
         }
 
         return (edgeLines(sharpEdges), edgeLines(smoothEdges))
@@ -399,3 +418,4 @@ func isDarkColor(_ color: SIMD4<Float>) -> Bool {
 private typealias EdgeEntryChunkStorage = ChunkStorage<[Mesh.EdgeKeyEntry]>
 private typealias NormalChunkStorage = ChunkStorage<SIMD3<Double>>
 private typealias AreaVolumeChunkStorage = ChunkStorage<(area: Double, volume: Double)>
+private typealias EdgeLineChunkStorage = ChunkStorage<([SCNVector3], [Bool?])>
