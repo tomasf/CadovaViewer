@@ -99,7 +99,7 @@ extension ModelData {
                 nodes: nodes,
                 itemIndex: itemIndex,
                 name: livePart.name,
-                id: nil,
+                id: livePart.id,
                 semantic: semantic,
                 stats: stats,
                 modelGeometryVariants: modelGeometryVariants,

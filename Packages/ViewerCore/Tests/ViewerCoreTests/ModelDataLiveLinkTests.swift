@@ -10,6 +10,7 @@ struct ModelDataLiveLinkTests {
         path: "/tmp/livelink-test.3mf",
         parts: [
             LiveLinkMessage.Part(
+                id: "triangle",
                 name: "Triangle",
                 semantic: "solid",
                 vertices: [0, 0, 0, 4, 0, 0, 0, 3, 0],
@@ -37,6 +38,7 @@ struct ModelDataLiveLinkTests {
         #expect(modelData.rootNode.childNodes.count == 1)
         #expect(modelData.hasAnyMaterials)
         #expect(modelData.metadata.first { $0.name == .title }?.value == "Triangle Model")
+        #expect(part.id == "triangle")
     }
 
     /// The whole reason to carry the full semantic instead of an isPrintable bool: a .context part
@@ -45,7 +47,7 @@ struct ModelDataLiveLinkTests {
     @Test func `each PartSemantic case round-trips distinctly`() {
         func semantic(for rawValue: String) -> PartSemantic {
             let part = LiveLinkMessage.Part(
-                name: "P", semantic: rawValue,
+                id: "p", name: "P", semantic: rawValue,
                 vertices: Self.triangleMessage.parts[0].vertices,
                 triangles: Self.triangleMessage.parts[0].triangles,
                 triangleMaterialIndices: Self.triangleMessage.parts[0].triangleMaterialIndices,
@@ -66,7 +68,7 @@ struct ModelDataLiveLinkTests {
     @Test func `edge nodes are only built for a solid part`() {
         var visualPart = Self.triangleMessage.parts[0]
         visualPart = LiveLinkMessage.Part(
-            name: visualPart.name, semantic: "visual",
+            id: visualPart.id, name: visualPart.name, semantic: "visual",
             vertices: visualPart.vertices, triangles: visualPart.triangles,
             triangleMaterialIndices: visualPart.triangleMaterialIndices,
             defaultMaterialIndex: visualPart.defaultMaterialIndex, materials: visualPart.materials
