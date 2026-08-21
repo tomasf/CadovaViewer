@@ -58,5 +58,27 @@ public final class LiveLinkService {
     public func stop() {
         server?.stop()
         server = nil
+        try? FileManager.default.removeItem(atPath: LiveLinkEndpoint.statePath)
+    }
+
+    /// Rewrites the declared LiveLink host state with the given set of open document paths. Nothing
+    /// currently reads this automatically — see the `LiveLinkHostState` type comment for why a
+    /// sender-side automatic read was tried and reverted — it's kept for manual/future diagnostic
+    /// use. Call this whenever the app's set of open documents changes — the app owns that
+    /// knowledge, this type deliberately doesn't (see the type comment). Safe to call before `start()`.
+    public func updateOpenDocuments(paths: [String]) {
+        let state = LiveLinkHostState(
+            protocolVersion: LiveLinkFraming.protocolVersion,
+            minimumCompatibleProtocolVersion: LiveLinkFraming.protocolVersion,
+            interestedPaths: paths,
+            bundleIdentifier: Bundle.main.bundleIdentifier ?? "",
+            buildNumber: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+            processIdentifier: ProcessInfo.processInfo.processIdentifier
+        )
+        do {
+            try state.write(toFileAt: LiveLinkEndpoint.statePath)
+        } catch {
+            print("LiveLink: couldn't write host state file (\(error))")
+        }
     }
 }

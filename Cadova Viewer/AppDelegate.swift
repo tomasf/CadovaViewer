@@ -6,6 +6,12 @@ import ViewerCore
 class AppDelegate: NSObject, NSApplicationDelegate {
     var preferencesWindow: NSWindow?
 
+    // Created here so it exists before AppKit's run loop starts and can process any "open untitled
+    // document" or Launch Services file-open request — NSDocumentController.shared lazily creates a
+    // plain NSDocumentController the first time anything asks for one, and that first instance can't
+    // be swapped out afterward.
+    private let documentController = DocumentController()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         LiveLinkService.shared.hasOpenDocument = { url in
             NSDocumentController.shared.document(for: url) is Document
