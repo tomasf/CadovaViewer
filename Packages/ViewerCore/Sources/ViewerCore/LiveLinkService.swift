@@ -61,11 +61,11 @@ public final class LiveLinkService {
         try? FileManager.default.removeItem(atPath: LiveLinkEndpoint.statePath)
     }
 
-    /// Rewrites the declared LiveLink host state with the given set of open document paths. Nothing
-    /// currently reads this automatically — see the `LiveLinkHostState` type comment for why a
-    /// sender-side automatic read was tried and reverted — it's kept for manual/future diagnostic
-    /// use. Call this whenever the app's set of open documents changes — the app owns that
-    /// knowledge, this type deliberately doesn't (see the type comment). Safe to call before `start()`.
+    /// Rewrites the declared LiveLink host state with the given set of open document paths, so a
+    /// sender (`LiveLinkClient.isInterested(inPath:)`) can tell up front whether it's worth building
+    /// a message for a given path, without connecting to ask. Call this whenever the app's set of
+    /// open documents changes — the app owns that knowledge, this type deliberately doesn't (see the
+    /// type comment). Safe to call before `start()`.
     public func updateOpenDocuments(paths: [String]) {
         let state = LiveLinkHostState(
             protocolVersion: LiveLinkFraming.protocolVersion,
