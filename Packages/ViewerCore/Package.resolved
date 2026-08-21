@@ -5,7 +5,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/CadovaLiveLink.git",
       "state" : {
-        "branch" : "main",
+        "branch" : "dev",
         "revision" : "afd58626dd2d5e880715c426078e84843215cca2"
       }
     },
