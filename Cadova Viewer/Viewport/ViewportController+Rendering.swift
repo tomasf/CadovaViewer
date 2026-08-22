@@ -15,6 +15,7 @@ extension ViewportController: SCNSceneRendererDelegate {
             return latest
         }) {
             cameraNode.transform = pending
+            updateOrthographicDepthRange()
         }
 
         let currentViewSize = sceneViewSize

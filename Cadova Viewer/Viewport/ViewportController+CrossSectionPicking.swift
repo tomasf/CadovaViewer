@@ -20,6 +20,19 @@ extension ViewportController {
     /// on a solid cut face lands on the cut surface rather than the hidden wall behind it.
     func nearestVisibleHit(at viewPoint: CGPoint, in root: SCNNode, includingCaps: Bool = true) -> SCNHitTestResult? {
         let searchMode: SCNHitTestSearchMode = activeCrossSections.isEmpty ? .closest : .all
+        let results = viewHitResults(at: viewPoint, searchMode: searchMode, includingCaps: includingCaps)
+        if let hit = nearestVisibleHit(in: results) {
+            return hit
+        }
+
+        // SceneKit's screen-space hit test occasionally misses very large scenes after wide
+        // orthographic depth ranges have been installed. Fall back to an explicit world segment
+        // through the cursor, long enough to cross the loaded model.
+        guard let segment = viewSegment(through: viewPoint) else { return nil }
+        return nearestVisibleHit(segmentFrom: segment.start, to: segment.end, in: root, includingCaps: includingCaps)
+    }
+
+    private func viewHitResults(at viewPoint: CGPoint, searchMode: SCNHitTestSearchMode, includingCaps: Bool) -> [SCNHitTestResult] {
         var results = visiblePartModelNodes.flatMap { node in
             sceneView.hitTest(viewPoint, options: [
                 .rootNode: node,
@@ -33,6 +46,10 @@ extension ViewportController {
             ])
         }
         return results
+    }
+
+    private func nearestVisibleHit(in results: [SCNHitTestResult]) -> SCNHitTestResult? {
+        results
             .compactMap { result -> (result: SCNHitTestResult, depth: Float)? in
                 guard !crossSectionHides(result.worldCoordinates),
                       let depth = viewDepth(of: result.worldCoordinates)
@@ -65,6 +82,34 @@ extension ViewportController {
 
     private var shouldHitTestCrossSectionCaps: Bool {
         !activeCrossSections.isEmpty && !crossSectionCapInFlight && !crossSectionCapNeedsRebuild && crossSectionDrag == nil
+    }
+
+    private func viewSegment(through viewPoint: CGPoint) -> (start: SCNVector3, end: SCNVector3)? {
+        let near = sceneView.unprojectPoint(SCNVector3(viewPoint.x, viewPoint.y, 0))
+        let far = sceneView.unprojectPoint(SCNVector3(viewPoint.x, viewPoint.y, 1))
+        let nearVector = SIMD3<Double>(Double(near.x), Double(near.y), Double(near.z))
+        let farVector = SIMD3<Double>(Double(far.x), Double(far.y), Double(far.z))
+        let delta = farVector - nearVector
+        let length = simd_length(delta)
+        guard length > 1e-9, length.isFinite else { return nil }
+
+        let direction = delta / length
+        let radius = max(Double(sceneController.modelBoundingSphere.radius), 1)
+        let c = sceneController.modelBoundingSphere.center
+        let center = SIMD3<Double>(Double(c.x), Double(c.y), Double(c.z))
+        let cameraDistance: Double
+        if let pointOfView = sceneView.pointOfView?.presentation {
+            let p = pointOfView.simdWorldPosition
+            cameraDistance = simd_distance(SIMD3<Double>(Double(p.x), Double(p.y), Double(p.z)), center)
+        } else {
+            cameraDistance = radius
+        }
+        let reach = max(100_000, radius * 4 + cameraDistance * 2)
+        return (scnVector(nearVector - direction * reach), scnVector(nearVector + direction * reach))
+    }
+
+    private func scnVector(_ v: SIMD3<Double>) -> SCNVector3 {
+        SCNVector3(v.x, v.y, v.z)
     }
 
     private func viewDepth(of point: SCNVector3) -> Float? {

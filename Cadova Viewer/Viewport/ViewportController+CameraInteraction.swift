@@ -225,6 +225,7 @@ extension ViewportController {
             var nm = m
             nm.columns.3 = SIMD4<Float>(m.columns.3.xyz + translation, 1)
             cameraNode.simdTransform = nm
+            updateOrthographicDepthRange()
             SCNTransaction.commit()
         } else {
             // Perspective dolly along the camera→pivot ray (keeps the pivot fixed on screen). The
@@ -288,6 +289,7 @@ extension ViewportController {
             var m = state.initialTransform
             m.columns.3 = SIMD4<Float>(newPos, 1)
             cameraNode.simdTransform = m
+            updateOrthographicDepthRange()
             SCNTransaction.commit()
         } else {
             // Perspective dolly along the camera→pivot ray (keeps the pivot fixed on screen). Distance to
@@ -319,6 +321,7 @@ extension ViewportController {
         SCNTransaction.begin()
         SCNTransaction.disableActions = true
         cameraNode.simdTransform = transform
+        updateOrthographicDepthRange()
         SCNTransaction.commit()
     }
 

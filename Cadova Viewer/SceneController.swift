@@ -74,8 +74,8 @@ final class SceneController: ObservableObject {
         parts = modelData.parts
         thumbnails.setParts(modelData.parts)
 
-        modelBoundingBox = modelData.rootNode.boundingBox
-        modelBoundingSphere = modelData.rootNode.boundingSphere
+        modelBoundingBox = modelData.rootNode.worldBoundingBox()
+        modelBoundingSphere = modelData.rootNode.worldBoundingSphere()
 
         // A reloaded model has fresh `ModelGeometryVariant`s, so any previous build no longer applies.
         smoothGeometryBuildState = .notStarted

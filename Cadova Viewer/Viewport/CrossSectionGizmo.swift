@@ -317,13 +317,25 @@ final class CrossSectionGizmo {
         }
     }
 
-    /// World-space radius at `position` that projects to `screenRadius` view points (mirrors the
-    /// technique in `MeasurementRenderer`).
+    /// World-space radius at `position` that projects to `screenRadius` view points.
     private func worldRadius(forScreenRadius screenRadius: Double, at position: SIMD3<Float>, renderer: SCNSceneRenderer) -> Double {
-        let world = SCNVector3(position)
-        let projected = renderer.projectPoint(world)
-        let offset = renderer.unprojectPoint(SCNVector3(projected.x + CGFloat(screenRadius), projected.y, projected.z))
-        let radius = offset.distance(from: world)
+        guard let pointOfView = renderer.pointOfView?.presentation,
+              let camera = pointOfView.camera else {
+            return 0.0001
+        }
+
+        let viewportHeight = max(Double((renderer as? SCNView)?.bounds.height ?? renderer.currentViewport.height), 1)
+        let worldPerPoint: Double
+        if camera.usesOrthographicProjection {
+            worldPerPoint = 2 * camera.orthographicScale / viewportHeight
+        } else {
+            let toPoint = position - pointOfView.simdWorldPosition
+            let depth = Double(abs(simd_dot(toPoint, simd_normalize(pointOfView.simdWorldFront))))
+            let tanHalfFov = tan(camera.fieldOfView * .pi / 180 / 2)
+            worldPerPoint = 2 * depth * tanHalfFov / viewportHeight
+        }
+
+        let radius = screenRadius * worldPerPoint
         return radius.isFinite ? max(radius, 0.0001) : 0.0001
     }
 }

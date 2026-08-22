@@ -4,6 +4,7 @@ import Combine
 import SceneKit
 import NavLib
 import Synchronization
+import simd
 
 extension ViewportController {
     // The document owns one NavLib session whose state provider is this viewport while it's focused
@@ -87,13 +88,7 @@ extension ViewportController: NavLibStateProvider {
     func hitTest(parameters: HitTest<SCNVector3>) -> SCNVector3? {
         let origin = parameters.origin.scnVector
         let direction = parameters.direction.scnVector
-
-        let length = 100000.0
-        let end = SCNVector3(
-            x: origin.x + direction.x * length,
-            y: origin.y + direction.y * length,
-            z: origin.z + direction.z * length
-        )
+        guard let end = modelHitTestEnd(from: origin, direction: direction) else { return nil }
 
         // When cuts are active, pivot only on visible geometry (kept side or a cap), never clipped-away
         // surfaces. Uses all-intersections + filtering, so it's reserved for when a cut is present.
@@ -122,6 +117,20 @@ extension ViewportController: NavLibStateProvider {
             }
         }
         return best
+    }
+
+    private func modelHitTestEnd(from origin: SCNVector3, direction: SCNVector3) -> SCNVector3? {
+        let originVector = SIMD3<Double>(Double(origin.x), Double(origin.y), Double(origin.z))
+        let directionVector = SIMD3<Double>(Double(direction.x), Double(direction.y), Double(direction.z))
+        let directionLength = simd_length(directionVector)
+        guard directionLength > 1e-9, directionLength.isFinite else { return nil }
+
+        let center = sceneController.modelBoundingSphere.center
+        let centerVector = SIMD3<Double>(Double(center.x), Double(center.y), Double(center.z))
+        let radius = max(Double(sceneController.modelBoundingSphere.radius), 1)
+        let reach = max(100_000, radius * 4 + simd_distance(originVector, centerVector) * 2)
+        let end = originVector + directionVector / directionLength * reach
+        return SCNVector3(end.x, end.y, end.z)
     }
 
     var mousePosition: SCNVector3? {

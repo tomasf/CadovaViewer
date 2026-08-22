@@ -58,8 +58,7 @@ extension ViewportController {
         if projection == .orthographic {
             camera.usesOrthographicProjection = true
             camera.automaticallyAdjustsZRange = false
-            camera.zNear = -100000
-            camera.zFar = 100000
+            updateOrthographicDepthRange()
         } else {
             camera.usesOrthographicProjection = false
             camera.automaticallyAdjustsZRange = true
@@ -67,5 +66,16 @@ extension ViewportController {
         }
 
         updateNavLibProjection()
+    }
+
+    /// Orthographic cameras do not get SceneKit's automatic depth range. Keep the range centered
+    /// around the current model depth and large enough for oversized models such as terrain maps.
+    func updateOrthographicDepthRange() {
+        guard let camera = sceneView.pointOfView?.camera, camera.usesOrthographicProjection else { return }
+        let radius = Double(sceneController.modelBoundingSphere.radius)
+        let depth = abs(modelCenterViewDepth())
+        let extent = max(100_000, depth + radius * 2)
+        camera.zNear = -extent
+        camera.zFar = extent
     }
 }

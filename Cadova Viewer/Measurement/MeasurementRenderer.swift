@@ -441,9 +441,23 @@ final class MeasurementRenderer {
 
     /// World-space radius at `worldPosition` that projects to `screenRadius` view points.
     private func worldRadius(forScreenRadius screenRadius: Double, at worldPosition: SCNVector3, renderer: SCNSceneRenderer) -> Double {
-        let projected = renderer.projectPoint(worldPosition)
-        let offset = renderer.unprojectPoint(SCNVector3(projected.x + CGFloat(screenRadius), projected.y, projected.z))
-        let radius = offset.distance(from: worldPosition)
+        guard let pointOfView = renderer.pointOfView?.presentation,
+              let camera = pointOfView.camera else {
+            return 0.0001
+        }
+
+        let viewportHeight = max(Double((renderer as? SCNView)?.bounds.height ?? renderer.currentViewport.height), 1)
+        let worldPerPoint: Double
+        if camera.usesOrthographicProjection {
+            worldPerPoint = 2 * camera.orthographicScale / viewportHeight
+        } else {
+            let toPoint = SIMD3<Float>(worldPosition) - pointOfView.simdWorldPosition
+            let depth = Double(abs(simd_dot(toPoint, simd_normalize(pointOfView.simdWorldFront))))
+            let tanHalfFov = tan(camera.fieldOfView * .pi / 180 / 2)
+            worldPerPoint = 2 * depth * tanHalfFov / viewportHeight
+        }
+
+        let radius = screenRadius * worldPerPoint
         return radius.isFinite ? max(radius, 0.0001) : 0.0001
     }
 }

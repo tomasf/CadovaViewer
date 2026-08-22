@@ -84,7 +84,7 @@ public final class ViewportGrid {
     }
 
     public func updateBounds(geometry: SCNNode) {
-        let box = geometry.boundingBox
+        let box = geometry.worldBoundingBox()
         let modelRadius = sqrt(pow(box.max.x - box.min.x, 2) + pow(box.max.y - box.min.y, 2)) * 0.5
         modelCenter = SCNVector3((box.min.x + box.max.x) / 2, (box.min.y + box.max.y) / 2, 0)
         modelBaseRadius = max(ceil(Double(modelRadius * 1.5) / 20.0) * 20.0, 20)

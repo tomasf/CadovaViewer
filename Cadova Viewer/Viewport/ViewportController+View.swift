@@ -26,6 +26,7 @@ extension ViewportController {
 
         cameraNode.transform = view.transform
         cameraNode.camera!.orthographicScale = view.orthographicScale
+        updateOrthographicDepthRange()
         SCNTransaction.commit()
         if movement != .preview {
             viewDidChange()
@@ -73,34 +74,12 @@ extension ViewportController {
         setCameraView(clearRollView(), movement: .small)
     }
 
-    func viewForZoom(amount: Double) -> CameraView {
-        guard let pointOfView = sceneView.pointOfView, let camera = pointOfView.camera else { fatalError() }
-
-        let point = CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY)
-        let target: SCNVector3
-        if let match = nearestVisibleHit(at: point, in: modelInstance.root) {
-            target = match.worldCoordinates
-        } else {
-            target = sceneView.xyPlanePoint(forViewPoint: point)
-        }
-
-        let distance = target.distance(from: pointOfView.worldPosition)
-        let distanceFactor = amount > 0 ? amount : amount / (1.0 + amount)
-        let transform = SCNMatrix4Mult(SCNMatrix4MakeTranslation(0, 0, -CGFloat(distance * distanceFactor)), cameraNode.presentation.transform)
-
-        var amount = amount * 5
-        if amount < 0 { amount = 1 / -amount }
-        let newOrthoScale = camera.orthographicScale / Double(amount)
-
-        return (transform, newOrthoScale)
-    }
-
     func zoomIn() {
-        setCameraView(viewForZoom(amount: 0.3), movement: .small)
+        zoomCamera(factor: 1.3, towardViewPoint: CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
     }
 
     func zoomOut() {
-        setCameraView(viewForZoom(amount: -0.3), movement: .small)
+        zoomCamera(factor: 1 / 1.3, towardViewPoint: CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
     }
 
     func canShowView(_ view: CameraView) -> Bool {
@@ -199,20 +178,9 @@ extension ViewportController {
         var result: (min: SIMD3<Double>, max: SIMD3<Double>)?
         for id in ids {
             guard let node = modelInstance.partContainers[id] else { continue }
-            let (localMin, localMax) = node.boundingBox
-            let transform = node.simdWorldTransform
-            let corners: [SIMD3<Float>] = [
-                SIMD3(Float(localMin.x), Float(localMin.y), Float(localMin.z)),
-                SIMD3(Float(localMin.x), Float(localMin.y), Float(localMax.z)),
-                SIMD3(Float(localMin.x), Float(localMax.y), Float(localMin.z)),
-                SIMD3(Float(localMin.x), Float(localMax.y), Float(localMax.z)),
-                SIMD3(Float(localMax.x), Float(localMin.y), Float(localMin.z)),
-                SIMD3(Float(localMax.x), Float(localMin.y), Float(localMax.z)),
-                SIMD3(Float(localMax.x), Float(localMax.y), Float(localMin.z)),
-                SIMD3(Float(localMax.x), Float(localMax.y), Float(localMax.z))
-            ]
-            for corner in corners {
-                let world = SIMD3<Double>((transform * SIMD4<Float>(corner, 1)).xyz)
+            let box = node.worldBoundingBox()
+            for corner in [box.min, box.max] {
+                let world = SIMD3<Double>(corner)
                 if result == nil {
                     result = (world, world)
                 } else {
