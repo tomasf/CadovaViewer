@@ -1,12 +1,21 @@
 {
   "pins" : [
     {
+      "identity" : "cadovalivelink",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tomasf/CadovaLiveLink.git",
+      "state" : {
+        "branch" : "dev",
+        "revision" : "afd58626dd2d5e880715c426078e84843215cca2"
+      }
+    },
+    {
       "identity" : "manifold-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/tomasf/manifold-swift.git",
       "state" : {
-        "revision" : "94a4f7bbfef3a7f23207f9d8a1d8ca2172fe0b61",
-        "version" : "1.1.0"
+        "revision" : "59fa5c3e567df75fd9bb6aacb57d52fd5b3074ec",
+        "version" : "1.1.1"
       }
     },
     {

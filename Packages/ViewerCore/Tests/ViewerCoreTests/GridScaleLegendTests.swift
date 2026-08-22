@@ -7,6 +7,7 @@ struct GridScaleLegendTests {
         #expect(GridScaleLegend.label(forMillimeters: 10) == "cm")
         #expect(GridScaleLegend.label(forMillimeters: 100) == "dm")
         #expect(GridScaleLegend.label(forMillimeters: 1000) == "m")
+        #expect(GridScaleLegend.label(forMillimeters: 1_000_000) == "km")
     }
 
     @Test func `sub-millimetre spacings stay in millimetres with a number`() {
@@ -19,7 +20,9 @@ struct GridScaleLegendTests {
     }
 
     @Test func `multiples of the largest unit keep their count`() {
-        #expect(GridScaleLegend.label(forMillimeters: 10000) == "10 m")
+        #expect(GridScaleLegend.label(forMillimeters: 10_000) == "10 m")
+        #expect(GridScaleLegend.label(forMillimeters: 100_000) == "100 m")
+        #expect(GridScaleLegend.label(forMillimeters: 10_000_000) == "10 km")
     }
 
     @Test func `zero or negative spacing yields no label`() {

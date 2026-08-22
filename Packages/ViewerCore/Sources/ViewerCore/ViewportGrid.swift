@@ -56,6 +56,10 @@ public final class ViewportGrid {
     /// that the solid grid fills a head-on view and only the distant edge fades; small enough to
     /// keep the line count bounded.
     private let focusRadiusFactor = 2.0
+    /// Lower zoom-density bound for the metric ladder. With `buildGrid`'s decade math this lets the
+    /// coarse grid grow to 1 km, with the fine grid at 100 m.
+    private let minimumGridScale = 0.00011
+    private let maximumGridScale = 400.0
 
     public init() {
         node.name = "Grid"
@@ -107,7 +111,8 @@ public final class ViewportGrid {
         let bounds = CGRect(origin: .zero, size: viewSize)
 
         let footprintChanged = updateFootprint(renderer: renderer, bounds: bounds)
-        let scale = min(max(gridScale(renderer: renderer, at: CGPoint(x: bounds.midX, y: bounds.midY)), 0.11), 400.0)
+        let sampledScale = gridScale(renderer: renderer, at: CGPoint(x: bounds.midX, y: bounds.midY))
+        let scale = min(max(sampledScale, minimumGridScale), maximumGridScale)
         buildGrid(scale, footprintChanged: footprintChanged)
     }
 

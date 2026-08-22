@@ -5,8 +5,9 @@ import Combine
 /// A small heads-up legend showing what the grid's lines currently represent, as a vertical
 /// "odometer" of metric units. Each unit fades in from the top, reaches full opacity as it scrolls
 /// through the centre, then continues down and fades out — so zooming in/out slides the ladder
-/// (0.1 mm → mm → cm → dm → m → 10 m) smoothly past the centre line. It appears while the scale
-/// changes and fades out after a short idle; it hides entirely when the grid is hidden.
+/// (0.1 mm → mm → cm → dm → m → 10 m → 100 m → km) smoothly past the centre line. It
+/// appears while the scale changes and fades out after a short idle; it hides entirely when the
+/// grid is hidden.
 public struct GridScaleLegend: View {
     let stream: AnyPublisher<ViewportGrid.ScaleInfo, Never>
 
@@ -30,10 +31,9 @@ public struct GridScaleLegend: View {
     /// How many rows from the centre a unit travels before it has fully faded out.
     private static let fadeRange = 1.25
     /// Exponents whose spacing the grid actually draws, bounded by ViewportGrid's scale clamp:
-    /// coarse spans 1 mm…1 m (exponents 0…3) and fine reaches 0.1 mm (-1). Units outside this never
-    /// appear as real lines, so the legend doesn't label them — e.g. no faint "10 m" at the zoom-out
-    /// limit.
-    private static let drawableExponents = -1...3
+    /// coarse spans 1 mm…1 km (exponents 0…6) and fine reaches 0.1 mm (-1). Units outside this never
+    /// appear as real lines, so the legend doesn't label them.
+    private static let drawableExponents = -1...6
 
     public var body: some View {
         let center = exponent
@@ -93,11 +93,12 @@ public struct GridScaleLegend: View {
     }
 
     /// Formats a spacing in millimetres using the most natural metric unit, e.g. `0.1 mm`, `mm`,
-    /// `cm`, `dm`, `m`, `10 m`. A spacing that is exactly one unit shows just the unit symbol.
+    /// `cm`, `dm`, `m`, `10 m`, `100 m`, `km`. A spacing that is exactly one unit shows just the
+    /// unit symbol.
     static func label(forMillimeters millimeters: Double) -> String {
         guard millimeters > 0 else { return "" }
         let units: [(symbol: String, millimeters: Double)] = [
-            ("m", 1000), ("dm", 100), ("cm", 10), ("mm", 1)
+            ("km", 1_000_000), ("m", 1000), ("dm", 100), ("cm", 10), ("mm", 1)
         ]
         let unit = units.first { millimeters + 1e-9 >= $0.millimeters } ?? ("mm", 1)
         let count = millimeters / unit.millimeters

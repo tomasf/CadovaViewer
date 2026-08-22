@@ -19,6 +19,12 @@ class Document: NSDocument, NSWindowDelegate {
     private var loadTask: Task<Void, Never>?
     private var loadGeneration = 0
 
+    /// The build UUID of the last LiveLink push applied to this document, if any. Compared against
+    /// the 3MF Production Extension `<build p:UUID>` of a subsequent on-disk change in
+    /// `presentedItemDidChange`, so a write that already arrived over LiveLink doesn't also trigger
+    /// a redundant full reload.
+    private var lastAppliedBuildUUID: UUID?
+
     var modelStream: AnyPublisher<ModelData, Never> {
         modelSubject.compactMap { $0 }.receive(on: DispatchQueue.main).eraseToAnyPublisher()
     }
@@ -162,6 +168,31 @@ class Document: NSDocument, NSWindowDelegate {
         }
     }
 
+    /// Shows the loading indicator for an incoming LiveLink push, the same way `startLoadingModel`
+    /// does for the file-loading path — called before `ModelData(liveLink:)` starts building (see
+    /// `LiveLinkService.onLoadingStarted`), since that conversion is proportional to mesh size and
+    /// can take multiple seconds for a large model, not an instant swap.
+    @MainActor
+    func beginLiveLinkLoad() {
+        sendLoadingStatus(true)
+    }
+
+    /// Applies a LiveLink push directly, without touching disk. Used when this document's file is
+    /// the target of an incoming push — see `LiveLinkService` and `AppDelegate`, which look up the
+    /// open `Document` for the push's path and call this. Cadova still always writes the file to
+    /// disk too; `presentedItemDidChange` recognizes that subsequent write via `buildUUID` and skips
+    /// reloading it again.
+    @MainActor
+    func applyLiveLinkUpdate(modelData: ModelData, buildUUID: UUID) {
+        Swift.print("LiveLink: applied push (build UUID \(buildUUID))")
+        loadGeneration += 1
+        loadTask?.cancel()
+
+        lastAppliedBuildUUID = buildUUID
+        sendModelData(modelData)
+        sendLoadingStatus(false)
+    }
+
     /// Slices the given candidate `parts` of the model in the preferred slicer, keeping the slicing
     /// indicator up while the filtered copy is written. Pass all parts for a full slice, or the visible
     /// subset for "Slice Visible Parts". Routed through the document so every trigger (toolbar, parts
@@ -240,9 +271,28 @@ class Document: NSDocument, NSWindowDelegate {
             return // Item on disk was unchanged
         }
 
+        if let lastAppliedBuildUUID, Self.onDiskBuildUUID(at: fileURL) == lastAppliedBuildUUID {
+            // This write is the one we already applied via LiveLink — acknowledge it without paying
+            // for a full reload. Any failure to read/parse the UUID below just falls through to the
+            // normal reload, so this is purely a speed optimization, never load-bearing for correctness.
+            Swift.print("LiveLink: skipping reload, on-disk file matches already-applied build UUID \(lastAppliedBuildUUID)")
+            self.fileModificationDate = diskModificationDate
+            return
+        }
+
         Task { @MainActor [weak self] in
             self?.startLoadingModel(from: fileURL, fileModificationDate: diskModificationDate, presentsZipErrors: false)
         }
+    }
+
+    /// Reads just the root model's `<build p:UUID>` (unzip + top-level XML decode, skipping
+    /// mesh/geometry entirely). Much cheaper than a full `ModelData(url:)` load, which is the whole
+    /// point of checking it here.
+    private static func onDiskBuildUUID(at url: URL) -> UUID? {
+        guard let reader = try? ThreeMF.PackageReader(url: url) else { return nil }
+        defer { reader.invalidate() }
+        guard let model = try? reader.model() else { return nil }
+        return model.build.uuid
     }
 
     enum Error: Swift.Error {
