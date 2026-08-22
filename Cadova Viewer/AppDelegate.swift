@@ -6,6 +6,12 @@ import ViewerCore
 class AppDelegate: NSObject, NSApplicationDelegate {
     var preferencesWindow: NSWindow?
 
+    // Declared first so its default-value initializer runs before any other property's (Swift
+    // evaluates these in declaration order) — must complete before anything reads
+    // Preferences()/UserDefaults.standard, which the first document window's ViewportController
+    // already does, possibly as early as Launch Services handing this process a file to open.
+    private let preferencesMigrationRun: Void = PreferencesMigration.runIfNeeded()
+
     // Created here so it exists before AppKit's run loop starts and can process any "open untitled
     // document" or Launch Services file-open request — NSDocumentController.shared lazily creates a
     // plain NSDocumentController the first time anything asks for one, and that first instance can't
