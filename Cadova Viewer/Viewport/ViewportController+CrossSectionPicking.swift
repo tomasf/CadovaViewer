@@ -64,10 +64,10 @@ extension ViewportController {
     func nearestVisibleHit(segmentFrom origin: SCNVector3, to end: SCNVector3, in root: SCNNode, includingCaps: Bool = true) -> SCNHitTestResult? {
         let options: [String: Any] = [SCNHitTestOption.searchMode.rawValue: SCNHitTestSearchMode.all.rawValue as NSNumber]
         var results = visiblePartModelNodes.flatMap { node in
-            node.hitTestWithSegment(from: origin, to: end, options: options)
+            node.hitTestWithWorldSegment(from: origin, to: end, options: options)
         }
         if includingCaps, shouldHitTestCrossSectionCaps {
-            results += crossSectionCapNode.hitTestWithSegment(from: origin, to: end, options: options)
+            results += crossSectionCapNode.hitTestWithWorldSegment(from: origin, to: end, options: options)
         }
         return results
             .filter { segmentContains($0.worldCoordinates, from: origin, to: end) && !crossSectionHides($0.worldCoordinates) }
@@ -133,5 +133,15 @@ extension ViewportController {
 
         let t = simd_dot(p - start, segment) / lengthSquared
         return t >= -1e-6 && t <= 1 + 1e-6
+    }
+}
+
+extension SCNNode {
+    func hitTestWithWorldSegment(from origin: SCNVector3, to end: SCNVector3, options: [String: Any]?) -> [SCNHitTestResult] {
+        hitTestWithSegment(
+            from: convertPosition(origin, from: nil),
+            to: convertPosition(end, from: nil),
+            options: options
+        )
     }
 }

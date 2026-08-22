@@ -107,7 +107,7 @@ extension ViewportController: NavLibStateProvider {
         var bestDistance = Double.greatestFiniteMagnitude
         for part in sceneController.parts where !hidden.contains(part.id) {
             guard let modelNode = modelInstance.partModelNodes[part.id] else { continue }
-            guard let hit = modelNode.hitTestWithSegment(from: origin, to: end, options: [
+            guard let hit = modelNode.hitTestWithWorldSegment(from: origin, to: end, options: [
                 SCNHitTestOption.searchMode.rawValue: SCNHitTestSearchMode.closest.rawValue as NSNumber
             ]).first else { continue }
             let distance = hit.worldCoordinates.distance(from: origin)
