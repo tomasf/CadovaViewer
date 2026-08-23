@@ -3,6 +3,36 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.2.0</title>
+            <pubDate>Sun, 23 Aug 2026 23:23:49 +0200</pubDate>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.2.0/CadovaViewer1.2.0.zip" length="9521773" type="application/octet-stream" sparkle:edSignature="tjVHgNkNb62oOOxJ23l/tDy3VFPewGyTv8E+/QpyaOGlDrwfi8lEJm8eGqpv5vboU5Tqm8aQpkyuzhq2hD81Dw=="/>
+            <description><![CDATA[
+                <h4>New Features</h4>
+                <ul>
+                    <li><strong>Live Link</strong> — receive model updates directly from Cadova, without waiting for a full reload through a 3MF file. It is transparent: existing files and workflows still work the same way, but iteration is faster when using Cadova 0.9.2 or later.</li>
+                    <li><strong>Per-part info</strong> — the sidebar now has a Get Info sheet for selected parts, showing their dimensions, volume, surface area, triangle count, vertex count, and semantic type.</li>
+                </ul>
+                <h4>Improvements</h4>
+                <ul>
+                    <li>Measurements can now be centered on the first clicked point by holding Option.</li>
+                    <li>Standard view presets now frame the visible parts, rather than the full model including hidden parts.</li>
+                    <li>The grid now supports terrain-scale spacing, reaching kilometre-scale views instead of topping out around small desktop-sized models.</li>
+                    <li>Large models load and respond faster, especially during geometry construction and edge extraction.</li>
+                    <li>Non-solid parts are italicized in the sidebar.</li>
+                </ul>
+                <h4>Bug Fixes</h4>
+                <ul>
+                    <li>Large models behave better during navigation, picking, and inspection.</li>
+                    <li>Fixed oversized measurement markers during animated view preset transitions.</li>
+                    <li>Fixed highlighted measurements being partially hidden by the model.</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>1.1.1</title>
             <pubDate>Fri, 17 Jul 2026 00:48:26 +0200</pubDate>
             <sparkle:version>11</sparkle:version>
