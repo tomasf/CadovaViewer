@@ -98,7 +98,7 @@ struct CadovaRender: AsyncParsableCommand {
         let resolvedEdgeVisibility = EdgeVisibility(rawValue: edges.lowercased())!
         let resolvedBackgroundColor = backgroundColor.flatMap { NSColor(cadovaRenderHex: $0) } ?? .white
 
-        let modelData = try await ModelData(url: inputURL, includeEdges: resolvedEdgeVisibility != .none)
+        let modelData = try ModelData(url: inputURL, includeEdges: resolvedEdgeVisibility != .none)
         let image = try ModelRenderer.render(
             modelData: modelData,
             preset: preset,

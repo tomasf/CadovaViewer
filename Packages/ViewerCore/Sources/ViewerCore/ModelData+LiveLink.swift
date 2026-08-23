@@ -12,11 +12,9 @@ extension ModelData {
     /// geometry itself gets turned into `SCNGeometry` changes.
     ///
     /// This is a separate, simpler pipeline rather than a refactor of `ModelData.init(url:)` to
-    /// share code through `ModelLoader<URL>.LoadedModel`'s more general (multi-file,
-    /// nested-component) shape: a LiveLink message is always one flat model with exactly one
-    /// component per part, so forcing it through that shape would add real complexity for no
-    /// benefit — and `componentProducts` below documents that loading path as deliberately
-    /// sensitive to how it's structured, not something to casually reshape.
+    /// share code through `SynchronousLoadedModel`'s more general (multi-file, nested-component)
+    /// shape: a LiveLink message is always one flat model with exactly one component per part, so
+    /// forcing it through that shape would add real complexity for no benefit.
     public init(liveLink message: LiveLinkMessage, includeEdges: Bool = true) async {
         let noInheritance = PartialPropertyReference(groupID: nil, index: nil)
 

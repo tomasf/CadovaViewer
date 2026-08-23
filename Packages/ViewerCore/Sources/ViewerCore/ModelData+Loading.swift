@@ -3,11 +3,9 @@ import ThreeMF
 import SceneKit
 import AppKit
 
-// The synchronous products of processing a single component, assembled concurrently by
-// `ModelData.init` and then consumed on the calling task to build the scene graph.
-// `@unchecked`: each instance is written by exactly one concurrent task and only read afterward
-// on the calling task, so the `SCNGeometry`/`EdgeLines` handoff is safe despite not being `Sendable`.
-private struct ComponentProducts: @unchecked Sendable {
+// The synchronous products of processing a single component, consumed by `ModelData.init` to build
+// the scene graph.
+private struct ComponentProducts {
     let mainGeometry: SCNGeometry
     let sharpEdgeLines: EdgeLines
     let smoothEdgeLines: EdgeLines
@@ -22,9 +20,8 @@ private struct ComponentProducts: @unchecked Sendable {
 }
 
 extension ModelData {
-    public init(url: URL, includeEdges: Bool = true) async throws {
-        let loader = ModelLoader(url: url)
-        let loadedModel = try await loader.load()
+    public init(url: URL, includeEdges: Bool = true) throws {
+        let loadedModel = try SynchronousLoadedModel(url: url)
 
         // Scale from the document's modelling unit to millimetres; applied both as the root
         // node's transform and when measuring real-world area/volume/dimensions.
@@ -34,18 +31,19 @@ extension ModelData {
         // Edge lines are classified once per unique mesh, by each edge's own bordering triangles
         // (see `edgeGeometries(triangleColors:)`) — independent of which part instances the mesh,
         // so this is shared even when the same mesh is placed multiple times with different colours.
-        let indexedEdgeLines: [(sharp: EdgeLines, smooth: EdgeLines)]
+        var indexedEdgeLines: [(sharp: EdgeLines, smooth: EdgeLines)] = []
         if includeEdges {
-            indexedEdgeLines = await loadedModel.meshes.asyncMap { loadedMesh in
+            indexedEdgeLines.reserveCapacity(loadedModel.meshes.count)
+            for loadedMesh in loadedModel.meshes {
                 let model = loadedModel.models[loadedMesh.modelIndex]
                 let triangleColors = model.explicitTriangleColors(for: loadedMesh.mesh)
-                return loadedMesh.mesh.edgeGeometries(triangleColors: triangleColors)
+                indexedEdgeLines.append(loadedMesh.mesh.edgeGeometries(triangleColors: triangleColors))
             }
-        } else {
-            indexedEdgeLines = []
         }
 
-        let parts = await Array(loadedModel.items.enumerated()).asyncMap { itemIndex, loadedItem in
+        var parts: [Part] = []
+        parts.reserveCapacity(loadedModel.items.count)
+        for (itemIndex, loadedItem) in loadedModel.items.enumerated() {
             let products = loadedItem.components.map { loadedComponent in
                 Self.componentProducts(
                     for: loadedComponent,
@@ -125,7 +123,7 @@ extension ModelData {
             }
             let capSolid = capVertices.isEmpty ? nil : PartSolid(vertices: capVertices, indices: capIndices)
 
-            return Part(
+            parts.append(Part(
                 nodes: nodes,
                 itemIndex: itemIndex,
                 name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
@@ -136,7 +134,7 @@ extension ModelData {
                 dominantColor: dominantColor,
                 hasMaterial: products.contains { $0.hasMaterial },
                 capSolid: capSolid
-            )
+            ))
         }
 
         let container = SCNNode()
@@ -159,15 +157,14 @@ extension ModelData {
         self = Self(rootNode: container, parts: parts, metadata: loadedModel.rootModel.metadata, boundingBoxSize: boundingBoxSize, hasAnyMaterials: parts.contains { $0.hasMaterial })
     }
 
-    // Builds one component's geometry/edges/cap/stats. Extracted from the `components.asyncMap`
-    // closure and kept synchronous on purpose: the work does no `await`s, and inlining it into the
-    // async task closure gave that coroutine a large frame that the Swift/LLVM coroutine-frame
-    // splitter miscompiles (an `EXC_BAD_ACCESS` in `swift_task_dealloc` when tearing the task down,
-    // Release-only). A plain function has no coroutine frame, so it sidesteps the bug entirely while
-    // still running concurrently across components via `asyncMap`.
+    // Builds one component's geometry/edges/cap/stats. Kept synchronous on purpose: the work does no
+    // `await`s, and inlining it into an async task closure gave that coroutine a large frame that the
+    // Swift/LLVM coroutine-frame splitter miscompiles (an `EXC_BAD_ACCESS` in `swift_task_dealloc`
+    // when tearing the task down, Release-only). A plain function has no coroutine frame, so it
+    // sidesteps the bug entirely.
     private static func componentProducts(
-        for loadedComponent: ModelLoader<URL>.LoadedModel.LoadedComponent,
-        loadedModel: ModelLoader<URL>.LoadedModel,
+        for loadedComponent: SynchronousLoadedModel.LoadedComponent,
+        loadedModel: SynchronousLoadedModel,
         unitScale: simd_double4x4,
         includeEdges: Bool,
         indexedEdgeLines: [(sharp: EdgeLines, smooth: EdgeLines)]
@@ -233,7 +230,7 @@ extension simd_double4x4 {
     }
 }
 
-extension ModelLoader.LoadedModel.LoadedComponent {
+extension SynchronousLoadedModel.LoadedComponent {
     var scnMatrix: SCNMatrix4 {
         transforms.reduce(SCNMatrix4Identity) { transform, matrix in
             SCNMatrix4Mult(matrix.scnMatrix, transform)

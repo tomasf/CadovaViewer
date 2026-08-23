@@ -16,7 +16,7 @@ struct OffscreenRenderer {
         size: CGSize,
         includeEdges: Bool = false
     ) async throws -> CGImage {
-        let modelData = try await ModelData(url: url, includeEdges: includeEdges)
+        let modelData = try ModelData(url: url, includeEdges: includeEdges)
         return try await renderScene(with: modelData, size: size)
     }
 

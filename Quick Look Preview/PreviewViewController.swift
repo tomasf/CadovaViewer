@@ -26,7 +26,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     }
 
     func preparePreviewOfFile(at url: URL) async throws {
-        let modelData = try await ModelData(url: url, includeEdges: true)
+        let modelData = try ModelData(url: url, includeEdges: true)
 
         await MainActor.run {
             let scene = SCNScene()
