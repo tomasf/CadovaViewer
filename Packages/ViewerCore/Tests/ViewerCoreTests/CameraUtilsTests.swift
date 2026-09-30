@@ -58,6 +58,23 @@ struct CameraUtilsTests {
         #expect(ViewPreset.bottom.title == "Bottom")
     }
 
+    @Test(arguments: ViewPreset.allCases)
+    func `each preset's angles reproduce its view axis`(preset: ViewPreset) {
+        let fromAngles = preset.direction.axis
+        #expect(fromAngles.x ≈ preset.axis.x)
+        #expect(fromAngles.y ≈ preset.axis.y)
+        #expect(fromAngles.z ≈ preset.axis.z)
+    }
+
+    @Test func `view direction axes are unit length and follow the angle conventions`() {
+        let direction = ViewDirection(azimuth: 30, elevation: 20)
+        #expect(simd_length(direction.axis) ≈ 1)
+        // Positive azimuth swings the camera from the front (−Y) toward the right (+X).
+        #expect(direction.axis.x > 0 && direction.axis.y < 0)
+        // Positive elevation raises the camera above the horizontal plane.
+        #expect(direction.axis.z ≈ sin(20 * .pi / 180))
+    }
+
     private func matricesEqual(_ a: float4x4, _ b: float4x4) -> Bool {
         (0..<4).allSatisfy { col in
             Double(a[col].x) ≈ Double(b[col].x)

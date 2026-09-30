@@ -35,6 +35,12 @@ struct CadovaRender: AsyncParsableCommand {
     @Option(help: "View preset: \(viewPresetsByName.keys.sorted().joined(separator: ", ")).")
     var view: String = "isometric"
 
+    @Option(parsing: .unconditional, help: ArgumentHelp("Camera angle around the vertical axis, in degrees: 0 = front, 90 = right, 180 = back, 270 = left. Replaces this angle of --view; the other angle keeps --view's value.", valueName: "degrees"))
+    var azimuth: Double?
+
+    @Option(parsing: .unconditional, help: ArgumentHelp("Camera angle above the horizontal plane, in degrees from -90 to 90 (90 = looking straight down). Replaces this angle of --view; the other angle keeps --view's value.", valueName: "degrees"))
+    var elevation: Double?
+
     @Option(help: "Camera projection: perspective or orthographic.")
     var projection: String = "perspective"
 
@@ -78,6 +84,12 @@ struct CadovaRender: AsyncParsableCommand {
         guard viewPresetsByName[view.lowercased()] != nil else {
             throw ValidationError("Unknown --view '\(view)'. Valid values: \(viewPresetsByName.keys.sorted().joined(separator: ", ")).")
         }
+        if let azimuth, !azimuth.isFinite {
+            throw ValidationError("--azimuth must be a finite number of degrees.")
+        }
+        if let elevation, !(-90...90).contains(elevation) {
+            throw ValidationError("--elevation must be between -90 and 90 degrees.")
+        }
         guard ["perspective", "orthographic"].contains(projection.lowercased()) else {
             throw ValidationError("Unknown --projection '\(projection)'. Valid values: perspective, orthographic.")
         }
@@ -109,6 +121,13 @@ struct CadovaRender: AsyncParsableCommand {
         let inputURL = URL(fileURLWithPath: input)
         let outputURL = URL(fileURLWithPath: output)
         let preset = viewPresetsByName[view.lowercased()]!
+        // Keep the preset's exact axis unless an angle overrides it.
+        let viewAxis = azimuth == nil && elevation == nil
+            ? preset.axis
+            : ViewDirection(
+                azimuth: azimuth ?? preset.direction.azimuth,
+                elevation: elevation ?? preset.direction.elevation
+            ).axis
         let cameraProjection: CameraProjection = projection.lowercased() == "orthographic" ? .orthographic : .perspective
         let resolvedEdgeVisibility = EdgeVisibility(rawValue: edges.lowercased())!
         let resolvedBackgroundColor = backgroundColor.flatMap { NSColor(cadovaRenderHex: $0) } ?? .white
@@ -117,7 +136,7 @@ struct CadovaRender: AsyncParsableCommand {
         let hiddenPartIDs = try hiddenPartIDs(in: modelData)
         let image = try ModelRenderer.render(
             modelData: modelData,
-            preset: preset,
+            viewAxis: viewAxis,
             size: CGSize(width: width, height: height),
             projection: cameraProjection,
             transparent: transparent,

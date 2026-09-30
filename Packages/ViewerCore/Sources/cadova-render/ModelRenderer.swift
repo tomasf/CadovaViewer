@@ -28,7 +28,7 @@ enum RenderError: Error, CustomStringConvertible {
 }
 
 /// Renders a loaded model to a still image, mirroring the offscreen render pattern used by the
-/// Quick Look Thumbnail extension's `OffscreenRenderer`, generalized to a configurable view preset,
+/// Quick Look Thumbnail extension's `OffscreenRenderer`, generalized to a configurable view direction,
 /// projection, size, background, and optional grid.
 enum ModelRenderer {
     /// Surface shader modifier matching the viewer's "Materials" option turned off: faces go flat
@@ -49,7 +49,7 @@ enum ModelRenderer {
 
     static func render(
         modelData: ModelData,
-        preset: ViewPreset,
+        viewAxis: SIMD3<Double>,
         size: CGSize,
         projection: CameraProjection,
         transparent: Bool,
@@ -102,7 +102,7 @@ enum ModelRenderer {
         ambientLightNode.light = ambientLight
         scene.rootNode.addChildNode(ambientLightNode)
 
-        let cameraNode = makeCamera(for: modelData.rootNode, in: scene, preset: preset, size: size, projection: projection, margin: margin)
+        let cameraNode = makeCamera(for: modelData.rootNode, in: scene, viewAxis: viewAxis, size: size, projection: projection, margin: margin)
 
         let edgeNodes = renderedParts.flatMap {
             [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 }
@@ -169,7 +169,7 @@ enum ModelRenderer {
     private static func makeCamera(
         for modelNode: SCNNode,
         in scene: SCNScene,
-        preset: ViewPreset,
+        viewAxis axis: SIMD3<Double>,
         size: CGSize,
         projection: CameraProjection,
         margin: Double
@@ -185,7 +185,6 @@ enum ModelRenderer {
         camera.fieldOfView = 30
         camera.projectionDirection = .vertical
 
-        let axis = preset.axis
         let framing = frameBoundingBox(
             axis: axis,
             boundingBox: boundingBox,

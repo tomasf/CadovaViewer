@@ -37,6 +37,34 @@ extension SIMD4<Float> {
     }
 }
 
+// MARK: - View Direction
+
+/// A viewing direction as orbit angles around the model, in degrees.
+///
+/// Azimuth rotates around the vertical (Z) axis, counter-clockwise seen from above: 0° looks from
+/// the front (camera on −Y), 90° from the right (+X), 180° from the back, 270° from the left.
+/// Elevation is the angle above the horizontal plane: 90° looks straight down, −90° straight up.
+public struct ViewDirection: Equatable, Sendable {
+    public var azimuth: Double
+    public var elevation: Double
+
+    public init(azimuth: Double, elevation: Double) {
+        self.azimuth = azimuth
+        self.elevation = elevation
+    }
+
+    /// The outward view axis: a unit vector pointing from the model center toward the camera.
+    public var axis: SIMD3<Double> {
+        let azimuthRadians = azimuth * .pi / 180
+        let elevationRadians = elevation * .pi / 180
+        return SIMD3(
+            sin(azimuthRadians) * cos(elevationRadians),
+            -cos(azimuthRadians) * cos(elevationRadians),
+            sin(elevationRadians)
+        )
+    }
+}
+
 // MARK: - View Presets
 
 public enum ViewPreset: Int, CaseIterable {
@@ -57,6 +85,24 @@ public enum ViewPreset: Int, CaseIterable {
         case .right: return "Right"
         case .top: return "Top"
         case .bottom: return "Bottom"
+        }
+    }
+
+    /// The preset expressed as orbit angles, for adjusting a preset rather than starting from
+    /// scratch. `direction.axis` matches `axis` (up to rounding).
+    public var direction: ViewDirection {
+        switch self {
+        case .isometric:
+            // `axis` normalizes (-cos 35.264°, -cos 35.264°, sin 35.264°), which puts the camera
+            // atan(tan 35.264° / √2) ≈ 26.57° above the horizontal, not 35.264°.
+            let elevation = atan(tan(35.264 * .pi / 180) / 2.squareRoot()) * 180 / .pi
+            return ViewDirection(azimuth: -45, elevation: elevation)
+        case .front:  return ViewDirection(azimuth: 0, elevation: 0)
+        case .back:   return ViewDirection(azimuth: 180, elevation: 0)
+        case .left:   return ViewDirection(azimuth: 270, elevation: 0)
+        case .right:  return ViewDirection(azimuth: 90, elevation: 0)
+        case .top:    return ViewDirection(azimuth: 0, elevation: 90)
+        case .bottom: return ViewDirection(azimuth: 0, elevation: -90)
         }
     }
 
