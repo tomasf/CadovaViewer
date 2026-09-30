@@ -23,7 +23,13 @@ class ViewportController: NSObject, ObservableObject {
     weak var documentViewModel: DocumentViewModel?
     /// Whether this is the document's focused viewport. Drives which NavLib (SpaceMouse) session is
     /// the active one, and the focus border.
-    var isFocusedViewport = false
+    var isFocusedViewport = false {
+        didSet {
+            // Motion callbacks follow the session's state provider, so once focus moves on this
+            // viewport would never see the motion end. Finish it here.
+            if oldValue, !isFocusedViewport { interruptSpaceMouseMotion() }
+        }
+    }
 
     /// The document-global measurement state, shared by every viewport.
     let measurementController: MeasurementController
@@ -162,6 +168,9 @@ class ViewportController: NSObject, ObservableObject {
     /// mouse drag or an animated fly-to). The document's NavLib session checks this on the focused
     /// viewport before applying motion.
     var navLibIsSuspended = false
+    /// Whether a SpaceMouse motion is in progress in this viewport, i.e. mouse camera control is
+    /// disabled and the view renders continuously until `endSpaceMouseMotion` restores them.
+    var isSpaceMouseMotionActive = false
     /// How long the camera must stay quiet after the last `viewDidChange` before the navigation-
     /// dependent toolbar state (`canResetCameraRoll`, `canShowPresets`) is refreshed.
     static let navigationSettleDelay: TimeInterval = 0.25

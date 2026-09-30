@@ -23,9 +23,37 @@ extension ViewportController {
 
     func setNavLibSuspended(_ suspend: Bool) {
         navLibIsSuspended = suspend
-        // Drop any unapplied SpaceMouse transform so it can't fight a mouse drag or fly-to.
-        if suspend { pendingNavLibTransform.withLock { $0 = nil } }
+        if suspend {
+            // Drop any unapplied SpaceMouse transform so it can't fight a mouse drag or fly-to.
+            pendingNavLibTransform.withLock { $0 = nil }
+            // Callbacks are ignored while suspended, so the motion's end would never arrive.
+            endSpaceMouseMotion(interrupted: true)
+        }
+        // Only the focused viewport drives the shared session; don't cancel its motion from here.
+        if isFocusedViewport {
+            documentViewModel?.navLibSession.cancelMotion()
+        }
+    }
+
+    /// Stops an in-progress SpaceMouse motion in this viewport, e.g. when it loses focus.
+    func interruptSpaceMouseMotion() {
+        guard isSpaceMouseMotionActive else { return }
+        endSpaceMouseMotion(interrupted: true)
         documentViewModel?.navLibSession.cancelMotion()
+    }
+
+    /// Restores mouse navigation and on-demand rendering after a SpaceMouse motion. An interrupted
+    /// motion also hides the pivot, since the navlib's own hide won't reach this viewport.
+    private func endSpaceMouseMotion(interrupted: Bool) {
+        guard isSpaceMouseMotionActive else { return }
+        isSpaceMouseMotionActive = false
+        sceneView.cameraControlEnabled = true
+        sceneView.rendersContinuously = false
+        if interrupted {
+            overlayScene.pivotPointVisibility = false
+        } else {
+            viewDidChange()
+        }
     }
 }
 
@@ -139,26 +167,27 @@ extension ViewportController: NavLibStateProvider {
     }
 
     func motionActiveChanged(_ active: Bool) {
-        guard !navLibIsSuspended else { return }
-        if active {
-            // A new gesture started: drop any pending "navigation settled" refresh so the toolbar
-            // state isn't updated mid-motion.
-            cancelNavigationSettledUpdate()
-            stopCameraInertia() // grabbing the SpaceMouse cancels a mouse glide
-            // Hide the cursor while navigating, the same way the system hides it
-            // while typing: it reappears automatically as soon as the mouse moves.
-            NSCursor.setHiddenUntilMouseMoves(true)
-        } else {
-            viewDidChange()
+        guard active else {
+            endSpaceMouseMotion(interrupted: false)
+            return
         }
+        guard !navLibIsSuspended, !isSpaceMouseMotionActive else { return }
+        isSpaceMouseMotionActive = true
+        // A new gesture started: drop any pending "navigation settled" refresh so the toolbar
+        // state isn't updated mid-motion.
+        cancelNavigationSettledUpdate()
+        stopCameraInertia() // grabbing the SpaceMouse cancels a mouse glide
+        // Hide the cursor while navigating, the same way the system hides it
+        // while typing: it reappears automatically as soon as the mouse moves.
+        NSCursor.setHiddenUntilMouseMoves(true)
         // Suspend mouse/trackpad camera navigation while a SpaceMouse motion is active so the two
         // don't fight (replaces toggling SceneKit's now-disabled allowsCameraControl).
-        sceneView.cameraControlEnabled = !active
+        sceneView.cameraControlEnabled = false
         // NavLib writes the camera transform with actions disabled, which doesn't spin up SceneKit's
         // render loop — so without this the view only repaints on demand and motion lags behind the
         // data. Render vsync-paced for the duration of the motion (SceneKit's own camera control used
         // to keep this alive via allowsCameraControl).
-        sceneView.rendersContinuously = active
+        sceneView.rendersContinuously = true
     }
 }
 
