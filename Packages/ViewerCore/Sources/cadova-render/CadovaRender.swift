@@ -41,6 +41,18 @@ struct CadovaRender: AsyncParsableCommand {
     @Option(help: "Which edges to draw: none, sharp, or all.")
     var edges: String = "sharp"
 
+    @Flag(help: "Shade curved surfaces smoothly instead of showing each facet.")
+    var smoothShading = false
+
+    @Flag(inversion: .prefixedNo, help: "Render the model's materials and colors. With --no-materials, faces render plain white and edges black.")
+    var materials = true
+
+    @Option(name: .customLong("include-part"), help: ArgumentHelp("Render only this part, by name or part number. Repeat to include several parts.", valueName: "part"))
+    var includedParts: [String] = []
+
+    @Option(name: .customLong("exclude-part"), help: ArgumentHelp("Leave out this part, by name or part number. Repeat to exclude several parts.", valueName: "part"))
+    var excludedParts: [String] = []
+
     @Option(help: "Headroom around the model as a multiple of the tightest fit (1.0 = no margin, edge-to-edge).")
     var margin: Double = 1.05
 
@@ -72,6 +84,9 @@ struct CadovaRender: AsyncParsableCommand {
         guard EdgeVisibility(rawValue: edges.lowercased()) != nil else {
             throw ValidationError("Unknown --edges '\(edges)'. Valid values: none, sharp, all.")
         }
+        if !includedParts.isEmpty, !excludedParts.isEmpty {
+            throw ValidationError("--include-part and --exclude-part can't be combined.")
+        }
         guard margin > 0 else {
             throw ValidationError("--margin must be positive.")
         }
@@ -99,6 +114,7 @@ struct CadovaRender: AsyncParsableCommand {
         let resolvedBackgroundColor = backgroundColor.flatMap { NSColor(cadovaRenderHex: $0) } ?? .white
 
         let modelData = try ModelData(url: inputURL, includeEdges: resolvedEdgeVisibility != .none)
+        let hiddenPartIDs = try hiddenPartIDs(in: modelData)
         let image = try ModelRenderer.render(
             modelData: modelData,
             preset: preset,
@@ -108,6 +124,9 @@ struct CadovaRender: AsyncParsableCommand {
             backgroundColor: resolvedBackgroundColor,
             showGrid: grid,
             edgeVisibility: resolvedEdgeVisibility,
+            smoothShading: smoothShading,
+            materialsEnabled: materials,
+            hiddenPartIDs: hiddenPartIDs,
             margin: margin
         )
 
@@ -115,5 +134,28 @@ struct CadovaRender: AsyncParsableCommand {
             ? ImageTrimming.trim(image, backgroundColor: transparent ? nil : resolvedBackgroundColor, padding: trimPadding)
             : image
         try ImageWriter.write(outputImage, to: outputURL)
+    }
+
+    /// Resolves `--include-part`/`--exclude-part` to the IDs of the parts to leave out. Each value
+    /// matches every part with that name or part number; a value matching nothing is an error.
+    private func hiddenPartIDs(in modelData: ModelData) throws -> Set<ModelData.Part.ID> {
+        let requested = includedParts.isEmpty ? excludedParts : includedParts
+        guard !requested.isEmpty else { return [] }
+
+        var matched: Set<ModelData.Part.ID> = []
+        for value in requested {
+            let matches = modelData.parts.filter { $0.name == value || $0.id == value }
+            guard !matches.isEmpty else {
+                let available = modelData.parts.map { "'\($0.name)'" }.joined(separator: ", ")
+                throw ValidationError("No part named '\(value)'. Parts in this model: \(available).")
+            }
+            matched.formUnion(matches.map(\.id))
+        }
+
+        let hidden = includedParts.isEmpty ? matched : Set(modelData.parts.map(\.id)).subtracting(matched)
+        guard hidden.count < modelData.parts.count else {
+            throw ValidationError("--exclude-part leaves no parts to render.")
+        }
+        return hidden
     }
 }

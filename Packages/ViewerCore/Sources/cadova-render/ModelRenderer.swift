@@ -31,6 +31,22 @@ enum RenderError: Error, CustomStringConvertible {
 /// Quick Look Thumbnail extension's `OffscreenRenderer`, generalized to a configurable view preset,
 /// projection, size, background, and optional grid.
 enum ModelRenderer {
+    /// Surface shader modifier matching the viewer's "Materials" option turned off: faces go flat
+    /// opaque matte white, and edge lines (flagged via `isEdgeMaterial`) go plain black, since their
+    /// baked light/dark colour was chosen for contrast against the original face colour.
+    private static let materialsDisabledShaderModifier = """
+    #pragma arguments
+    float isEdgeMaterial;
+    #pragma body
+    if (isEdgeMaterial > 0.5) {
+        _surface.diffuse = float4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        _surface.diffuse = float4(1.0, 1.0, 1.0, 1.0);
+        _surface.metalness = 0.0;
+        _surface.roughness = 0.9;
+    }
+    """
+
     static func render(
         modelData: ModelData,
         preset: ViewPreset,
@@ -40,8 +56,28 @@ enum ModelRenderer {
         backgroundColor: NSColor,
         showGrid: Bool,
         edgeVisibility: EdgeVisibility,
+        smoothShading: Bool,
+        materialsEnabled: Bool,
+        hiddenPartIDs: Set<ModelData.Part.ID>,
         margin: Double
     ) throws -> NSImage {
+        // Remove (rather than hide) excluded parts, so the camera framing and grid bounds, which
+        // both measure the root node, only cover the parts actually rendered.
+        let renderedParts = modelData.parts.filter { !hiddenPartIDs.contains($0.id) }
+        for part in modelData.parts where hiddenPartIDs.contains(part.id) {
+            part.nodes.container.removeFromParentNode()
+        }
+
+        if smoothShading {
+            for variant in renderedParts.flatMap(\.modelGeometryVariants) {
+                variant.node.geometry = variant.smoothGeometry()
+            }
+        }
+
+        if !materialsEnabled {
+            disableMaterials(of: renderedParts)
+        }
+
         let scene = SCNScene()
         scene.lightingEnvironment.contents = SceneLighting.environmentImage
         if !transparent {
@@ -54,7 +90,7 @@ enum ModelRenderer {
         // Matches the interactive viewport's default (ViewOptions.edgeVisibility = .sharp):
         // both groups exist in the scene graph whenever edges were loaded, so hide the ones
         // that shouldn't show for the requested mode.
-        for part in modelData.parts {
+        for part in renderedParts {
             part.nodes.sharpEdges?.isHidden = edgeVisibility == .none
             part.nodes.smoothEdges?.isHidden = edgeVisibility != .all
         }
@@ -68,7 +104,7 @@ enum ModelRenderer {
 
         let cameraNode = makeCamera(for: modelData.rootNode, in: scene, preset: preset, size: size, projection: projection, margin: margin)
 
-        let edgeNodes = modelData.parts.flatMap {
+        let edgeNodes = renderedParts.flatMap {
             [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 }
         }.flatMap { $0.childNodes { node, _ in node.geometry != nil } }
         for node in edgeNodes {
@@ -99,6 +135,35 @@ enum ModelRenderer {
         }
 
         return renderer.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
+    }
+
+    /// Applies `materialsDisabledShaderModifier` to every material of the given parts, flagging
+    /// edge-line materials so they turn black instead of white.
+    private static func disableMaterials(of parts: [ModelData.Part]) {
+        func geometryNodes(under node: SCNNode?) -> [SCNNode] {
+            guard let node else { return [] }
+            return (node.geometry != nil ? [node] : []) + node.childNodes { child, _ in child.geometry != nil }
+        }
+        let edgeMaterials = parts
+            .flatMap { geometryNodes(under: $0.nodes.sharpEdges) + geometryNodes(under: $0.nodes.smoothEdges) }
+            .flatMap { $0.geometry?.materials ?? [] }
+        let edgeMaterialIDs = Set(edgeMaterials.map(ObjectIdentifier.init))
+
+        var faceMaterials = parts
+            .flatMap { geometryNodes(under: $0.nodes.model) }
+            .flatMap { $0.geometry?.materials ?? [] }
+        // Smooth variants share the flat geometry's materials, but include them in case a node
+        // currently holds the other variant.
+        faceMaterials += parts.flatMap(\.modelGeometryVariants).flatMap(\.flat.materials)
+
+        var seen: Set<ObjectIdentifier> = []
+        for material in faceMaterials + edgeMaterials where seen.insert(ObjectIdentifier(material)).inserted {
+            var modifiers = material.shaderModifiers ?? [:]
+            modifiers[.surface] = materialsDisabledShaderModifier
+            material.shaderModifiers = modifiers
+            let isEdge = edgeMaterialIDs.contains(ObjectIdentifier(material))
+            material.setValue(NSNumber(value: isEdge ? Float(1) : Float(0)), forKey: "isEdgeMaterial")
+        }
     }
 
     private static func makeCamera(
