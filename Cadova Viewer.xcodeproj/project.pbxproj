@@ -904,7 +904,7 @@
 			repositoryURL = "https://github.com/tomasf/NavLibSwift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 3.0.0;
+				minimumVersion = 3.1.0;
 			};
 		};
 		C9A941A52EA5018D00D5BAB2 /* XCRemoteSwiftPackageReference "Nodal" */ = {

@@ -312,6 +312,7 @@ final class DocumentViewModel: ObservableObject {
     private func startNavLib() {
         do {
             try navLibSession.start(stateProvider: focusedViewport, applicationName: "Model Viewer")
+            registerNavLibCommands()
         } catch {
             print("NavLib initialization failed: \(error)")
         }
