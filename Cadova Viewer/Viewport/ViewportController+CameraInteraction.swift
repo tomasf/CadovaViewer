@@ -406,7 +406,9 @@ extension ViewportController {
         }
     }
 
+    /// Stops any glide, and any animated camera flight, so direct navigation takes over.
     func stopCameraInertia() {
+        cancelCameraFlight()
         inertia.withLock { $0 = nil }
         sceneView.rendersContinuously = false
     }

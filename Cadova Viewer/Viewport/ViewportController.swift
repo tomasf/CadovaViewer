@@ -276,6 +276,10 @@ class ViewportController: NSObject, ObservableObject {
         var lastTime: CFTimeInterval = 0
     }
     let inertia = Mutex<InertiaState?>(nil)
+
+    /// Animated camera move to a new view (presets, center-on-parts, clear roll). Stepped in the
+    /// render loop like the inertia glide, and guarded the same way. See `ViewportController+View`.
+    let cameraFlight = Mutex<CameraFlight?>(nil)
     
     /// The geometry node currently named as the outline target, so its name can be cleared when
     /// the highlight moves. See `ViewportController+Highlight`.

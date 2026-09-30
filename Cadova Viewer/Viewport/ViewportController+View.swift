@@ -14,23 +14,76 @@ extension ViewportController {
 
     func setCameraView(_ view: CameraView, movement: MovementType) {
         stopCameraInertia()
+
+        guard movement == .small || movement == .large else {
+            setNavLibSuspended(true)
+            SCNTransaction.begin()
+            SCNTransaction.disableActions = true
+            cameraNode.transform = view.transform
+            cameraNode.camera!.orthographicScale = view.orthographicScale
+            updateOrthographicDepthRange()
+            SCNTransaction.commit()
+            setNavLibSuspended(false)
+            if movement != .preview {
+                viewDidChange()
+            }
+            return
+        }
+
+        // Animate by orbiting around the model rather than letting SceneKit tween the transform
+        // matrix, which moves the camera in a straight line (see `CameraFlight`).
+        let pivot = SIMD3<Float>(sceneController.modelBoundingSphere.center)
+        let fallbackDistance = Swift.max(sceneController.modelBoundingSphere.radius * 3, 1)
+        let flight = CameraFlight(
+            from: .init(transform: cameraNode.simdTransform, orthographicScale: cameraNode.camera!.orthographicScale, pivot: pivot, fallbackDistance: fallbackDistance),
+            to: .init(transform: simd_float4x4(view.transform), orthographicScale: view.orthographicScale, pivot: pivot, fallbackDistance: fallbackDistance),
+            duration: movement == .small ? 0.3 : 0.5
+        )
         setNavLibSuspended(true)
+        cameraFlight.withLock { $0 = flight }
+        // Render vsync-paced so the render loop ticks `stepCameraFlight` every frame.
+        sceneView.rendersContinuously = true
+    }
 
-        SCNTransaction.begin()
-        SCNTransaction.disableActions = movement == .instant || movement == .preview
-        SCNTransaction.animationDuration = movement == .small ? 0.3 : 0.8
-
-        SCNTransaction.completionBlock = {
-            self.setNavLibSuspended(false)
+    /// Advances an in-progress camera flight one frame. Called from the render loop
+    /// (`renderer(_:updateAtTime:)`); no-op when no flight is active.
+    func stepCameraFlight(atTime time: TimeInterval) {
+        let step = cameraFlight.withLock { state -> (pose: CameraFlight.Pose, finished: Bool)? in
+            guard var flight = state else { return nil }
+            let startTime = flight.startTime ?? time
+            flight.startTime = startTime
+            let progress = flight.duration > 0 ? Swift.min(Swift.max((time - startTime) / flight.duration, 0), 1) : 1
+            let finished = progress >= 1
+            state = finished ? nil : flight
+            return (flight.pose(at: Float(progress)), finished)
         }
+        guard let step else { return }
 
-        cameraNode.transform = view.transform
-        cameraNode.camera!.orthographicScale = view.orthographicScale
+        cameraNode.simdTransform = step.pose.transform
+        cameraNode.camera?.orthographicScale = step.pose.orthographicScale
         updateOrthographicDepthRange()
-        SCNTransaction.commit()
-        if movement != .preview {
-            viewDidChange()
+
+        if step.finished {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, cameraFlight.withLock({ $0 == nil }) else { return }
+                finishCameraFlight()
+            }
         }
+    }
+
+    /// Stops an in-progress camera flight where it is (e.g. when the user grabs the view).
+    func cancelCameraFlight() {
+        guard cameraFlight.withLock({ state in
+            defer { state = nil }
+            return state != nil
+        }) else { return }
+        finishCameraFlight()
+    }
+
+    private func finishCameraFlight() {
+        sceneView.rendersContinuously = false
+        setNavLibSuspended(false)
+        viewDidChange()
     }
 
     var currentCameraView: CameraView {
@@ -204,5 +257,85 @@ extension simd_float4x4 {
 
         let dot = abs(simd_dot(simd_quaternion(self).vector, simd_quaternion(other).vector))
         return dot > 1 - tolerance
+    }
+}
+
+/// An animated camera move that turns the camera around the model instead of sliding it in a
+/// straight line. Tweening the transform matrix (as `SCNTransaction` does) interpolates the
+/// position linearly, so e.g. front → back sends the camera straight through the model and swings
+/// the model far across the screen. Here each end is expressed as an orientation, a focus point on
+/// its view axis (the model center projected onto that axis) and a distance to it; interpolating
+/// those keeps the model in view, so it mostly just rotates while the framing adjusts.
+struct CameraFlight {
+    struct Pose {
+        var orientation: simd_quatf
+        var target: SIMD3<Float>
+        var distance: Float
+        var orthographicScale: Double
+
+        /// Decomposes a camera transform around `pivot`. If the pivot isn't in front of the
+        /// camera, `fallbackDistance` is used for the focus point instead.
+        init(transform: simd_float4x4, orthographicScale: Double, pivot: SIMD3<Float>, fallbackDistance: Float) {
+            let rotation = simd_float3x3(
+                simd_normalize(transform.columns.0.xyz),
+                simd_normalize(transform.columns.1.xyz),
+                simd_normalize(transform.columns.2.xyz)
+            )
+            let position = transform.columns.3.xyz
+            let forward = -rotation.columns.2
+            let depth = simd_dot(pivot - position, forward)
+            let distance = depth > 1.0e-4 ? depth : fallbackDistance
+
+            self.orientation = simd_normalize(simd_quatf(rotation))
+            self.distance = distance
+            self.target = position + forward * distance
+            self.orthographicScale = orthographicScale
+        }
+
+        init(orientation: simd_quatf, target: SIMD3<Float>, distance: Float, orthographicScale: Double) {
+            self.orientation = orientation
+            self.target = target
+            self.distance = distance
+            self.orthographicScale = orthographicScale
+        }
+
+        var transform: simd_float4x4 {
+            let rotation = simd_float3x3(orientation)
+            let position = target + rotation.columns.2 * distance // camera looks along -Z
+            return simd_float4x4(columns: (
+                SIMD4(rotation.columns.0, 0),
+                SIMD4(rotation.columns.1, 0),
+                SIMD4(rotation.columns.2, 0),
+                SIMD4(position, 1)
+            ))
+        }
+    }
+
+    let from: Pose
+    let to: Pose
+    let duration: TimeInterval
+    /// Nil until the first render-loop step seeds it from that frame's time.
+    var startTime: TimeInterval?
+
+    init(from: Pose, to: Pose, duration: TimeInterval) {
+        self.from = from
+        self.to = to
+        self.duration = duration
+    }
+
+    /// The pose at linear `progress` (0...1), with a cubic ease-out applied (starts at full speed, glides into the end view).
+    func pose(at progress: Float) -> Pose {
+        guard progress < 1 else { return to }
+        let t = 1 - pow(1 - progress, 3)
+        let scaleRatio = to.orthographicScale / from.orthographicScale
+        let scale = from.orthographicScale > 0 && scaleRatio > 0 && scaleRatio.isFinite
+            ? from.orthographicScale * pow(scaleRatio, Double(t))
+            : from.orthographicScale + (to.orthographicScale - from.orthographicScale) * Double(t)
+        return Pose(
+            orientation: simd_slerp(from.orientation, to.orientation, t),
+            target: simd_mix(from.target, to.target, SIMD3(repeating: t)),
+            distance: from.distance * pow(to.distance / from.distance, t),
+            orthographicScale: scale
+        )
     }
 }

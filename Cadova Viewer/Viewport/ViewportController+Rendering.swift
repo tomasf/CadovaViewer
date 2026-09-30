@@ -6,6 +6,7 @@ extension ViewportController: SCNSceneRendererDelegate {
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
         // Advance any post-release camera glide in lockstep with the render loop (no-op when idle).
         stepCameraInertia(atTime: time)
+        stepCameraFlight(atTime: time)
 
         // Apply the latest SpaceMouse-commanded transform here (render thread), so NavLib's setter
         // stays lock-free and never stalls the run loop on the scene lock.
