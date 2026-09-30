@@ -113,6 +113,9 @@ struct DocumentSidebar: View {
                     Button("Get Info") {
                         partInfoData = .init(parts: parts(for: ids))
                     }
+                    Button(copyNameTitle(for: ids)) {
+                        copyPartNames(for: ids)
+                    }
                 }
             } primaryAction: { ids in
                 viewport.centerView(onPartIDs: ids)
@@ -186,6 +189,16 @@ struct DocumentSidebar: View {
 
     private func sliceTitle(for ids: Set<ModelData.Part.ID>) -> String {
         ids.count == 1 ? "Slice" : "Slice \(ids.count) Parts"
+    }
+
+    private func copyNameTitle(for ids: Set<ModelData.Part.ID>) -> String {
+        ids.count == 1 ? "Copy Part Name" : "Copy Part Names"
+    }
+
+    private func copyPartNames(for ids: Set<ModelData.Part.ID>) {
+        let names = parts(for: ids).map(\.name).joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(names, forType: .string)
     }
 
     private func refreshMeasurementRows() {
