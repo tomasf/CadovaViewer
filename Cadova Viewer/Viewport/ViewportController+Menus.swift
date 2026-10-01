@@ -217,6 +217,14 @@ extension ViewportController {
 
         buildViewportLayoutMenu(with: builder)
 
+        #if DEBUG
+        builder.addSeparator()
+        let showFrameRate = UserDefaults.standard.bool(forKey: FrameRateCounter.visibilityDefaultsKey)
+        builder.addItem(label: "Show Frame Rate", checked: showFrameRate) {
+            UserDefaults.standard.set(!showFrameRate, forKey: FrameRateCounter.visibilityDefaultsKey)
+        }
+        #endif
+
         // Sits just above the system "Show/Hide Toolbar" item (the end marker is the separator right
         // before it).
         if let viewModel = documentViewModel {

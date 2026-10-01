@@ -17,6 +17,10 @@ struct ViewportContentView: View {
     /// change without staying on permanently.
     @State private var focusRingOpacity: Double = 0
 
+    #if DEBUG
+    @AppStorage(FrameRateCounter.visibilityDefaultsKey) private var showFrameRate = false
+    #endif
+
     private var isFocused: Bool { viewModel.focusedViewportID == viewportID }
 
     var body: some View {
@@ -49,6 +53,14 @@ struct ViewportContentView: View {
                     .frame(width: 142)
                     .padding(.bottom, 132)
             }
+            #if DEBUG
+            .overlay(alignment: .bottomLeading) {
+                if showFrameRate {
+                    FrameRateCounter(stream: viewportController.frameRateSamples)
+                        .padding(8)
+                }
+            }
+            #endif
             .overlay {
                 if viewModel.hasMultipleViewports {
                     Rectangle()

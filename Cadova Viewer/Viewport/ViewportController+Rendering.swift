@@ -4,6 +4,12 @@ import ViewerCore
 
 extension ViewportController: SCNSceneRendererDelegate {
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        #if DEBUG
+        if let sample = frameRateMeter.withLock({ $0.recordFrame(at: time) }) {
+            frameRateStream.send(sample)
+        }
+        #endif
+
         // Advance any post-release camera glide in lockstep with the render loop (no-op when idle).
         stepCameraInertia(atTime: time)
         stepCameraFlight(atTime: time)

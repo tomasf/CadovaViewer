@@ -242,6 +242,14 @@ class ViewportController: NSObject, ObservableObject {
     var gridScaleInfo: AnyPublisher<ViewportGrid.ScaleInfo, Never> { gridScaleStream.eraseToAnyPublisher() }
     var lastSentGridScale: ViewportGrid.ScaleInfo?
 
+    #if DEBUG
+    /// Frame timing for the Debug-only frame rate counter. Only touched from the render loop, but
+    /// guarded like the other render-thread state. See `FrameRateMeter`.
+    let frameRateMeter = Mutex(FrameRateMeter())
+    let frameRateStream = PassthroughSubject<FrameRateMeter.Sample, Never>()
+    var frameRateSamples: AnyPublisher<FrameRateMeter.Sample, Never> { frameRateStream.eraseToAnyPublisher() }
+    #endif
+
     var hoverPoint: CGPoint? {
         didSet {
             scheduleHoverPointUpdate()
