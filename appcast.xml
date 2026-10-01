@@ -3,6 +3,30 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.3.0</title>
+            <pubDate>Thu, 01 Oct 2026 09:26:00 +0200</pubDate>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.3.0/CadovaViewer1.3.0.zip" length="9563439" type="application/octet-stream" sparkle:edSignature="DZE44j36XS+6/Se9NYaPJx2tTlOic4A/Dabr8u85HE5XUtOxvRXYyiS+miXNRsLrQyK57yv8a+uNqax+bNdwCg=="/>
+            <description><![CDATA[
+                <h4>Additions</h4>
+                <ul>
+                    <li>Viewer commands can now be assigned to SpaceMouse buttons. They're listed under Exported Commands in the 3Dconnexion settings and include standard views, projection, smooth shading, edges, panes and slicing. Each command acts on the focused pane.</li>
+                    <li>The sidebar's part context menu has a new Copy Part Name item, which copies the selected parts' names, one per line.</li>
+                </ul>
+                <h4>Improvements</h4>
+                <ul>
+                    <li>Switching between standard views now rotates the camera around the model instead of sweeping the model across the screen. The transition is also quicker.</li>
+                </ul>
+                <h4>Fixes</h4>
+                <ul>
+                    <li>Fixed a pane that could stop responding to the mouse, with the SpaceMouse pivot stuck on screen, if a SpaceMouse motion was interrupted by switching panes or by a view change.</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>1.2.0</title>
             <pubDate>Sun, 23 Aug 2026 23:23:49 +0200</pubDate>
             <sparkle:version>12</sparkle:version>
