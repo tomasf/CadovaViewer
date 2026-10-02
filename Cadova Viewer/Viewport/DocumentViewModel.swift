@@ -4,6 +4,7 @@ import AppKit
 import SceneKit
 import NavLib
 import ViewerCore
+import OSLog
 
 /// Per-document coordinator for the (possibly split) set of viewports. Owns the shared
 /// `SceneController`, the live `ViewportController`s keyed by leaf id, the split layout tree and
@@ -16,8 +17,15 @@ final class DocumentViewModel: ObservableObject {
     /// One SpaceMouse (NavLib) session for the whole document. Its state provider is re-pointed to
     /// the focused viewport, so exactly one session always drives whichever viewport has focus —
     /// avoiding the multiple-active-session routing problem of a session per viewport.
-    let navLibSession = NavLibSession<SCNVector3>()
+    /// Replaced with a fresh session if the 3Dconnexion daemon drops this one (see `NavLibChannelMonitor`).
+    private(set) var navLibSession = NavLibSession<SCNVector3>()
     private var navLibActive = false
+    /// The driver channel of the current session's connection, while it's being watched.
+    private var navLibChannel: UInt64?
+    /// Bumped whenever the session is replaced, so a late channel identification for a previous session is ignored.
+    private var navLibGeneration = 0
+    private var lastNavLibRestart: Date?
+    private var navLibRestartPending = false
     weak var document: Document?
 
     /// The document's status/model publishers, captured at init. `document` is weak and goes nil once
@@ -310,12 +318,7 @@ final class DocumentViewModel: ObservableObject {
     /// Starts the document's single NavLib session (driving the focused viewport via its state
     /// provider) and tracks when this document should receive SpaceMouse input.
     private func startNavLib() {
-        do {
-            try navLibSession.start(stateProvider: focusedViewport, applicationName: "Model Viewer")
-            registerNavLibCommands()
-        } catch {
-            print("NavLib initialization failed: \(error)")
-        }
+        connectNavLib()
         updateNavLibActive()
 
         NotificationCenter.default.publisher(for: NSWindow.didBecomeMainNotification)
@@ -323,23 +326,128 @@ final class DocumentViewModel: ObservableObject {
             .sink { [weak self] _ in self?.updateNavLibActive() }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: Self.navLibSessionDidRestartNotification)
+            .sink { [weak self] _ in self?.reclaimNavLibAfterRestart() }
+            .store(in: &cancellables)
+
         NSWorkspace.shared.publisher(for: \.frontmostApplication).sink { [weak self] runningApp in
-            guard let self, let runningApp, navLibActive else { return }
-
-            if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
-                navLibSession.applicationHasFocus = true
-                return
-            }
-
-            let active = switch Preferences().navLibActivationBehavior {
-            case .always: true
-            case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
-            case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
-            case .allExceptSpecificApplications: !Preferences().navLibExcludedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
-            }
-            navLibSession.applicationHasFocus = active
+            guard let self, navLibActive else { return }
+            updateNavLibApplicationFocus(for: runningApp)
         }.store(in: &cancellables)
     }
+
+    /// Opens the connection for `navLibSession` and watches its driver channel, so the session can be
+    /// recreated if the 3Dconnexion daemon drops the connection.
+    private func connectNavLib() {
+        let generation = navLibGeneration
+        do {
+            try NavLibChannelMonitor.shared.identifyChannel(createdBy: {
+                try navLibSession.start(stateProvider: focusedViewport, applicationName: "Model Viewer")
+            }, completion: { [weak self] channel in
+                self?.watchNavLibChannel(channel, generation: generation)
+            })
+            registerNavLibCommands()
+        } catch {
+            print("NavLib initialization failed: \(error)")
+        }
+    }
+
+    private func watchNavLibChannel(_ channel: UInt64?, generation: Int) {
+        guard generation == navLibGeneration else { return }
+        let name = document?.displayName ?? "<none>"
+        guard let channel else {
+            if NavLibChannelMonitor.shared.isDaemonAvailable {
+                Logger.navLib.notice("Couldn't identify the SpaceMouse channel for \(name, privacy: .public); it won't be recovered if dropped")
+            } else {
+                // Connecting without a running daemon leaves a session that never gets input.
+                Logger.navLib.notice("3Dconnexion daemon isn't running; \(name, privacy: .public) will reconnect when it is")
+                scheduleNavLibRestart(after: 0)
+            }
+            return
+        }
+        Logger.navLib.notice("Watching SpaceMouse channel \(channel, privacy: .public) for \(name, privacy: .public)")
+        navLibChannel = channel
+        NavLibChannelMonitor.shared.watchChannel(channel) { [weak self] in
+            self?.navLibChannelTerminated()
+        }
+    }
+
+    /// The daemon dropped this document's connection. Recreate the session after a short delay, and no
+    /// more often than every `minimumNavLibRestartInterval`, so a daemon that keeps dropping connections
+    /// can't make this loop.
+    private func navLibChannelTerminated() {
+        navLibChannel = nil
+        let earliestRestart = (lastNavLibRestart ?? .distantPast).addingTimeInterval(Self.minimumNavLibRestartInterval)
+        let delay = max(Self.navLibRestartDelay, earliestRestart.timeIntervalSinceNow)
+        Logger.navLib.notice("SpaceMouse channel for \(self.document?.displayName ?? "<none>", privacy: .public) was terminated; reconnecting in \(delay, format: .fixed(precision: 1), privacy: .public) s or when the 3Dconnexion daemon is back")
+        scheduleNavLibRestart(after: delay)
+    }
+
+    /// Recreates the session after `delay`, once the daemon is running. A dropped channel often means the
+    /// daemon itself went away; connecting before it's back blocks for seconds and yields a dead session.
+    private func scheduleNavLibRestart(after delay: TimeInterval) {
+        guard !navLibRestartPending else { return }
+        navLibRestartPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            NavLibChannelMonitor.shared.whenDaemonAvailable { [weak self] in
+                self?.restartNavLib()
+            }
+        }
+    }
+
+    private func restartNavLib() {
+        navLibRestartPending = false
+        lastNavLibRestart = Date()
+        navLibGeneration += 1
+        if let navLibChannel {
+            NavLibChannelMonitor.shared.stopWatchingChannel(navLibChannel)
+            self.navLibChannel = nil
+        }
+
+        // The dead connection will never report the end of a motion that was in progress.
+        for viewport in viewports.values {
+            viewport.interruptSpaceMouseMotion()
+        }
+
+        // Replacing the session releases the old one, which closes its connection.
+        navLibSession = NavLibSession()
+        connectNavLib()
+        focusedViewport.updateNavLibProjection()
+
+        // Creating a connection makes the daemon route the SpaceMouse to it, whichever document it's for.
+        NotificationCenter.default.post(name: Self.navLibSessionDidRestartNotification, object: self)
+    }
+
+    /// After any document's session is recreated, the document that had the SpaceMouse takes it back.
+    private func reclaimNavLibAfterRestart() {
+        guard navLibActive else { return }
+        navLibSession.setAsActiveSession()
+        updateNavLibApplicationFocus(for: NSWorkspace.shared.frontmostApplication)
+    }
+
+    /// Whether this document's session should claim the SpaceMouse while `runningApp` is frontmost, per the
+    /// activation behaviour preference.
+    private func updateNavLibApplicationFocus(for runningApp: NSRunningApplication?) {
+        guard let runningApp else { return }
+
+        if runningApp.bundleIdentifier == Bundle.main.bundleIdentifier {
+            navLibSession.applicationHasFocus = true
+            return
+        }
+
+        let active = switch Preferences().navLibActivationBehavior {
+        case .always: true
+        case .foregroundOnly: runningApp.bundleIdentifier == Bundle.main.bundleIdentifier
+        case .specificApplicationsInForeground: Preferences().navLibWhitelistedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
+        case .allExceptSpecificApplications: !Preferences().navLibExcludedApps.map(\.bundleIdentifier).contains(runningApp.bundleIdentifier)
+        }
+        navLibSession.applicationHasFocus = active
+    }
+
+    private static let navLibSessionDidRestartNotification = Notification.Name("DocumentViewModel.navLibSessionDidRestart")
+    /// Lets the daemon finish tearing down the dropped connection before a new one is opened.
+    private static let navLibRestartDelay: TimeInterval = 0.5
+    private static let minimumNavLibRestartInterval: TimeInterval = 30
 
     /// Makes this document's session active while its window is the main one. (Across documents the
     /// most recently activated session wins; within a document there's only this one session.)
