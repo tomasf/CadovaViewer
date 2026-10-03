@@ -11,7 +11,7 @@ extension ViewportController: SCNSceneRendererDelegate {
         #endif
 
         // Advance any post-release camera glide in lockstep with the render loop (no-op when idle).
-        stepCameraInertia(atTime: time)
+        cameraNavigator.stepInertia(atTime: time)
         stepCameraFlight(atTime: time)
 
         // Apply the latest SpaceMouse-commanded transform here (render thread), so NavLib's setter

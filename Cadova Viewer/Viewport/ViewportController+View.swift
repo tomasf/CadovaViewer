@@ -13,7 +13,7 @@ extension ViewportController {
     }
 
     func setCameraView(_ view: CameraView, movement: MovementType) {
-        stopCameraInertia()
+        cameraNavigator.stopMotion()
 
         guard movement == .small || movement == .large else {
             setNavLibSuspended(true)
@@ -128,11 +128,11 @@ extension ViewportController {
     }
 
     func zoomIn() {
-        zoomCamera(factor: 1.3, towardViewPoint: CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
+        cameraNavigator.zoom(factor: 1.3, towardViewPoint: CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
     }
 
     func zoomOut() {
-        zoomCamera(factor: 1 / 1.3, towardViewPoint: CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
+        cameraNavigator.zoom(factor: 1 / 1.3, towardViewPoint: CGPoint(x: sceneView.bounds.midX, y: sceneView.bounds.midY))
     }
 
     func canShowView(_ view: CameraView) -> Bool {

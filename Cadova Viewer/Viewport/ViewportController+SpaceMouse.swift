@@ -176,7 +176,7 @@ extension ViewportController: NavLibStateProvider {
         // A new gesture started: drop any pending "navigation settled" refresh so the toolbar
         // state isn't updated mid-motion.
         cancelNavigationSettledUpdate()
-        stopCameraInertia() // grabbing the SpaceMouse cancels a mouse glide
+        cameraNavigator.stopMotion() // grabbing the SpaceMouse cancels a mouse glide
         // Hide the cursor while navigating, the same way the system hides it
         // while typing: it reappears automatically as soon as the mouse moves.
         NSCursor.setHiddenUntilMouseMoves(true)

@@ -8,6 +8,10 @@ import ViewerCore
 
 class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneRendererDelegate {
     private var sceneView: SCNView?
+    private var cameraNavigator: CameraNavigator?
+    /// The point of view. Created up front and never replaced, so the render loop can read it safely.
+    private let cameraNode = SCNNode()
+    private var modelBoundingSphere: (center: SCNVector3, radius: Float) = (SCNVector3Zero, 0)
     private var grid: ViewportGrid?
     private var modelNode: SCNNode?
     private var parts: [ModelData.Part] = []
@@ -33,6 +37,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             scene.lightingEnvironment.contents = SceneLighting.environmentImage
             scene.rootNode.addChildNode(modelData.rootNode)
             self.modelNode = modelData.rootNode
+            self.modelBoundingSphere = modelData.rootNode.worldBoundingSphere()
             self.parts = modelData.parts
             self.edgeNodes = Set(modelData.parts.flatMap { [$0.nodes.sharpEdges, $0.nodes.smoothEdges].compactMap { $0 } })
 
@@ -50,22 +55,20 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             self.grid = grid
 
             let sceneView = PreviewSceneView(frame: view.bounds)
-            sceneView.modelNode = modelData.rootNode
             sceneView.autoresizingMask = [.width, .height]
             sceneView.scene = scene
-            sceneView.allowsCameraControl = true
+            // Navigation is the app's own (CameraNavigator); SceneKit's built-in controller stays off.
+            sceneView.allowsCameraControl = false
             sceneView.autoenablesDefaultLighting = false
             sceneView.backgroundColor = NSColor(white: 0.05, alpha: 1)
             sceneView.delegate = self
 
             setupCamera(for: modelData.rootNode, in: scene, sceneView: sceneView)
 
-            let worldCenter = modelData.rootNode.convertPosition(modelData.rootNode.boundingSphere.center, to: nil)
-            sceneView.defaultCameraController.target = worldCenter
-
-            sceneView.defaultCameraController.worldUp = SCNVector3(0, 0, 1)
-            sceneView.defaultCameraController.automaticTarget = true
-            sceneView.defaultCameraController.interactionMode = .orbitTurntable
+            let cameraNavigator = CameraNavigator(sceneView: sceneView)
+            cameraNavigator.delegate = self
+            sceneView.cameraNavigator = cameraNavigator
+            self.cameraNavigator = cameraNavigator
 
             view.addSubview(sceneView)
             self.sceneView = sceneView
@@ -89,7 +92,6 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
         scene.rootNode.addChildNode(lightNode)
         cameraLightNode = lightNode
 
-        let cameraNode = SCNNode()
         cameraNode.camera = camera
 
         scene.rootNode.addChildNode(cameraNode)
@@ -102,7 +104,8 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
 
     func showViewPreset(_ preset: ViewPreset) {
         guard let cameraNode = sceneView?.pointOfView else { return }
-        
+        cameraNavigator?.stopMotion() // a glide would fight the animated move
+
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0.3
         cameraNode.simdTransform = cameraTransform(for: preset)
@@ -251,6 +254,8 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     // MARK: - SCNSceneRendererDelegate
 
     func renderer(_ renderer: any SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        // Advance any post-release camera glide in lockstep with the render loop (no-op when idle).
+        cameraNavigator?.stepInertia(atTime: time)
         guard let sceneView = sceneView else { return }
         grid?.updateScale(renderer: sceneView, viewSize: sceneViewSize)
     }
@@ -274,5 +279,23 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             viewSize: sceneViewSize
         )
         // Edge lines are left at Metal's default 1-pixel line width.
+    }
+}
+
+extension PreviewViewController: CameraNavigatorDelegate {
+    func cameraNode(for navigator: CameraNavigator) -> SCNNode {
+        cameraNode
+    }
+
+    func modelBoundingSphere(for navigator: CameraNavigator) -> (center: SCNVector3, radius: Float) {
+        modelBoundingSphere
+    }
+
+    func cameraNavigator(_ navigator: CameraNavigator, surfacePointAt viewPoint: CGPoint) -> SCNVector3? {
+        guard let sceneView, let modelNode else { return nil }
+        return sceneView.hitTest(viewPoint, options: [
+            .searchMode: SCNHitTestSearchMode.closest.rawValue as NSNumber,
+            .rootNode: modelNode
+        ]).first?.worldCoordinates
     }
 }

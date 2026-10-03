@@ -32,7 +32,7 @@ extension ViewportController {
     /// document view model. The controller then deallocates with its scene view and NavLib session.
     func tearDown() {
         setNavLibSuspended(true)
-        stopCameraInertia()
+        cameraNavigator.stopMotion()
         observers.removeAll()
         if let modifierFlagsMonitor { NSEvent.removeMonitor(modifierFlagsMonitor) }
         modifierFlagsMonitor = nil

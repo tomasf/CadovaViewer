@@ -88,8 +88,10 @@ extension ViewportController {
         sceneView.showsStatistics = false
         sceneView.backgroundColor = NSColor(white: 0.05, alpha: 1)
         // Camera navigation is fully custom (see ViewportController+CameraInteraction and
-        // CustomSceneView); SceneKit's built-in controller stays off.
+        // NavigableSceneView); SceneKit's built-in controller stays off.
         sceneView.allowsCameraControl = false
+        cameraNavigator.delegate = self
+        sceneView.cameraNavigator = cameraNavigator
         sceneView.delegate = self
     }
 

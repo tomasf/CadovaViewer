@@ -1,186 +1,39 @@
 import AppKit
 import SceneKit
 import Carbon.HIToolbox
+import ViewerCore
 
+/// Input on top of `NavigableSceneView`'s camera navigation: clicks focus the viewport, and a left
+/// press on a cross-section gizmo handle manipulates it instead of moving the camera.
 extension CustomSceneView {
-    override func rightMouseDown(with event: NSEvent) {
-        viewportController?.requestFocus()
-        runCameraDrag(with: event, mode: .pan)
-    }
-
-    // Camera drags read raw deltas through MouseTracker, so the drag/up events delivered by AppKit
-    // are unused; swallow them rather than letting SCNView act on them.
-    override func rightMouseDragged(with event: NSEvent) {}
-    override func rightMouseUp(with event: NSEvent) {}
-    override func mouseDragged(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {}
-
-    override func updateTrackingAreas() {
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-
-        let area = NSTrackingArea(
-            rect: .zero,
-            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
-
-        super.updateTrackingAreas()
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        super.mouseMoved(with: event)
-        onHover?(convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        onHover?(convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        onHover?(nil)
-    }
-
-    override func scrollWheel(with event: NSEvent) {
-        guard let viewportController, cameraControlEnabled else { return }
-
-        let point = convert(event.locationInWindow, from: nil)
-
-        if event.hasPreciseScrollingDeltas {
-            // While the fingers are down (no momentum) the modifiers are current, so (re)latch the
-            // mode; the momentum tail then keeps it. The preference chooses the default precise
-            // scroll behavior, and Shift or Option always zooms toward the cursor.
-            if event.momentumPhase == [] {
-                scrollGestureZooms =
-                    Preferences().preciseScrollAction == .zoom ||
-                    event.modifierFlags.contains(.shift) ||
-                    event.modifierFlags.contains(.option)
-            }
-            if scrollGestureZooms {
-                // macOS reports the wheel on whichever axis dominates (Shift swaps Y->X); deltas are
-                // points, so a gentle per-point sensitivity.
-                let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
-                viewportController.zoomCamera(factor: zoomFactor(forScrollDelta: delta, sensitivity: 0.01), towardViewPoint: point)
-            } else {
-                viewportController.panByScroll(dx: Float(event.scrollingDeltaX), dy: Float(event.scrollingDeltaY))
-            }
-        } else {
-            // Classic mouse wheel: zoom toward the cursor. Deltas are ~1 per detent, so each detent
-            // needs a much larger step than a trackpad point.
-            viewportController.zoomCamera(factor: zoomFactor(forScrollDelta: event.scrollingDeltaY, sensitivity: 0.1), towardViewPoint: point)
-        }
-    }
-
-    /// Trackpad pinch gesture → zoom toward the pinch centre. Like `rotate(with:)` (and unlike the
-    /// synchronous orbit/pan `MouseTracker` loop), this arrives as discrete phased events, so a
-    /// cumulative log-zoom is accumulated across them (applied rigidly from the drag-start pose, so it's
-    /// drift-free) and a glide is started on release.
-    override func magnify(with event: NSEvent) {
-        guard let viewportController, cameraControlEnabled else { return }
-        // A twist almost always carries a trace of pinch, so AppKit delivers this alongside rotate(with:)
-        // from the same touches; ignore it entirely for the duration of an active roll rather than let it
-        // fight the roll with a concurrent zoom drag.
-        guard activeTrackpadCameraGesture != .roll else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        switch event.phase {
-        case .began:
-            viewportController.requestFocus()
-            mouseInteractionActiveSubject.send(true)
-            activeTrackpadCameraGesture = .zoom
-            // beginCameraDrag cancels any ongoing glide and hit-tests the pivot under the cursor.
-            zoomDragState = viewportController.beginCameraDrag(atViewPoint: point)
-            zoomLogAmount = 0
-            zoomVelocityTracker = ZoomVelocityTracker()
-        case .changed:
-            guard let state = zoomDragState else { return }
-            // event.magnification is the per-event fractional change (factor − 1); accumulate its log so
-            // the total is an exponential dolly (factor = e^zoomLogAmount).
-            zoomLogAmount += log(1 + max(Float(event.magnification), -0.99))
-            zoomVelocityTracker.record(logZoom: zoomLogAmount)
-            viewportController.zoomCamera(state, logZoom: zoomLogAmount)
-        case .ended, .cancelled:
-            defer {
-                zoomDragState = nil
-                activeTrackpadCameraGesture = nil
-                mouseInteractionActiveSubject.send(false)
-            }
-            guard let state = zoomDragState else { return }
-            viewportController.startCameraInertia(
-                dragState: state,
-                delta: SIMD2(zoomLogAmount, 0),
-                velocity: SIMD2(zoomVelocityTracker.release(), 0),
-                mode: .zoom
-            )
-        default:
-            break
-        }
-    }
-
-    /// Trackpad two-finger rotation gesture → roll about the screen-depth axis (like SceneKit's native
-    /// interaction). Unlike orbit/pan (a synchronous `MouseTracker` loop), this arrives as discrete
-    /// phased events, so the angle is accumulated across them and a glide is started on release.
-    override func rotate(with event: NSEvent) {
-        guard let viewportController, cameraControlEnabled else { return }
-        // A twist almost always carries a trace of pinch, so AppKit delivers magnify(with:) alongside
-        // this from the same touches; ignore it entirely for the duration of an active zoom rather than
-        // let it fight the pinch with a concurrent roll drag.
-        guard activeTrackpadCameraGesture != .zoom else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        switch event.phase {
-        case .began:
-            viewportController.requestFocus()
-            mouseInteractionActiveSubject.send(true)
-            activeTrackpadCameraGesture = .roll
-            // beginCameraDrag cancels any ongoing glide and hit-tests the pivot under the cursor.
-            rollDragState = viewportController.beginCameraDrag(atViewPoint: point)
-            rollAngle = 0
-            rollVelocityTracker = RollVelocityTracker()
-        case .changed:
-            guard let state = rollDragState else { return }
-            // NSEvent.rotation is the per-event delta in degrees (CCW positive); accumulate a total so
-            // the view tracks the fingers, and apply in radians.
-            rollAngle += Float(event.rotation) * .pi / 180
-            rollVelocityTracker.record(angle: rollAngle)
-            viewportController.rollCamera(state, angle: rollAngle)
-        case .ended, .cancelled:
-            defer {
-                rollDragState = nil
-                activeTrackpadCameraGesture = nil
-                mouseInteractionActiveSubject.send(false)
-            }
-            guard let state = rollDragState else { return }
-            viewportController.startCameraInertia(
-                dragState: state,
-                delta: SIMD2(rollAngle, 0),
-                velocity: SIMD2(rollVelocityTracker.release(), 0),
-                mode: .roll
-            )
-        default:
-            break
-        }
-    }
-
     override func mouseDown(with event: NSEvent) {
         // Any click (including the start of a camera drag) focuses this viewport.
         viewportController?.requestFocus()
 
-        let localPoint = convert(event.locationInWindow, from: nil)
-
         // A left-press on a cross-section gizmo handle starts a manipulation, ahead of camera control.
-        if beginGizmoDrag?(localPoint) == true {
+        if beginGizmoDrag?(convert(event.locationInWindow, from: nil)) == true {
             runGizmoDrag(with: event)
             return
         }
 
-        // Option turns a left-drag into a pan; otherwise it orbits (Shift then locks to one axis).
-        let mode: CameraDragMode = event.modifierFlags.contains(.option) ? .pan : .orbit
-        runCameraDrag(with: event, mode: mode)
+        super.mouseDown(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        viewportController?.requestFocus()
+        super.rightMouseDown(with: event)
+    }
+
+    private func runGizmoDrag(with event: NSEvent) {
+        mouseInteractionActiveSubject.send(true)
+        NSCursor.hide()
+        _ = MouseTracker.track(with: event) { [weak self] location in
+            guard let self else { return }
+            updateGizmoDrag?(convert(location, from: nil))
+        }
+        NSCursor.unhide()
+        endGizmoDrag?()
+        mouseInteractionActiveSubject.send(false)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -198,12 +51,5 @@ extension CustomSceneView {
         default:
             super.keyDown(with: event)
         }
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-
-    func zoomFactor(forScrollDelta delta: CGFloat, sensitivity: Double) -> Double {
-        // Scrolling up (positive delta) zooms in. Exponential so each step is a constant ratio.
-        return exp(Double(delta) * sensitivity)
     }
 }

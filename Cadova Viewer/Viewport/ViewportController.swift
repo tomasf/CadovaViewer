@@ -9,6 +9,9 @@ import Synchronization
 
 class ViewportController: NSObject, ObservableObject {
     let sceneView = CustomSceneView(frame: .zero)
+    /// Mouse/trackpad camera navigation (shared with the Quick Look preview). Created during setup on the
+    /// main thread, before rendering starts. See `ViewportController+CameraInteraction`.
+    private(set) lazy var cameraNavigator = CameraNavigator(sceneView: sceneView)
     let sceneController: SceneController
     /// This viewport's own scene. Each viewport renders an independent scene (its own real
     /// lighting, its own `isHidden` part visibility) built from the shared model data.
@@ -251,42 +254,12 @@ class ViewportController: NSObject, ObservableObject {
     #endif
 
     var hoverPoint: CGPoint? {
-        didSet {
-            scheduleHoverPointUpdate()
-            // The cursor moved, so the cached zoom-toward-cursor pivot is stale. (Scroll/pinch don't
-            // move the cursor, so a zoom burst keeps reusing the one hit-test.)
-            zoomPivot = nil
-        }
+        didSet { scheduleHoverPointUpdate() }
     }
     var hoverPointUpdateScheduled = false
 
-    /// Cached world pivot for zoom-toward-cursor, hit-tested once per cursor resting spot rather than
-    /// every scroll/pinch event (which would re-scan the scene and drop the framerate). Cleared when
-    /// the cursor moves. See `zoomCamera(factor:towardViewPoint:)`.
-    var zoomPivot: SCNVector3?
-
-    /// Camera glide (post-release momentum). Each render-loop frame integrates `velocity` into `delta`
-    /// and re-applies the drag from its captured start. Stepping in the render loop
-    /// (`renderer(_:updateAtTime:)`) keeps it in lockstep with vsync, so every presented frame shows a
-    /// pose computed for that frame — a free-running timer instead beats against SceneKit's render loop
-    /// and looks choppy. The render loop reads/clears this while the main thread starts and cancels it,
-    /// so it's guarded by a `Mutex`. See `ViewportController+CameraInteraction`.
-    enum CameraInertiaMode { case orbit, pan, roll, zoom }
-    struct InertiaState {
-        var dragState: CameraDragState
-        var delta: SIMD2<Float>
-        var velocity: SIMD2<Float>
-        /// Which gliding motion `delta`/`velocity` describe. For `.roll`, only `.x` is used (the angle
-        /// and angular speed, in radians); for `.zoom`, only `.x` is used (the cumulative log-zoom and
-        /// its rate, factor = e^delta.x).
-        var mode: CameraInertiaMode
-        /// 0 until the first render-loop step seeds it from that frame's time (so the first dt is 0).
-        var lastTime: CFTimeInterval = 0
-    }
-    let inertia = Mutex<InertiaState?>(nil)
-
     /// Animated camera move to a new view (presets, center-on-parts, clear roll). Stepped in the
-    /// render loop like the inertia glide, and guarded the same way. See `ViewportController+View`.
+    /// render loop like the navigator's inertia glide, and guarded the same way. See `ViewportController+View`.
     let cameraFlight = Mutex<CameraFlight?>(nil)
     
     /// The geometry node currently named as the outline target, so its name can be cleared when
