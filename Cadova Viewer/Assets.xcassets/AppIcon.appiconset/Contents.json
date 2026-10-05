@@ -1,62 +1,68 @@
 {
-  "images" : [
+  "images": [
     {
-      "idiom" : "mac",
-      "scale" : "1x",
-      "size" : "16x16"
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "16x16",
+      "filename": "viewer-16.png"
     },
     {
-      "idiom" : "mac",
-      "scale" : "2x",
-      "size" : "16x16"
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "16x16",
+      "filename": "viewer-16@2x.png"
     },
     {
-      "idiom" : "mac",
-      "scale" : "1x",
-      "size" : "32x32"
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "32x32",
+      "filename": "viewer-32.png"
     },
     {
-      "idiom" : "mac",
-      "scale" : "2x",
-      "size" : "32x32"
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "32x32",
+      "filename": "viewer-32@2x.png"
     },
     {
-      "idiom" : "mac",
-      "scale" : "1x",
-      "size" : "128x128"
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "128x128",
+      "filename": "viewer-128.png"
     },
     {
-      "idiom" : "mac",
-      "scale" : "2x",
-      "size" : "128x128"
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "128x128",
+      "filename": "viewer-128@2x.png"
     },
     {
-      "filename" : "Cadova-Viewer256.png",
-      "idiom" : "mac",
-      "scale" : "1x",
-      "size" : "256x256"
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "256x256",
+      "filename": "viewer-256.png"
     },
     {
-      "filename" : "Cadova-Viewer512 1.png",
-      "idiom" : "mac",
-      "scale" : "2x",
-      "size" : "256x256"
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "256x256",
+      "filename": "viewer-256@2x.png"
     },
     {
-      "filename" : "Cadova-Viewer512.png",
-      "idiom" : "mac",
-      "scale" : "1x",
-      "size" : "512x512"
+      "idiom": "mac",
+      "scale": "1x",
+      "size": "512x512",
+      "filename": "viewer-512.png"
     },
     {
-      "filename" : "Cadova-Viewer1024.png",
-      "idiom" : "mac",
-      "scale" : "2x",
-      "size" : "512x512"
+      "idiom": "mac",
+      "scale": "2x",
+      "size": "512x512",
+      "filename": "viewer-512@2x.png"
     }
   ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
+  "info": {
+    "author": "xcode",
+    "version": 1
   }
 }

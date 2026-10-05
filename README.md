@@ -1,4 +1,7 @@
-# Cadova Viewer
+<h1 align="center">
+  <img alt="Cadova Viewer" src=".github/assets/cadova-viewer-header-light.png#gh-light-mode-only" width="462">
+  <img alt="Cadova Viewer" src=".github/assets/cadova-viewer-header-dark.png#gh-dark-mode-only" width="462">
+</h1>
 
 Cadova Viewer is a macOS app for viewing 3MF 3D model files, designed as a companion to the [Cadova Swift library](https://github.com/tomasf/Cadova) for programmatic 3D modeling.
 
