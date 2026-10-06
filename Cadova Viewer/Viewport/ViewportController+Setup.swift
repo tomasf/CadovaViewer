@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SceneKit
+import ViewerCore
 
 extension ViewportController {
     func configureScene(measurementParent: SCNNode) {
@@ -78,7 +79,7 @@ extension ViewportController {
     }
 
     func configureOverlayScene() {
-        overlayScene = OverlayScene(viewportController: self, renderer: sceneView)
+        overlayScene = OverlayScene(renderer: sceneView)
         sceneView.overlaySKScene = overlayScene
         sceneView.viewportController = self
     }

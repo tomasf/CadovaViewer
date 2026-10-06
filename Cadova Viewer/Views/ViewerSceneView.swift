@@ -48,11 +48,6 @@ class CustomSceneView: NavigableSceneView {
     private var paneResizeLiveResizeDepth = 0
     private var paneResizeIsUsingHorizontalProjection = false
 
-    override func layout() {
-        super.layout()
-        overlaySKScene?.size = bounds.size
-    }
-
     func beginPaneResize(axis: SplitLayout.Axis) {
         if paneResizeLiveResizeDepth == 0 {
             super.viewWillStartLiveResize()

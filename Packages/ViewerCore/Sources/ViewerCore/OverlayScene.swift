@@ -1,25 +1,25 @@
 import Foundation
 import SpriteKit
 import SceneKit
-import Combine
-import Synchronization
+import os
 
-final class OverlayScene: SKScene {
-    private weak var sceneKitRenderer: SCNSceneRenderer!
-    private weak var viewportController: ViewportController?
+/// The SpriteKit overlay drawn on top of a scene view: the red pivot indicator shown while orbiting.
+/// Shared by the app's viewports and the Quick Look preview.
+public final class OverlayScene: SKScene {
+    private weak var sceneKitRenderer: SCNSceneRenderer?
 
     private let pivotPointIndicator = SKShapeNode(circleOfRadius: 4)
 
     /// The world-space point the pivot indicator tracks. Written on the main thread (from the
     /// scene view's rotation-pivot stream) and read every frame by `update(_:)`, which SpriteKit
-    /// drives on its own render thread — so it's guarded by a `Mutex` to avoid a torn read of the
+    /// drives on its own render thread — so it's guarded by a lock to avoid a torn read of the
     /// `SCNVector3` components.
-    var pivotPointLocation: SCNVector3 {
+    public var pivotPointLocation: SCNVector3 {
         get { _pivotPointLocation.withLock { $0 } }
         set { _pivotPointLocation.withLock { $0 = newValue } }
     }
-    private let _pivotPointLocation = Mutex<SCNVector3>(SCNVector3(0, 0, 0))
-    var pivotPointVisibility = false {
+    private let _pivotPointLocation = OSAllocatedUnfairLock<SCNVector3>(initialState: SCNVector3(0, 0, 0))
+    public var pivotPointVisibility = false {
         didSet {
             guard pivotPointVisibility != oldValue else { return }
 
@@ -36,12 +36,9 @@ final class OverlayScene: SKScene {
             }
         }
     }
-    var delayedPivotPointHide: Task<Void, Error>?
+    private var delayedPivotPointHide: Task<Void, Error>?
 
-    private var cancellables: Set<AnyCancellable> = []
-
-    init(viewportController: ViewportController, renderer: SCNSceneRenderer) {
-        self.viewportController = viewportController
+    public init(renderer: SCNSceneRenderer) {
         sceneKitRenderer = renderer
         super.init(size: .zero)
         isUserInteractionEnabled = false
@@ -57,7 +54,7 @@ final class OverlayScene: SKScene {
         fatalError("init(coder:) has not been implemented")
     }
 
-    override func update(_ currentTime: TimeInterval) {
+    public override func update(_ currentTime: TimeInterval) {
         guard let sceneKitRenderer else { return }
 
         let projectedPivot = sceneKitRenderer.projectPoint(pivotPointLocation)

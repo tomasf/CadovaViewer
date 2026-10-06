@@ -16,6 +16,8 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     private var modelNode: SCNNode?
     private var parts: [ModelData.Part] = []
     private var toolbar: NSVisualEffectView?
+    private var overlayScene: OverlayScene?
+    private var cancellables: Set<AnyCancellable> = []
     
     private var edgeNodes: Set<SCNNode> = []
     private var cameraLightNode: SCNNode?
@@ -72,7 +74,8 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
 
             view.addSubview(sceneView)
             self.sceneView = sceneView
-            
+
+            setupPivotIndicator(for: sceneView)
             setupToolbar()
             setupCoordinateIndicator()
             updateEdgeVisibility()
@@ -233,6 +236,20 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     @objc private func viewPresetButtonClicked(_ sender: NSButton) {
         guard let preset = ViewPreset(rawValue: sender.tag) else { return }
         showViewPreset(preset)
+    }
+
+    private func setupPivotIndicator(for sceneView: PreviewSceneView) {
+        let overlayScene = OverlayScene(renderer: sceneView)
+        sceneView.overlaySKScene = overlayScene
+        self.overlayScene = overlayScene
+
+        sceneView.mouseRotationPivot.sink { [weak overlayScene] pivot in
+            guard let overlayScene else { return }
+            if let pivot {
+                overlayScene.pivotPointLocation = pivot
+            }
+            overlayScene.pivotPointVisibility = pivot != nil
+        }.store(in: &cancellables)
     }
 
     private func setupCoordinateIndicator() {

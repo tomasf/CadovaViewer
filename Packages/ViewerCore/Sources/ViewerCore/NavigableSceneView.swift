@@ -79,6 +79,11 @@ open class NavigableSceneView: SCNView {
 
     open override var acceptsFirstResponder: Bool { true }
 
+    open override func layout() {
+        super.layout()
+        overlaySKScene?.size = bounds.size
+    }
+
     // MARK: - Mouse buttons
 
     open override func mouseDown(with event: NSEvent) {
