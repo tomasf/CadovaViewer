@@ -7,6 +7,6 @@ struct HeadlessViewer: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "cadova-viewer",
         abstract: "Headless Cadova Viewer: works with 3MF model files from the command line.",
-        subcommands: [RenderCommand.self]
+        subcommands: [RenderCommand.self, InfoCommand.self]
     )
 }

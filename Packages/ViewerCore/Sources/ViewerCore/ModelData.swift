@@ -45,6 +45,8 @@ public struct ModelData: @unchecked Sendable {
 
         public let name: String
         public let id: ID
+        /// The source item's `partnumber`, or nil if it has none (in which case `id` is a random UUID).
+        public let partNumber: String?
         public let semantic: PartSemantic
         public let statistics: Statistics
 
@@ -71,6 +73,7 @@ public struct ModelData: @unchecked Sendable {
             self.itemIndex = itemIndex
             self.name = name
             self.id = id ?? UUID().uuidString
+            self.partNumber = id
             self.semantic = semantic
             self.statistics = stats
             self.modelGeometryVariants = modelGeometryVariants

@@ -39,6 +39,7 @@ let package = Package(
             name: "cadova-viewer",
             dependencies: [
                 "ViewerCore",
+                .product(name: "ThreeMF", package: "ThreeMF"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             swiftSettings: [
