@@ -3,6 +3,26 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.3.1</title>
+            <pubDate>Tue, 06 Oct 2026 16:30:00 +0200</pubDate>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.3.1/CadovaViewer1.3.1.zip" length="9450021" type="application/octet-stream" sparkle:edSignature="RlgwmrTk40Yc/MihEvgLxjnyzCbN7SWn8Rq58PWwow5PiHxBBDMXASC1hC+KJAKt7wwHKa0dTrE1UFVOQ1HuBA=="/>
+            <description><![CDATA[
+                <h4>Improvements</h4>
+                <ul>
+                    <li>Quick Look previews of 3MF files now use the same mouse and trackpad navigation as the app.</li>
+                    <li>New app icon.</li>
+                </ul>
+                <h4>Fixes</h4>
+                <ul>
+                    <li>Fixed the SpaceMouse stopping working in a document until relaunch when several documents were open.</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>1.3.0</title>
             <pubDate>Thu, 01 Oct 2026 09:26:00 +0200</pubDate>
             <sparkle:version>13</sparkle:version>
