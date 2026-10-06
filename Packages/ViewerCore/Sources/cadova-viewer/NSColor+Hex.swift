@@ -1,7 +1,7 @@
 import AppKit
 
 extension NSColor {
-    convenience init?(cadovaRenderHex hex: String) {
+    convenience init?(hexRGB hex: String) {
         var value = hex.trimmingCharacters(in: .whitespaces)
         if value.hasPrefix("#") { value.removeFirst() }
         guard value.count == 6, let intValue = UInt32(value, radix: 16) else { return nil }

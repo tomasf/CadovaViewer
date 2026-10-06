@@ -36,7 +36,7 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "cadova-render",
+            name: "cadova-viewer",
             dependencies: [
                 "ViewerCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),

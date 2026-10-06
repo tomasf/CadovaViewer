@@ -3,22 +3,22 @@ import Foundation
 import AppKit
 import ViewerCore
 
-let viewPresetsByName: [String: ViewPreset] = [
-    "isometric": .isometric,
-    "front": .front,
-    "back": .back,
-    "left": .left,
-    "right": .right,
-    "top": .top,
-    "bottom": .bottom,
-]
-
-@main
-struct CadovaRender: AsyncParsableCommand {
+/// `cadova-viewer render`: renders a model to an image file.
+struct RenderCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "cadova-render",
+        commandName: "render",
         abstract: "Renders a 3MF model file to an image, for documentation screenshots or other scripted use."
     )
+
+    static let viewPresetsByName: [String: ViewPreset] = [
+        "isometric": .isometric,
+        "front": .front,
+        "back": .back,
+        "left": .left,
+        "right": .right,
+        "top": .top,
+        "bottom": .bottom,
+    ]
 
     @Argument(help: "Path to the input .3mf file.")
     var input: String
@@ -32,7 +32,7 @@ struct CadovaRender: AsyncParsableCommand {
     @Option(help: "Image height in pixels.")
     var height: Int = 1024
 
-    @Option(help: "View preset: \(viewPresetsByName.keys.sorted().joined(separator: ", ")).")
+    @Option(help: "View preset: \(Self.viewPresetsByName.keys.sorted().joined(separator: ", ")).")
     var view: String = "isometric"
 
     @Option(parsing: .unconditional, help: ArgumentHelp("Camera angle around the vertical axis, in degrees: 0 = front, 90 = right, 180 = back, 270 = left. Replaces this angle of --view; the other angle keeps --view's value.", valueName: "degrees"))
@@ -81,8 +81,8 @@ struct CadovaRender: AsyncParsableCommand {
         guard width > 0, height > 0 else {
             throw ValidationError("--width and --height must be positive.")
         }
-        guard viewPresetsByName[view.lowercased()] != nil else {
-            throw ValidationError("Unknown --view '\(view)'. Valid values: \(viewPresetsByName.keys.sorted().joined(separator: ", ")).")
+        guard Self.viewPresetsByName[view.lowercased()] != nil else {
+            throw ValidationError("Unknown --view '\(view)'. Valid values: \(Self.viewPresetsByName.keys.sorted().joined(separator: ", ")).")
         }
         if let azimuth, !azimuth.isFinite {
             throw ValidationError("--azimuth must be a finite number of degrees.")
@@ -112,7 +112,7 @@ struct CadovaRender: AsyncParsableCommand {
         if transparent, outputExtension != "png" {
             throw ValidationError("--transparent requires a .png output file (JPEG doesn't support transparency).")
         }
-        if let backgroundColor, NSColor(cadovaRenderHex: backgroundColor) == nil {
+        if let backgroundColor, NSColor(hexRGB: backgroundColor) == nil {
             throw ValidationError("Invalid --background-color '\(backgroundColor)'. Use a hex RGB value, e.g. FFFFFF.")
         }
     }
@@ -120,7 +120,7 @@ struct CadovaRender: AsyncParsableCommand {
     func run() async throws {
         let inputURL = URL(fileURLWithPath: input)
         let outputURL = URL(fileURLWithPath: output)
-        let preset = viewPresetsByName[view.lowercased()]!
+        let preset = Self.viewPresetsByName[view.lowercased()]!
         // Keep the preset's exact axis unless an angle overrides it.
         let viewAxis = azimuth == nil && elevation == nil
             ? preset.axis
@@ -130,7 +130,7 @@ struct CadovaRender: AsyncParsableCommand {
             ).axis
         let cameraProjection: CameraProjection = projection.lowercased() == "orthographic" ? .orthographic : .perspective
         let resolvedEdgeVisibility = EdgeVisibility(rawValue: edges.lowercased())!
-        let resolvedBackgroundColor = backgroundColor.flatMap { NSColor(cadovaRenderHex: $0) } ?? .white
+        let resolvedBackgroundColor = backgroundColor.flatMap { NSColor(hexRGB: $0) } ?? .white
 
         let modelData = try ModelData(url: inputURL, includeEdges: resolvedEdgeVisibility != .none)
         let hiddenPartIDs = try hiddenPartIDs(in: modelData)
