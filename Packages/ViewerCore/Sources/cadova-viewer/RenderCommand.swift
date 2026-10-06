@@ -55,6 +55,9 @@ struct RenderCommand: AsyncParsableCommand {
 
     @OptionGroup var partSelection: PartSelection
 
+    @Option(name: .customLong("section"), parsing: .unconditionalSingleValue, help: ArgumentHelp("Cut the model with a plane and show the cut faces filled: \(SectionArgument.formatHelp). The cut removes the side the axis or normal points to. Repeat for several cuts (up to \(CrossSection.maxRenderedCount)).", valueName: "plane"))
+    var sections: [SectionArgument] = []
+
     @Option(help: "Headroom around the model as a multiple of the tightest fit (1.0 = no margin, edge-to-edge).")
     var margin: Double = 1.05
 
@@ -94,6 +97,9 @@ struct RenderCommand: AsyncParsableCommand {
         }
         guard margin > 0 else {
             throw ValidationError("--margin must be positive.")
+        }
+        guard sections.count <= CrossSection.maxRenderedCount else {
+            throw ValidationError("At most \(CrossSection.maxRenderedCount) --section cuts are supported.")
         }
         guard trimPadding >= 0 else {
             throw ValidationError("--trim-padding must not be negative.")
@@ -140,6 +146,7 @@ struct RenderCommand: AsyncParsableCommand {
             smoothShading: smoothShading,
             materialsEnabled: materials,
             hiddenPartIDs: hiddenPartIDs,
+            crossSections: sections.map(\.crossSection),
             margin: margin
         )
 

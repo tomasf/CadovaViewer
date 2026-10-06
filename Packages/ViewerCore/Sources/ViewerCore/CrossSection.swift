@@ -109,11 +109,17 @@ public struct CrossSection: Identifiable, Equatable, Sendable, Codable {
                 if dot > bestDot { bestDot = dot; best = direction }
             }
         }
+        orientation = Self.orientation(toward: best)
+    }
+
+    /// The orientation whose +Z maps onto `normal` (any non-zero vector).
+    public static func orientation(toward normal: SIMD3<Double>) -> simd_quatd {
         let z = SIMD3<Double>(0, 0, 1)
+        let direction = simd_normalize(normal)
         // `simd_quatd(from:to:)` is undefined for antiparallel vectors, so turn 180° explicitly there.
-        orientation = simd_dot(best, z) < -0.5
-            ? simd_quatd(angle: .pi, axis: SIMD3(1, 0, 0))
-            : simd_quatd(from: z, to: best)
+        return simd_dot(direction, z) < -0.5
+            ? simd_quatd(from: -z, to: direction) * simd_quatd(angle: .pi, axis: SIMD3(1, 0, 0))
+            : simd_quatd(from: z, to: direction)
     }
 
     /// A new section flat along `axis` (normal = that axis) through `origin`.

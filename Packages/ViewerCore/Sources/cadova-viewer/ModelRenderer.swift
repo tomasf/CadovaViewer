@@ -31,22 +31,6 @@ enum RenderError: Error, CustomStringConvertible {
 /// Quick Look Thumbnail extension's `OffscreenRenderer`, generalized to a configurable view direction,
 /// projection, size, background, and optional grid.
 enum ModelRenderer {
-    /// Surface shader modifier matching the viewer's "Materials" option turned off: faces go flat
-    /// opaque matte white, and edge lines (flagged via `isEdgeMaterial`) go plain black, since their
-    /// baked light/dark colour was chosen for contrast against the original face colour.
-    private static let materialsDisabledShaderModifier = """
-    #pragma arguments
-    float isEdgeMaterial;
-    #pragma body
-    if (isEdgeMaterial > 0.5) {
-        _surface.diffuse = float4(0.0, 0.0, 0.0, 1.0);
-    } else {
-        _surface.diffuse = float4(1.0, 1.0, 1.0, 1.0);
-        _surface.metalness = 0.0;
-        _surface.roughness = 0.9;
-    }
-    """
-
     static func render(
         modelData: ModelData,
         viewAxis: SIMD3<Double>,
@@ -59,6 +43,7 @@ enum ModelRenderer {
         smoothShading: Bool,
         materialsEnabled: Bool,
         hiddenPartIDs: Set<ModelData.Part.ID>,
+        crossSections: [CrossSection],
         margin: Double
     ) throws -> NSImage {
         // Remove (rather than hide) excluded parts, so the camera framing and grid bounds, which
@@ -74,8 +59,9 @@ enum ModelRenderer {
             }
         }
 
-        if !materialsEnabled {
-            disableMaterials(of: renderedParts)
+        let packedPlanes = CrossSection.PackedPlanes(crossSections)
+        if !materialsEnabled || !crossSections.isEmpty {
+            installClipShader(on: renderedParts, planes: packedPlanes, materialsEnabled: materialsEnabled)
         }
 
         let scene = SCNScene()
@@ -86,6 +72,7 @@ enum ModelRenderer {
             scene.background.contents = backgroundColor
         }
         scene.rootNode.addChildNode(modelData.rootNode)
+        addCaps(for: crossSections, of: renderedParts, planes: packedPlanes, modelSize: modelData.boundingBoxSize, materialsEnabled: materialsEnabled, to: scene)
 
         // Matches the interactive viewport's default (ViewOptions.edgeVisibility = .sharp):
         // both groups exist in the scene graph whenever edges were loaded, so hide the ones
@@ -137,9 +124,10 @@ enum ModelRenderer {
         return renderer.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
     }
 
-    /// Applies `materialsDisabledShaderModifier` to every material of the given parts, flagging
-    /// edge-line materials so they turn black instead of white.
-    private static func disableMaterials(of parts: [ModelData.Part]) {
+    /// Installs the shared clip shader modifier on every material of the given parts: it cuts away
+    /// whatever lies past the planes and, with materials off, turns faces matte white and edge lines
+    /// black (edge-line materials are flagged so the shader can tell them apart).
+    private static func installClipShader(on parts: [ModelData.Part], planes: CrossSection.PackedPlanes, materialsEnabled: Bool) {
         func geometryNodes(under node: SCNNode?) -> [SCNNode] {
             guard let node else { return [] }
             return (node.geometry != nil ? [node] : []) + node.childNodes { child, _ in child.geometry != nil }
@@ -159,10 +147,61 @@ enum ModelRenderer {
         var seen: Set<ObjectIdentifier> = []
         for material in faceMaterials + edgeMaterials where seen.insert(ObjectIdentifier(material)).inserted {
             var modifiers = material.shaderModifiers ?? [:]
-            modifiers[.surface] = materialsDisabledShaderModifier
+            modifiers[.surface] = CrossSection.clipShaderModifier
             material.shaderModifiers = modifiers
             let isEdge = edgeMaterialIDs.contains(ObjectIdentifier(material))
             material.setValue(NSNumber(value: isEdge ? Float(1) : Float(0)), forKey: "isEdgeMaterial")
+            material.setValue(NSNumber(value: materialsEnabled ? Float(1) : Float(0)), forKey: "materialsEnabled")
+            planes.apply(to: material, skip: -1)
+            // Cut parts are open, so their inside faces must draw too.
+            if planes.count > 0 { material.isDoubleSided = true }
+        }
+    }
+
+    /// The hatch stripe blended into cut faces: a neutral darkening, since there's no per-section
+    /// colour as in the app.
+    private static let capStripeColor = SCNVector4(0.15, 0.15, 0.15, 1)
+
+    /// Adds the filled, hatched faces where each plane cuts each part, like the app's cross-section
+    /// caps. Each cap is trimmed by the other planes (its own plane is skipped).
+    private static func addCaps(
+        for sections: [CrossSection],
+        of parts: [ModelData.Part],
+        planes: CrossSection.PackedPlanes,
+        modelSize: SIMD3<Double>,
+        materialsEnabled: Bool,
+        to scene: SCNScene
+    ) {
+        let hatchSpacing = CrossSection.hatchSpacing(forModelSize: modelSize)
+        for (index, section) in sections.prefix(CrossSection.maxRenderedCount).enumerated() {
+            for part in parts {
+                guard let solid = part.capSolid else { continue }
+                let triangles = solid.capTriangles(planeNormal: section.normal, offset: section.plane().w)
+                guard !triangles.isEmpty else { continue }
+
+                let source = SCNGeometrySource(vertices: triangles.map { SCNVector3($0.x, $0.y, $0.z) })
+                let element = SCNGeometryElement(indices: Array(UInt32(0)..<UInt32(triangles.count)), primitiveType: .triangles)
+                let geometry = SCNGeometry(sources: [source], elements: [element])
+
+                let color = part.dominantColor ?? SIMD4(0.7, 0.7, 0.7, 1)
+                let hatch = section.hatchDirection
+                let material = SCNMaterial()
+                material.lightingModel = .constant
+                material.isDoubleSided = true
+                material.shaderModifiers = [.surface: CrossSection.capShaderModifier]
+                material.setValue(NSValue(scnVector4: SCNVector4(color.x, color.y, color.z, 1)), forKey: "capColor")
+                material.setValue(NSValue(scnVector4: capStripeColor), forKey: "capStripeColor")
+                material.setValue(NSValue(scnVector3: SCNVector3(hatch.x, hatch.y, hatch.z)), forKey: "hatchDirection")
+                material.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
+                material.setValue(NSNumber(value: Float(0.2)), forKey: "hatchStrength")
+                material.setValue(NSNumber(value: materialsEnabled ? Float(1) : Float(0)), forKey: "materialsEnabled")
+                planes.apply(to: material, skip: index)
+                geometry.materials = [material]
+
+                let node = SCNNode(geometry: geometry)
+                node.name = "Cross-section cap"
+                scene.rootNode.addChildNode(node)
+            }
         }
     }
 

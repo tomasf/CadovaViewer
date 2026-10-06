@@ -150,7 +150,7 @@ extension ViewportController {
         root.name = "Highlight ghost \(part.id)"
         root.renderingOrder = 100
 
-        let packedPlanes = clipToCutAway ? packedClipPlanes(activeCrossSections) : nil
+        let packedPlanes = clipToCutAway ? CrossSection.PackedPlanes(activeCrossSections) : nil
         func applyGhostClip(to material: SCNMaterial) {
             guard let packedPlanes else { return }
             material.shaderModifiers = [.surface: Self.ghostClipShaderModifier]

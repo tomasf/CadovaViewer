@@ -23,46 +23,10 @@ struct CrossSectionDragState {
 }
 
 extension ViewportController {
-    /// Up to this many simultaneous cutting planes (the clip uniform packs planes into two `float4x4`).
-    static let maxCrossSections = 8
+    /// Up to this many simultaneous cutting planes.
+    static let maxCrossSections = CrossSection.maxRenderedCount
 
-    /// Surface shader modifier clipping fragments past **any** active plane, and — via the
-    /// `materialsEnabled` uniform — overriding the surface when the viewport's materials-enabled
-    /// option is off. Face materials go flat opaque matte white; edge-line materials (flagged by the
-    /// `isEdgeMaterial` uniform, set once at install time — see `installCrossSectionShader`) instead
-    /// force plain black, since their baked light/dark choice was picked for contrast against the
-    /// *original* face colour, which no longer applies once faces turn white. Planes are packed into
-    /// two `float4x4` uniforms (columns 0–3 in A, 4–7 in B); `crossSectionSkip` lets a cap skip its
-    /// own plane. Attached to every per-viewport model material.
-    static let clipShaderModifier = """
-    #pragma arguments
-    float4x4 crossSectionPlanesA;
-    float4x4 crossSectionPlanesB;
-    float crossSectionCount;
-    float crossSectionSkip;
-    float materialsEnabled;
-    float isEdgeMaterial;
-    #pragma body
-    int csCount = int(round(crossSectionCount));
-    if (csCount > 0) {
-        int csSkip = int(round(crossSectionSkip));
-        float3 csWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
-        for (int i = 0; i < csCount; i++) {
-            if (i == csSkip) continue;
-            float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
-            if (dot(csWorld, csPlane.xyz) > csPlane.w) { discard_fragment(); }
-        }
-    }
-    if (materialsEnabled < 0.5 && isEdgeMaterial > 0.5) {
-        _surface.diffuse = float4(0.0, 0.0, 0.0, 1.0);
-    } else if (materialsEnabled < 0.5) {
-        _surface.diffuse = float4(1.0, 1.0, 1.0, 1.0);
-        _surface.metalness = 0.0;
-        _surface.roughness = 0.9;
-    }
-    """
-
-    /// The inverse of `clipShaderModifier`, for the translucent cut-away ghost. Two modes:
+    /// The inverse of `CrossSection.clipShaderModifier`, for the translucent cut-away ghost. Two modes:
     /// - **union** (`ghostMode` 0, used while dragging): keep a fragment removed by **any** active
     ///   plane — the whole cut-away half.
     /// - **difference** (`ghostMode` 1, used when a single cut is enabled/added): keep only the material
@@ -93,42 +57,6 @@ extension ViewportController {
             float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
             if (dot(csWorld, csPlane.xyz) > csPlane.w) { discard_fragment(); } // already removed before → not new
         }
-    }
-    """
-
-    /// Cap surface modifier: the same N-plane clip (skipping its own plane, so a cap is trimmed by the
-    /// *other* cuts) plus the part colour and a diagonal hatch marking it as a cut face. When the
-    /// viewport's materials-enabled option is off, both the base fill and the hatch stripe desaturate
-    /// to white/gray (same "no material" look as the model's faces) rather than showing the part or
-    /// cross-section colour.
-    static let capShaderModifier = """
-    #pragma arguments
-    float4x4 crossSectionPlanesA;
-    float4x4 crossSectionPlanesB;
-    float crossSectionCount;
-    float crossSectionSkip;
-    float4 capColor;
-    float4 capStripeColor;
-    float3 hatchDirection;
-    float hatchSpacing;
-    float hatchStrength;
-    float materialsEnabled;
-    #pragma body
-    float3 csWorld = (scn_frame.inverseViewTransform * float4(_surface.position, 1.0)).xyz;
-    int csCount = int(round(crossSectionCount));
-    int csSkip = int(round(crossSectionSkip));
-    for (int i = 0; i < csCount; i++) {
-        if (i == csSkip) continue;
-        float4 csPlane = (i < 4) ? crossSectionPlanesA[i] : crossSectionPlanesB[i - 4];
-        if (dot(csWorld, csPlane.xyz) > csPlane.w) { discard_fragment(); }
-    }
-    bool csMaterialsEnabled = materialsEnabled >= 0.5;
-    float3 csBaseColor = csMaterialsEnabled ? capColor.rgb : float3(1.0, 1.0, 1.0);
-    float3 csStripeColor = csMaterialsEnabled ? capStripeColor.rgb : float3(0.6, 0.6, 0.6);
-    _surface.diffuse = float4(csBaseColor, capColor.a);
-    float hatchCoordinate = dot(csWorld, hatchDirection) / hatchSpacing;
-    if (fract(hatchCoordinate) < 0.5) {
-        _surface.diffuse.rgb = mix(_surface.diffuse.rgb, csStripeColor, hatchStrength);
     }
     """
 
@@ -166,7 +94,7 @@ extension ViewportController {
         let faceMaterialIDs = Set(modelInstance.faceMaterials.map(ObjectIdentifier.init))
         for material in modelInstance.clipMaterials {
             var modifiers = material.shaderModifiers ?? [:]
-            modifiers[.surface] = Self.clipShaderModifier
+            modifiers[.surface] = CrossSection.clipShaderModifier
             material.shaderModifiers = modifiers
             let isEdge = !faceMaterialIDs.contains(ObjectIdentifier(material))
             material.setValue(NSNumber(value: isEdge ? Float(1) : Float(0)), forKey: "isEdgeMaterial")
@@ -212,9 +140,9 @@ extension ViewportController {
         updateCrossSectionOverlays()
 
         guard !renderedCrossSections.isEmpty else {
-            let packed = packedClipPlanes([])
+            let packed = CrossSection.PackedPlanes([])
             for material in modelInstance.clipMaterials {
-                setClipUniforms(on: material, packed: packed, skip: -1)
+                packed.apply(to: material, skip: -1)
                 material.isDoubleSided = false
             }
             crossSectionCapNeedsRebuild = false
@@ -229,9 +157,9 @@ extension ViewportController {
     /// model (re)load so the geometry is clipped in the first rendered frame — otherwise the whole
     /// model flashes uncut until the background cap slice finishes and applies the uniforms.
     func applyModelClipUniforms() {
-        let packed = packedClipPlanes(renderedCrossSections)
+        let packed = CrossSection.PackedPlanes(renderedCrossSections)
         for material in modelInstance.clipMaterials {
-            setClipUniforms(on: material, packed: packed, skip: -1)
+            packed.apply(to: material, skip: -1)
             material.isDoubleSided = packed.count > 0
         }
     }
@@ -294,8 +222,8 @@ extension ViewportController {
         // Diagonal hatch in the plane, matching the cut-cap hatch direction and density. Spacing uses
         // the same basis as the cap (`updateCrossSectionCap`): the model's max extent / 90, not the
         // diagonal (which is longer and would make the locator bands wider than the cap's).
-        let hatchAxis = hatchDirection(for: SIMD3<Float>(section.normal))
-        let hatchSpacing = max(Double((bounds.max - bounds.min).max()) / 90, 0.3)
+        let hatchAxis = section.hatchDirection
+        let hatchSpacing = Double(CrossSection.hatchSpacing(forModelSize: bounds.max - bounds.min))
         plane.firstMaterial?.setValue(NSValue(scnVector3: SCNVector3(hatchAxis.x, hatchAxis.y, hatchAxis.z)), forKey: "hatchAxis")
         plane.firstMaterial?.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
 
@@ -345,14 +273,14 @@ extension ViewportController {
         crossSectionCapNeedsRebuild = false
 
         let sections = Array(renderedCrossSections.prefix(Self.maxCrossSections))
-        let packed = packedClipPlanes(sections)
+        let packed = CrossSection.PackedPlanes(sections)
         let bounds = crossSectionModelBounds
-        let hatchSpacing = Float(max((bounds.max - bounds.min).max() / 90, 0.3))
+        let hatchSpacing = CrossSection.hatchSpacing(forModelSize: bounds.max - bounds.min)
 
         struct SectionJob { let id: UUID; let index: Int; let normal: SIMD3<Double>; let offset: Double; let hatch: SIMD3<Float>; let stripeColor: SIMD4<Float> }
         let jobs = sections.enumerated().map { index, section in
             SectionJob(id: section.id, index: index, normal: section.normal, offset: section.plane().w,
-                       hatch: hatchDirection(for: SIMD3<Float>(section.normal)),
+                       hatch: section.hatchDirection,
                        stripeColor: ColorPalette.linearComponents(forIndex: section.colorIndex))
         }
         let hidden = hiddenPartIDs
@@ -379,7 +307,7 @@ extension ViewportController {
                 guard !self.renderedCrossSections.isEmpty else { self.clearCrossSectionCaps(); return }
 
                 for material in self.modelInstance.clipMaterials {
-                    self.setClipUniforms(on: material, packed: packed, skip: -1)
+                    packed.apply(to: material, skip: -1)
                     material.isDoubleSided = packed.count > 0
                 }
                 // Only a drag needs the ghost re-synced to moving planes (union mode); a static flash
@@ -399,7 +327,7 @@ extension ViewportController {
     /// (only the geometry changes). Each cap material clips by the *other* planes (skip = its index).
     private func applyCrossSectionCaps(
         _ caps: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, stripeColor: SIMD4<Float>, hatch: SIMD3<Float>)],
-        packed: PackedClipPlanes, hatchSpacing: Float
+        packed: CrossSection.PackedPlanes, hatchSpacing: Float
     ) {
         var present: Set<CrossSectionCapKey> = []
         for cap in caps {
@@ -412,13 +340,13 @@ extension ViewportController {
                 material = SCNMaterial()
                 material.lightingModel = .constant
                 material.isDoubleSided = true
-                material.shaderModifiers = [.surface: Self.capShaderModifier]
+                material.shaderModifiers = [.surface: CrossSection.capShaderModifier]
                 material.setValue(NSValue(scnVector4: SCNVector4(cap.color.x, cap.color.y, cap.color.z, 1)), forKey: "capColor")
                 material.setValue(NSValue(scnVector4: SCNVector4(cap.stripeColor.x, cap.stripeColor.y, cap.stripeColor.z, 1)), forKey: "capStripeColor")
                 material.setValue(NSNumber(value: viewOptions.materialsEnabled ? Float(1) : Float(0)), forKey: "materialsEnabled")
                 crossSectionCapMaterialsByKey[cap.key] = material
             }
-            setClipUniforms(on: material, packed: packed, skip: cap.sectionIndex)
+            packed.apply(to: material, skip: cap.sectionIndex)
             material.setValue(NSValue(scnVector3: SCNVector3(cap.hatch.x, cap.hatch.y, cap.hatch.z)), forKey: "hatchDirection")
             material.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
             material.setValue(NSNumber(value: hatchStrength(forSection: cap.key.section)), forKey: "hatchStrength")
@@ -484,10 +412,10 @@ extension ViewportController {
         if let difference {
             let others = activeCrossSections.filter { $0.id != difference.id }
             let p = difference.plane()
-            setGhostUniforms(planes: packedClipPlanes(others),
+            setGhostUniforms(planes: CrossSection.PackedPlanes(others),
                              newPlane: SIMD4<Float>(Float(p.x), Float(p.y), Float(p.z), Float(p.w)))
         } else {
-            setGhostUniforms(planes: packedClipPlanes(activeCrossSections), newPlane: nil)
+            setGhostUniforms(planes: CrossSection.PackedPlanes(activeCrossSections), newPlane: nil)
         }
         for (id, node) in crossSectionGhostFillNodes {
             node.isHidden = hiddenPartIDs.contains(id)
@@ -539,14 +467,14 @@ extension ViewportController {
 
     /// Pushes the active clip planes to the ghost materials so the revealed cut-away tracks the plane
     /// live as it's dragged (union mode). Used by the drag's live-update hooks.
-    func setGhostClipUniforms(packed: PackedClipPlanes) {
+    func setGhostClipUniforms(packed: CrossSection.PackedPlanes) {
         setGhostUniforms(planes: packed, newPlane: nil)
     }
 
     /// Sets the ghost's clip uniforms on all the gizmo-drag ghost materials. `newPlane` nil selects
     /// union mode (whole cut-away); a value selects difference mode, where `planes` are the *other*
     /// active cuts and `newPlane` is the cut whose newly-removed material is shown.
-    private func setGhostUniforms(planes: PackedClipPlanes, newPlane: SIMD4<Float>?) {
+    private func setGhostUniforms(planes: CrossSection.PackedPlanes, newPlane: SIMD4<Float>?) {
         for material in crossSectionGhostMaterials {
             setGhostUniforms(on: material, planes: planes, newPlane: newPlane)
         }
@@ -554,7 +482,7 @@ extension ViewportController {
 
     /// Sets the inverted-clip ghost uniforms on a single material — shared by the gizmo-drag ghost and
     /// the per-part hover ghost (`makeHighlightGhost`). `newPlane` nil = union mode.
-    func setGhostUniforms(on material: SCNMaterial, planes: PackedClipPlanes, newPlane: SIMD4<Float>?) {
+    func setGhostUniforms(on material: SCNMaterial, planes: CrossSection.PackedPlanes, newPlane: SIMD4<Float>?) {
         let plane = newPlane ?? SIMD4<Float>(0, 0, 0, 0)
         material.setValue(NSValue(scnMatrix4: planes.a), forKey: "crossSectionPlanesA")
         material.setValue(NSValue(scnMatrix4: planes.b), forKey: "crossSectionPlanesB")
@@ -654,41 +582,6 @@ extension ViewportController {
             material.setValue(NSNumber(value: hatchStrength(forSection: key.section)), forKey: "hatchStrength")
         }
         sceneView.setNeedsRedraw()
-    }
-
-    // MARK: - Clip uniform packing
-
-    /// Two `float4x4` columns of planes plus the active count, ready to push to a material uniform.
-    struct PackedClipPlanes {
-        let a: SCNMatrix4
-        let b: SCNMatrix4
-        let count: Int
-    }
-
-    func packedClipPlanes(_ sections: [CrossSection]) -> PackedClipPlanes {
-        let planes = sections.prefix(Self.maxCrossSections).map { section -> SIMD4<Float> in
-            let p = section.plane()
-            return SIMD4<Float>(Float(p.x), Float(p.y), Float(p.z), Float(p.w))
-        }
-        func column(_ i: Int) -> SIMD4<Float> { i < planes.count ? planes[i] : .zero }
-        let a = simd_float4x4(column(0), column(1), column(2), column(3))
-        let b = simd_float4x4(column(4), column(5), column(6), column(7))
-        return PackedClipPlanes(a: SCNMatrix4(a), b: SCNMatrix4(b), count: planes.count)
-    }
-
-    func setClipUniforms(on material: SCNMaterial, packed: PackedClipPlanes, skip: Int) {
-        material.setValue(NSValue(scnMatrix4: packed.a), forKey: "crossSectionPlanesA")
-        material.setValue(NSValue(scnMatrix4: packed.b), forKey: "crossSectionPlanesB")
-        material.setValue(NSNumber(value: Float(packed.count)), forKey: "crossSectionCount")
-        material.setValue(NSNumber(value: Float(skip)), forKey: "crossSectionSkip")
-    }
-
-    /// A diagonal direction lying in the plane with the given normal (for the cap hatch).
-    private func hatchDirection(for normal: SIMD3<Float>) -> SIMD3<Float> {
-        let reference = abs(normal.x) < 0.9 ? SIMD3<Float>(1, 0, 0) : SIMD3<Float>(0, 1, 0)
-        let u = simd_normalize(simd_cross(reference, normal))
-        let v = simd_cross(normal, u)
-        return simd_normalize(u + v)
     }
 
     // MARK: - Mutators (called from the UI) — all undoable via the interaction undo manager

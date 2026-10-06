@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import simd
+import SceneKit
 @testable import ViewerCore
 
 struct CrossSectionTests {
@@ -85,5 +86,35 @@ struct CrossSectionTests {
         // The origin lies exactly on the plane: dot(origin, n) == distance.
         let plane = section.plane()
         #expect(simd_dot(origin, SIMD3(plane.x, plane.y, plane.z)) ≈ plane.w)
+    }
+
+    @Test func `orientation toward a normal maps +Z onto it`() {
+        let normals: [SIMD3<Double>] = [
+            SIMD3(0, 0, 1), SIMD3(0, 0, -1), SIMD3(1, 1, 0), SIMD3(-1, 0, 0),
+            SIMD3(0.1, 0, -1), SIMD3(2, -3, 0.5),
+        ]
+        for normal in normals {
+            let section = CrossSection(origin: .zero, orientation: CrossSection.orientation(toward: normal))
+            #expect(close(section.normal, simd_normalize(normal)), "normal \(normal)")
+        }
+    }
+
+    @Test func `packed planes hold each section's plane and count`() {
+        let sections = [
+            CrossSection.axisAligned(.z, origin: SIMD3(0, 0, 12)),
+            CrossSection(origin: SIMD3(0, 3, 0), orientation: CrossSection.orientation(toward: SIMD3(0, -1, 0))),
+        ]
+        let packed = CrossSection.PackedPlanes(sections)
+        #expect(packed.count == 2)
+        let a = simd_float4x4(packed.a)
+        #expect(a.columns.0 == SIMD4<Float>(0, 0, 1, 12))
+        #expect(close(SIMD3<Double>(SIMD3<Float>(a.columns.1.x, a.columns.1.y, a.columns.1.z)), SIMD3(0, -1, 0)))
+        #expect(abs(a.columns.1.w - -3) < 1e-5)
+        #expect(a.columns.2 == .zero)
+    }
+
+    @Test func `packed planes drop sections past the limit`() {
+        let sections = (0..<10).map { CrossSection.axisAligned(.x, origin: SIMD3(Double($0), 0, 0)) }
+        #expect(CrossSection.PackedPlanes(sections).count == CrossSection.maxRenderedCount)
     }
 }
