@@ -247,7 +247,8 @@ enum ModelRenderer {
             camera.automaticallyAdjustsZRange = true
         }
 
-        let position = center + axis * framing.distance
+        let distance = projection == .perspective ? framing.perspectiveDistance : framing.distance
+        let position = center + axis * distance
 
         let cameraLight = SCNLight()
         cameraLight.type = .directional

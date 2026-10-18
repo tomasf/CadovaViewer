@@ -83,6 +83,56 @@ struct CameraUtilsTests {
             && Double(a[col].w) ≈ Double(b[col].w)
         }
     }
+
+    /// The largest on-screen offset of any box corner, relative to the edge of a perspective camera's
+    /// view (1 = exactly at the edge), for a camera on `axis` at `distance` from `center`.
+    private func perspectiveFit(
+        _ box: (min: SIMD3<Double>, max: SIMD3<Double>),
+        center: SIMD3<Double>,
+        axis: SIMD3<Double>,
+        distance: Double,
+        framing: BoundingBoxFraming,
+        fieldOfViewDegrees: Double,
+        aspectRatio: Double
+    ) -> Double {
+        let tanHalfFov = tan(fieldOfViewDegrees / 2 * .pi / 180)
+        let camera = center + axis * distance
+        var fit = 0.0
+        for x in [box.min.x, box.max.x] {
+            for y in [box.min.y, box.max.y] {
+                for z in [box.min.z, box.max.z] {
+                    let toCorner = SIMD3(x, y, z) - camera
+                    let depth = -simd_dot(toCorner, axis)
+                    let vertical = abs(simd_dot(toCorner, framing.up)) / depth / tanHalfFov
+                    let horizontal = abs(simd_dot(toCorner, framing.right)) / depth / (tanHalfFov * aspectRatio)
+                    fit = max(fit, vertical, horizontal)
+                }
+            }
+        }
+        return fit
+    }
+
+    @Test func `the perspective distance keeps every corner in view when a long box is seen end-on`() {
+        let box = (min: SIMD3<Double>(0, -5, 0), max: SIMD3<Double>(120, 5, 16))
+        let center = (box.min + box.max) / 2
+        let axis = simd_normalize(SIMD3<Double>(-0.9, -0.3, 0.4))
+        let fov = 30.0, aspect = 0.8
+
+        let framing = frameBoundingBox(
+            axis: axis, boundingBox: box, center: center,
+            fieldOfViewDegrees: fov, aspectRatio: aspect, margin: 1
+        )
+        func fit(at distance: Double) -> Double {
+            perspectiveFit(box, center: center, axis: axis, distance: distance, framing: framing,
+                           fieldOfViewDegrees: fov, aspectRatio: aspect)
+        }
+
+        // The parallel-projection distance lets the near end run off screen, which is the case the
+        // perspective distance exists for; at the perspective distance the tightest corner touches
+        // the edge exactly
+        #expect(fit(at: framing.distance) > 1.1)
+        #expect(fit(at: framing.perspectiveDistance) ≈ 1)
+    }
 }
 
 private extension simd_float4 {

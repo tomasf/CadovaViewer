@@ -134,7 +134,12 @@ public struct BoundingBoxFraming {
     /// (i.e. the value SceneKit's `orthographicScale` needs to reproduce the same framing).
     public let orthographicScale: Double
     /// The distance from `center` (along the framing axis) the camera must sit at to fit the box.
+    /// This assumes a parallel projection, so it suits orthographic cameras; a perspective camera at
+    /// this distance can crop corners that sit closer to it than the center does.
     public let distance: Double
+    /// The distance from `center` (along the framing axis) at which a perspective camera fits the
+    /// box with the same headroom, taking into account that nearer corners appear larger.
+    public let perspectiveDistance: Double
 }
 
 /// Computes the placement needed to frame a world-space bounding box viewed from `axis` (a unit
@@ -166,14 +171,28 @@ public func frameBoundingBox(
         SIMD3(max.x, max.y, min.z), SIMD3(max.x, max.y, max.z)
     ]
 
+    let fovRadians = fieldOfViewDegrees * (.pi / 180.0)
+    let tanHalfFov = tan(fovRadians / 2)
+    let safeAspectRatio = aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 1
+
     var minU = Double.greatestFiniteMagnitude, maxU = -Double.greatestFiniteMagnitude
     var minV = Double.greatestFiniteMagnitude, maxV = -Double.greatestFiniteMagnitude
+    var perspectiveDistance = 0.0
     for corner in corners {
         let diff = corner - center
         let u = simd_dot(diff, right)
         let v = simd_dot(diff, up)
         minU = Swift.min(minU, u); maxU = Swift.max(maxU, u)
         minV = Swift.min(minV, v); maxV = Swift.max(maxV, v)
+
+        // A perspective camera looking at the center sees this corner at an angle that depends on
+        // how much closer it is than the center, so it needs to be far enough back for the corner's
+        // offset to fit within half the field of view, on both screen axes
+        if tanHalfFov > 0 {
+            let depth = simd_dot(diff, axis)
+            let required = Swift.max(abs(v), abs(u) / safeAspectRatio) * margin / tanHalfFov
+            perspectiveDistance = Swift.max(perspectiveDistance, depth + required)
+        }
     }
 
     var width = maxU - minU
@@ -187,7 +206,6 @@ public func frameBoundingBox(
 
     // orthoScale is half the world-height that fills the full view height, so fitting width needs
     // to account for the view's aspect ratio while fitting height doesn't.
-    let safeAspectRatio = aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 1
     let fitWidthScale = width / 2 / safeAspectRatio
     let fitHeightScale = height / 2
     var orthoScale = Swift.max(fitWidthScale, fitHeightScale) * margin
@@ -199,9 +217,16 @@ public func frameBoundingBox(
     // tan(fov/2), the value SceneKit actually uses for the ortho projection) reproduce exactly
     // orthoScale, so the framing isn't overridden. The same distance frames the model with matching
     // margin in perspective mode.
-    let fovRadians = fieldOfViewDegrees * (.pi / 180.0)
-    let tanHalfFov = tan(fovRadians / 2)
     let distance = tanHalfFov > 0 && orthoScale > 0 ? orthoScale / tanHalfFov : 1
+    if perspectiveDistance <= 0 || !perspectiveDistance.isFinite {
+        perspectiveDistance = distance
+    }
 
-    return BoundingBoxFraming(right: right, up: up, orthographicScale: orthoScale, distance: distance)
+    return BoundingBoxFraming(
+        right: right,
+        up: up,
+        orthographicScale: orthoScale,
+        distance: distance,
+        perspectiveDistance: perspectiveDistance
+    )
 }
