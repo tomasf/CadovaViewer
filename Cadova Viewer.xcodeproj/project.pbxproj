@@ -22,6 +22,9 @@
 		CC81DD5586A646E8AD257888 /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = F067A6B312C9480CB8822D14 /* ViewerCore */; };
 		CCAA000D2F0000000000000D /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = CCAA000C2F0000000000000C /* ViewerCore */; };
 		E2D2543564BA4131815F84AA /* ViewerCore in Frameworks */ = {isa = PBXBuildFile; productRef = FD012F8F219446A99E10DAB0 /* ViewerCore */; };
+		DDAA00102F10000000000010 /* EntryPoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAA00112F10000000000011 /* EntryPoint.swift */; };
+		DDAA00122F10000000000012 /* CadovaViewerCLI in Frameworks */ = {isa = PBXBuildFile; productRef = DDAA00132F10000000000013 /* CadovaViewerCLI */; };
+		DDAA00142F10000000000014 /* cadova-viewer in Embed Command Line Tool */ = {isa = PBXBuildFile; fileRef = DDAA00152F10000000000015 /* cadova-viewer */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +49,13 @@
 			remoteGlobalIDString = C932E6412D0F5A01006E5D17;
 			remoteInfo = "Cadova Viewer";
 		};
+		DDAA00162F10000000000016 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C932E63A2D0F5A01006E5D17 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DDAA00012F10000000000001;
+			remoteInfo = "cadova-viewer";
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -61,6 +71,17 @@
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DDAA00182F10000000000018 /* Embed Command Line Tool */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				DDAA00142F10000000000014 /* cadova-viewer in Embed Command Line Tool */,
+			);
+			name = "Embed Command Line Tool";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -69,6 +90,8 @@
 		C932E6422D0F5A01006E5D17 /* Cadova Viewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Cadova Viewer.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C98E716E2F672980007FD032 /* pugixml.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = pugixml.xcodeproj; sourceTree = "<group>"; };
 		CCAA00082F00000000000008 /* Cadova ViewerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Cadova ViewerTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDAA00112F10000000000011 /* EntryPoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryPoint.swift; sourceTree = "<group>"; };
+		DDAA00152F10000000000015 /* cadova-viewer */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "cadova-viewer"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -169,6 +192,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DDAA00192F10000000000019 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DDAA00122F10000000000012 /* CadovaViewerCLI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -179,6 +210,7 @@
 				AAAA00142EA6000000000014 /* Quick Look Preview */,
 				AAAA00152EA6000000000015 /* Quick Look Thumbnail */,
 				CCAA00072F00000000000007 /* Cadova ViewerTests */,
+				DDAA001A2F1000000000001A /* cadova-viewer */,
 				C932E6432D0F5A01006E5D17 /* Products */,
 				C99158F13037AF6F00EB15DE /* Recovered References */,
 			);
@@ -191,6 +223,7 @@
 				AAAA00102EA6000000000010 /* Quick Look Preview.appex */,
 				AAAA00112EA6000000000011 /* Quick Look Thumbnail.appex */,
 				CCAA00082F00000000000008 /* Cadova ViewerTests.xctest */,
+				DDAA00152F10000000000015 /* cadova-viewer */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -200,6 +233,15 @@
 			children = (
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DDAA001A2F1000000000001A /* cadova-viewer */ = {
+			isa = PBXGroup;
+			children = (
+				DDAA00112F10000000000011 /* EntryPoint.swift */,
+			);
+			name = "cadova-viewer";
+			path = "Packages/ViewerCore/Sources/cadova-viewer";
 			sourceTree = "<group>";
 		};
 		C99158F13037AF6F00EB15DE /* Recovered References */ = {
@@ -269,12 +311,14 @@
 				C932E63F2D0F5A01006E5D17 /* Frameworks */,
 				C932E6402D0F5A01006E5D17 /* Resources */,
 				AAAA00092EA6000000000006 /* Embed Foundation Extensions */,
+				DDAA00182F10000000000018 /* Embed Command Line Tool */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				AAAA00192EA6000000000019 /* PBXTargetDependency */,
 				AAAA001A2EA600000000001A /* PBXTargetDependency */,
+				DDAA00172F10000000000017 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C932E6442D0F5A01006E5D17 /* Cadova Viewer */,
@@ -318,6 +362,25 @@
 			productReference = CCAA00082F00000000000008 /* Cadova ViewerTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		DDAA00012F10000000000001 /* cadova-viewer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DDAA001B2F1000000000001B /* Build configuration list for PBXNativeTarget "cadova-viewer" */;
+			buildPhases = (
+				DDAA001C2F1000000000001C /* Sources */,
+				DDAA00192F10000000000019 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "cadova-viewer";
+			packageProductDependencies = (
+				DDAA00132F10000000000013 /* CadovaViewerCLI */,
+			);
+			productName = "cadova-viewer";
+			productReference = DDAA00152F10000000000015 /* cadova-viewer */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -336,6 +399,9 @@
 					};
 					C932E6412D0F5A01006E5D17 = {
 						CreatedOnToolsVersion = 16.1;
+					};
+					DDAA00012F10000000000001 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 					CCAA00012F00000000000001 = {
 						CreatedOnToolsVersion = 16.1;
@@ -374,6 +440,7 @@
 				AAAA00202EA6000000000020 /* Quick Look Preview */,
 				AAAA00302EA6000000000030 /* Quick Look Thumbnail */,
 				CCAA00012F00000000000001 /* Cadova ViewerTests */,
+				DDAA00012F10000000000001 /* cadova-viewer */,
 			);
 		};
 /* End PBXProject section */
@@ -438,6 +505,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DDAA001C2F1000000000001C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DDAA00102F10000000000010 /* EntryPoint.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -455,6 +530,11 @@
 			isa = PBXTargetDependency;
 			target = C932E6412D0F5A01006E5D17 /* Cadova Viewer */;
 			targetProxy = CCAA00022F00000000000002 /* PBXContainerItemProxy */;
+		};
+		DDAA00172F10000000000017 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DDAA00012F10000000000001 /* cadova-viewer */;
+			targetProxy = DDAA00162F10000000000016 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -825,6 +905,36 @@
 			};
 			name = Release;
 		};
+		DDAA001D2F1000000000001D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 4R2KAE48H2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		DDAA001E2F1000000000001E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 4R2KAE48H2;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_INTEROP_MODE = objcxx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -869,6 +979,15 @@
 			buildConfigurations = (
 				CCAA000A2F0000000000000A /* Debug */,
 				CCAA000B2F0000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DDAA001B2F1000000000001B /* Build configuration list for PBXNativeTarget "cadova-viewer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DDAA001D2F1000000000001D /* Debug */,
+				DDAA001E2F1000000000001E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -979,6 +1098,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
 			productName = ViewerCore;
+		};
+		DDAA00132F10000000000013 /* CadovaViewerCLI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9BC80B470583443FB3FA3725 /* XCLocalSwiftPackageReference "Packages/ViewerCore" */;
+			productName = CadovaViewerCLI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

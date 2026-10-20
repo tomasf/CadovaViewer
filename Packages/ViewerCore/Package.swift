@@ -8,6 +8,8 @@ let package = Package(
     ],
     products: [
         .library(name: "ViewerCore", targets: ["ViewerCore"]),
+        // The headless viewer's commands, for the Xcode target that embeds cadova-viewer in the app.
+        .library(name: "CadovaViewerCLI", targets: ["CadovaViewerCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/tomasf/ThreeMF", .upToNextMinor(from: "0.2.0")),
@@ -35,13 +37,20 @@ let package = Package(
                 .interoperabilityMode(.Cxx)
             ]
         ),
-        .executableTarget(
-            name: "cadova-viewer",
+        .target(
+            name: "CadovaViewerCLI",
             dependencies: [
                 "ViewerCore",
                 .product(name: "ThreeMF", package: "ThreeMF"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
+            swiftSettings: [
+                .interoperabilityMode(.Cxx)
+            ]
+        ),
+        .executableTarget(
+            name: "cadova-viewer",
+            dependencies: ["CadovaViewerCLI"],
             swiftSettings: [
                 .interoperabilityMode(.Cxx)
             ]
