@@ -3,6 +3,21 @@
     <channel>
         <title>Cadova Viewer</title>
         <item>
+            <title>1.3.2</title>
+            <pubDate>Tue, 20 Oct 2026 10:27:10 +0200</pubDate>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>1.3.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.1</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/tomasf/CadovaViewer/releases/download/1.3.2/CadovaViewer1.3.2.zip" length="12514109" type="application/octet-stream" sparkle:edSignature="UG20Od3cHrWSSz+IMc/uwQ98qWJgYAdqUfmYeyOCwH/AaeDKCNalFUqQjmrGuPP8JXin/txruYhcZyljCbtECw=="/>
+            <description><![CDATA[
+                <h4>Additions</h4>
+                <ul>
+                    <li>Cadova Viewer now includes <code>cadova-viewer</code>, a command-line tool for scripts and coding agents, at <code>Cadova Viewer.app/Contents/Helpers/cadova-viewer</code>. <code>cadova-viewer render</code> renders a 3MF file to an image, with options for the view, edges, materials, parts and cross-sections. <code>cadova-viewer info</code> reports a model's dimensions, volume, metadata and other details as JSON or text.</li>
+                </ul>
+            ]]>
+            </description>
+        </item>
+        <item>
             <title>1.3.1</title>
             <pubDate>Tue, 06 Oct 2026 16:30:00 +0200</pubDate>
             <sparkle:version>14</sparkle:version>
