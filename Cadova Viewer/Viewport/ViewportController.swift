@@ -61,23 +61,18 @@ class ViewportController: NSObject, ObservableObject {
     /// `ViewportController+CrossSection`.
     let crossSectionPlaneNode = SCNNode()
 
-    /// Holds the filled cap geometry drawn where each cut plane slices each part. Rebuilt off the main
-    /// thread whenever a plane moves; see `ViewportController+CrossSection`.
+    /// Holds the filled cap geometry drawn where each cut plane slices each part. Re-sliced in step
+    /// with the clip planes whenever a plane moves; see `ViewportController+CrossSection`.
     let crossSectionCapNode = SCNNode()
     /// The interactive transform handle for the selected cross-section.
     let crossSectionGizmo = CrossSectionGizmo()
-    /// Whether a cap computation is currently running. Only one runs at a time; new requests during a
-    /// drag set `crossSectionCapNeedsRebuild` instead of piling up a backlog of stale full scans.
-    var crossSectionCapInFlight = false
-    /// Set when a plane moved while a cap computation was in flight, so the latest is rebuilt once the
-    /// current one finishes (a trailing update).
-    var crossSectionCapNeedsRebuild = false
-    /// Serialises the (potentially heavy) cap geometry computation off the main thread.
-    let crossSectionCapQueue = DispatchQueue(label: "cross-section-cap", qos: .userInitiated)
     /// Persistent cap nodes and materials, keyed by section + part, reused across rebuilds so a drag
     /// only swaps geometry — avoiding per-frame material/shader-modifier recreation (which stutters).
     var crossSectionCapNodesByKey: [CrossSectionCapKey: SCNNode] = [:]
     var crossSectionCapMaterialsByKey: [CrossSectionCapKey: SCNMaterial] = [:]
+    /// The plane each cap was last sliced at (also recorded when the plane missed the part), so only
+    /// caps whose plane moved are sliced again.
+    var crossSectionCapPlanesByKey: [CrossSectionCapKey: SIMD4<Double>] = [:]
     /// Translucent "ghost" of the cut-away half, shown only while dragging a gizmo handle so the user
     /// can see what they're cutting into. Built lazily (a per-part clone of the model) and torn down on
     /// model reload; see `ViewportController+CrossSection`.
@@ -195,7 +190,14 @@ class ViewportController: NSObject, ObservableObject {
 
     /// This viewport's cutting planes. Per-viewport (cuts in one split pane leave others intact),
     /// applied to this viewport's own materials. See `ViewportController+CrossSection`.
-    @Published var crossSections: [CrossSection] = [] {
+    /// Published by hand rather than `@Published`: a gizmo drag rewrites this on every mouse event, and
+    /// each `objectWillChange` re-evaluates the pane's SwiftUI overlays and (via `DocumentViewModel`)
+    /// the whole document UI. No view shows the plane's live position, so a drag publishes once, at its
+    /// end (`endCrossSectionGizmoDrag`).
+    var crossSections: [CrossSection] = [] {
+        willSet {
+            if crossSectionDrag == nil, newValue != crossSections { objectWillChange.send() }
+        }
         didSet {
             guard crossSections != oldValue else { return }
             // Undo/redo (or delete) can drop the selected section — forget it so the gizmo and plane

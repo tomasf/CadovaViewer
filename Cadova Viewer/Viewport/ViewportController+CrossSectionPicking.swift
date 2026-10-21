@@ -81,7 +81,7 @@ extension ViewportController {
     }
 
     private var shouldHitTestCrossSectionCaps: Bool {
-        !activeCrossSections.isEmpty && !crossSectionCapInFlight && !crossSectionCapNeedsRebuild && crossSectionDrag == nil
+        !activeCrossSections.isEmpty && crossSectionDrag == nil
     }
 
     private func viewSegment(through viewPoint: CGPoint) -> (start: SCNVector3, end: SCNVector3)? {

@@ -118,9 +118,9 @@ extension ViewportController {
 
     // MARK: - Apply
 
-    /// Applies the current cross-sections. The locator plane + gizmo update live here; the clip planes
-    /// and caps are applied together when the (background) cap slice finishes, so the cut surface and
-    /// its fill stay in sync. Removing all cuts restores the geometry immediately.
+    /// Applies the current cross-sections: the locator plane, gizmo, clip planes and caps all update
+    /// together, so the cut surface and its fill never drift apart. Removing all cuts restores the
+    /// geometry.
     /// The cross-sections whose cut is currently applied (disabled ones still exist but don't clip).
     var activeCrossSections: [CrossSection] { crossSections.filter { $0.enabled } }
 
@@ -145,23 +145,11 @@ extension ViewportController {
                 packed.apply(to: material, skip: -1)
                 material.isDoubleSided = false
             }
-            crossSectionCapNeedsRebuild = false
             clearCrossSectionCaps()
             sceneView.setNeedsRedraw()
             return
         }
         updateCrossSectionCap()
-    }
-
-    /// Pushes the current clip planes to the model materials immediately (no async cap wait). Used on
-    /// model (re)load so the geometry is clipped in the first rendered frame — otherwise the whole
-    /// model flashes uncut until the background cap slice finishes and applies the uniforms.
-    func applyModelClipUniforms() {
-        let packed = CrossSection.PackedPlanes(renderedCrossSections)
-        for material in modelInstance.clipMaterials {
-            packed.apply(to: material, skip: -1)
-            material.isDoubleSided = packed.count > 0
-        }
     }
 
     /// Shows the locator plane for the selected-or-hovered section and the gizmo for the selected one —
@@ -257,114 +245,104 @@ extension ViewportController {
 
     // MARK: - Caps
 
-    /// Rebuilds caps for every section/part off the main thread, then applies clip planes + caps
-    /// together on the main thread. One slice in flight at a time with a trailing rebuild (no backlog).
+    /// Applies the clip planes and caps together, in the same frame, so the cut surface and its fill
+    /// move as one. Only caps whose plane moved are sliced again — while dragging one section, the
+    /// others' caps are reused as they are — which keeps slicing on the main thread cheap enough.
     func updateCrossSectionCap() {
         guard !renderedCrossSections.isEmpty else {
-            crossSectionCapNeedsRebuild = false
             clearCrossSectionCaps()
             return
         }
-        guard !crossSectionCapInFlight else {
-            crossSectionCapNeedsRebuild = true
-            return
-        }
-        crossSectionCapInFlight = true
-        crossSectionCapNeedsRebuild = false
 
         let sections = Array(renderedCrossSections.prefix(Self.maxCrossSections))
         let packed = CrossSection.PackedPlanes(sections)
         let bounds = crossSectionModelBounds
         let hatchSpacing = CrossSection.hatchSpacing(forModelSize: bounds.max - bounds.min)
-
-        struct SectionJob { let id: UUID; let index: Int; let normal: SIMD3<Double>; let offset: Double; let hatch: SIMD3<Float>; let stripeColor: SIMD4<Float> }
-        let jobs = sections.enumerated().map { index, section in
-            SectionJob(id: section.id, index: index, normal: section.normal, offset: section.plane().w,
-                       hatch: section.hatchDirection,
-                       stripeColor: ColorPalette.linearComponents(forIndex: section.colorIndex))
-        }
         let hidden = hiddenPartIDs
-        let parts = sceneController.parts.filter { !hidden.contains($0.id) && $0.capSolid != nil }
-        let partInputs = parts.map { (id: $0.id, solid: $0.capSolid!, color: $0.dominantColor) }
 
-        crossSectionCapQueue.async { [weak self] in
-            var results: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, stripeColor: SIMD4<Float>, hatch: SIMD3<Float>)] = []
-            for job in jobs {
-                for part in partInputs {
-                    let triangles = part.solid.capTriangles(planeNormal: job.normal, offset: job.offset)
-                    guard !triangles.isEmpty else { continue }
-                    let source = SCNGeometrySource(vertices: triangles.map { SCNVector3($0.x, $0.y, $0.z) })
-                    let element = SCNGeometryElement(indices: Array(UInt32(0)..<UInt32(triangles.count)), primitiveType: .triangles)
-                    results.append((CrossSectionCapKey(section: job.id, part: part.id), job.index,
-                                    SCNGeometry(sources: [source], elements: [element]),
-                                    part.color ?? SIMD4(0.7, 0.7, 0.7, 1), job.stripeColor, job.hatch))
-                }
-            }
-
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.crossSectionCapInFlight = false
-                guard !self.renderedCrossSections.isEmpty else { self.clearCrossSectionCaps(); return }
-
-                for material in self.modelInstance.clipMaterials {
-                    packed.apply(to: material, skip: -1)
-                    material.isDoubleSided = packed.count > 0
-                }
-                // Only a drag needs the ghost re-synced to moving planes (union mode); a static flash
-                // (enable/add difference mode) must keep the uniforms it was shown with.
-                if self.crossSectionGhostVisible, self.crossSectionDrag != nil {
-                    self.setGhostClipUniforms(packed: packed)
-                }
-                self.applyCrossSectionCaps(results, packed: packed, hatchSpacing: hatchSpacing)
-                self.sceneView.setNeedsRedraw()
-
-                if self.crossSectionCapNeedsRebuild { self.updateCrossSectionCap() }
-            }
-        }
-    }
-
-    /// Installs computed caps onto persistent per-(section,part) nodes, reusing each node + material
-    /// (only the geometry changes). Each cap material clips by the *other* planes (skip = its index).
-    private func applyCrossSectionCaps(
-        _ caps: [(key: CrossSectionCapKey, sectionIndex: Int, geometry: SCNGeometry, color: SIMD4<Float>, stripeColor: SIMD4<Float>, hatch: SIMD3<Float>)],
-        packed: CrossSection.PackedPlanes, hatchSpacing: Float
-    ) {
         var present: Set<CrossSectionCapKey> = []
-        for cap in caps {
-            present.insert(cap.key)
-
-            let material: SCNMaterial
-            if let existing = crossSectionCapMaterialsByKey[cap.key] {
-                material = existing
-            } else {
-                material = SCNMaterial()
-                material.lightingModel = .constant
-                material.isDoubleSided = true
-                material.shaderModifiers = [.surface: CrossSection.capShaderModifier]
-                material.setValue(NSValue(scnVector4: SCNVector4(cap.color.x, cap.color.y, cap.color.z, 1)), forKey: "capColor")
-                material.setValue(NSValue(scnVector4: SCNVector4(cap.stripeColor.x, cap.stripeColor.y, cap.stripeColor.z, 1)), forKey: "capStripeColor")
-                material.setValue(NSNumber(value: viewOptions.materialsEnabled ? Float(1) : Float(0)), forKey: "materialsEnabled")
-                crossSectionCapMaterialsByKey[cap.key] = material
-            }
-            packed.apply(to: material, skip: cap.sectionIndex)
-            material.setValue(NSValue(scnVector3: SCNVector3(cap.hatch.x, cap.hatch.y, cap.hatch.z)), forKey: "hatchDirection")
-            material.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
-            material.setValue(NSNumber(value: hatchStrength(forSection: cap.key.section)), forKey: "hatchStrength")
-            cap.geometry.materials = [material]
-
-            if let node = crossSectionCapNodesByKey[cap.key] {
-                node.geometry = cap.geometry
+        for (index, section) in sections.enumerated() {
+            let plane = section.plane()
+            let stripeColor = ColorPalette.linearComponents(forIndex: section.colorIndex)
+            for part in sceneController.parts where !hidden.contains(part.id) {
+                guard let solid = part.capSolid else { continue }
+                let key = CrossSectionCapKey(section: section.id, part: part.id)
+                if crossSectionCapPlanesByKey[key] != plane {
+                    let triangles = solid.capTriangles(planeNormal: section.normal, offset: plane.w)
+                    setCrossSectionCapGeometry(Self.capGeometry(triangles), for: key,
+                                               color: part.dominantColor ?? SIMD4(0.7, 0.7, 0.7, 1), stripeColor: stripeColor)
+                    crossSectionCapPlanesByKey[key] = plane
+                }
+                guard let node = crossSectionCapNodesByKey[key], node.geometry != nil,
+                      let material = crossSectionCapMaterialsByKey[key] else { continue }
+                present.insert(key)
+                // Each cap material clips by the *other* planes (skip = its own index).
+                packed.apply(to: material, skip: index)
+                let hatch = section.hatchDirection
+                material.setValue(NSValue(scnVector3: SCNVector3(hatch.x, hatch.y, hatch.z)), forKey: "hatchDirection")
+                material.setValue(NSNumber(value: hatchSpacing), forKey: "hatchSpacing")
+                material.setValue(NSNumber(value: hatchStrength(forSection: section.id)), forKey: "hatchStrength")
                 node.isHidden = false
-            } else {
-                let node = SCNNode(geometry: cap.geometry)
-                node.name = "Cross-section cap"
-                crossSectionCapNodesByKey[cap.key] = node
-                crossSectionCapNode.addChildNode(node)
             }
         }
         for (key, node) in crossSectionCapNodesByKey where !present.contains(key) {
             node.isHidden = true
         }
+
+        for material in modelInstance.clipMaterials {
+            packed.apply(to: material, skip: -1)
+            material.isDoubleSided = packed.count > 0
+        }
+        // Only a drag needs the ghost re-synced to moving planes (union mode); a static flash
+        // (enable/add difference mode) must keep the uniforms it was shown with.
+        if crossSectionGhostVisible, crossSectionDrag != nil {
+            setGhostClipUniforms(packed: packed)
+        }
+        sceneView.setNeedsRedraw()
+    }
+
+    /// Swaps a cap's geometry on its persistent node, creating the node and its material on first use
+    /// (only the geometry changes per slice). A nil geometry means the plane misses the part.
+    private func setCrossSectionCapGeometry(_ geometry: SCNGeometry?, for key: CrossSectionCapKey, color: SIMD4<Float>, stripeColor: SIMD4<Float>) {
+        guard let geometry else {
+            crossSectionCapNodesByKey[key]?.geometry = nil
+            return
+        }
+        let material: SCNMaterial
+        if let existing = crossSectionCapMaterialsByKey[key] {
+            material = existing
+        } else {
+            material = SCNMaterial()
+            material.lightingModel = .constant
+            material.isDoubleSided = true
+            material.shaderModifiers = [.surface: CrossSection.capShaderModifier]
+            material.setValue(NSValue(scnVector4: SCNVector4(color.x, color.y, color.z, 1)), forKey: "capColor")
+            material.setValue(NSValue(scnVector4: SCNVector4(stripeColor.x, stripeColor.y, stripeColor.z, 1)), forKey: "capStripeColor")
+            material.setValue(NSNumber(value: viewOptions.materialsEnabled ? Float(1) : Float(0)), forKey: "materialsEnabled")
+            crossSectionCapMaterialsByKey[key] = material
+        }
+        geometry.materials = [material]
+
+        if let node = crossSectionCapNodesByKey[key] {
+            node.geometry = geometry
+        } else {
+            let node = SCNNode(geometry: geometry)
+            node.name = "Cross-section cap"
+            crossSectionCapNodesByKey[key] = node
+            crossSectionCapNode.addChildNode(node)
+        }
+    }
+
+    /// A cap's triangle soup as geometry, handing the vertex array to SceneKit as-is, or nil when empty.
+    private static func capGeometry(_ triangles: [SIMD3<Float>]) -> SCNGeometry? {
+        guard !triangles.isEmpty else { return nil }
+        let data = triangles.withUnsafeBufferPointer { Data(buffer: $0) }
+        let source = SCNGeometrySource(data: data, semantic: .vertex, vectorCount: triangles.count,
+                                       usesFloatComponents: true, componentsPerVector: 3,
+                                       bytesPerComponent: MemoryLayout<Float>.size, dataOffset: 0,
+                                       dataStride: MemoryLayout<SIMD3<Float>>.stride)
+        let element = SCNGeometryElement(indices: Array(UInt32(0)..<UInt32(triangles.count)), primitiveType: .triangles)
+        return SCNGeometry(sources: [source], elements: [element])
     }
 
     func clearCrossSectionCaps() {
@@ -384,8 +362,7 @@ extension ViewportController {
 
         if preview?.id != crossSectionPreviewID {
             crossSectionPreviewID = preview?.id
-            applyModelClipUniforms() // clip immediately so the previewed region pops cleanly to a cut
-            applyCrossSection()      // rebuild caps + overlays for the new rendered set
+            applyCrossSection() // clip + caps + overlays for the new rendered set
         }
         if let preview {
             showCrossSectionGhost(difference: preview)
@@ -605,6 +582,9 @@ extension ViewportController {
             crossSectionCapNodesByKey[key] = nil
             crossSectionCapMaterialsByKey[key] = nil
         }
+        for key in crossSectionCapPlanesByKey.keys where key.section == id {
+            crossSectionCapPlanesByKey[key] = nil
+        }
         updateCrossSections(crossSections.filter { $0.id != id }, actionName: "Delete Cross-Section")
     }
 
@@ -676,24 +656,11 @@ extension ViewportController {
         undoManager?.setActionName(actionName)
     }
 
-    /// The model's world-space axis-aligned bounding box (min, max) in millimetres.
+    /// The model's world-space axis-aligned bounding box (min, max) in millimetres. Read from the
+    /// scene controller's load-time cache: a drag needs it on every mouse event, and walking the node
+    /// tree for `boundingBox` takes SceneKit's scene lock, contending with the render thread.
     var crossSectionModelBounds: (min: SIMD3<Double>, max: SIMD3<Double>) {
-        let root = modelInstance.root
-        let (localMin, localMax) = root.boundingBox
-        if localMin == localMax { return (.zero, .zero) }
-
-        var worldMin = SIMD3<Double>(repeating: .greatestFiniteMagnitude)
-        var worldMax = SIMD3<Double>(repeating: -.greatestFiniteMagnitude)
-        for xi in [localMin.x, localMax.x] {
-            for yi in [localMin.y, localMax.y] {
-                for zi in [localMin.z, localMax.z] {
-                    let world = root.convertPosition(SCNVector3(xi, yi, zi), to: nil)
-                    let p = SIMD3<Double>(Double(world.x), Double(world.y), Double(world.z))
-                    worldMin = simd_min(worldMin, p)
-                    worldMax = simd_max(worldMax, p)
-                }
-            }
-        }
-        return (worldMin, worldMax)
+        let (min, max) = sceneController.modelBoundingBox
+        return (SIMD3(Double(min.x), Double(min.y), Double(min.z)), SIMD3(Double(max.x), Double(max.y), Double(max.z)))
     }
 }

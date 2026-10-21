@@ -103,6 +103,8 @@ extension ViewportController {
             }
             registerCrossSectionUndo(restoring: snapshot, actionName: actionName)
         }
+        // The drag's live updates skipped publishing (see `crossSections`); catch the UI up once.
+        if crossSectionDragUndoSnapshot != crossSections { objectWillChange.send() }
         crossSectionDragUndoSnapshot = nil
         crossSectionDrag = nil
         crossSectionGizmo.setActiveHandle(nil) // restore all handles

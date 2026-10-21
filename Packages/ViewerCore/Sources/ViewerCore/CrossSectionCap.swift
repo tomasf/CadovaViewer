@@ -13,7 +13,7 @@ public final class PartSolid: @unchecked Sendable {
     private let indices: [UInt32]
 
     /// Serialises lazy construction and slicing — Manifold's C++ objects aren't guaranteed
-    /// thread-safe, and multiple viewports compute caps on their own queues.
+    /// thread-safe, and nothing stops callers slicing a shared solid from more than one thread.
     private let lock = NSLock()
     private var didBuild = false
     private var manifold: Manifold<CapVector3>?
