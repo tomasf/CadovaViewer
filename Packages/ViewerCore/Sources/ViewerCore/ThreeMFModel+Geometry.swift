@@ -19,6 +19,15 @@ public struct MeshGeometryResult: @unchecked Sendable {
     /// group *or* a colour group — as opposed to falling back to the plain, uncoloured default.
     /// Used to tell whether the model has any real "materials" to toggle at all.
     public let hasMaterial: Bool
+    /// Each triangle's opacity, from 0 to 1, with the component's inherited property applied; 1 where
+    /// a triangle has no material at all. Used to fade edge lines by the faces they border.
+    public let triangleAlphas: [Float]
+
+    /// Whether the mesh has triangles but none of them are drawn, because every one is fully
+    /// transparent. Such a mesh is treated as absent: no edges, no cross-section cap, no statistics.
+    public var isInvisible: Bool {
+        emittedCorners.isEmpty && !triangleAlphas.isEmpty
+    }
 }
 
 extension ThreeMF.Model {
@@ -52,7 +61,9 @@ extension ThreeMF.Model {
         var triangleCountPerMaterial: [PBRMaterial?: Int] = [:]
         var colorSumPerMaterial: [PBRMaterial?: SIMD4<Double>] = [:]
         var hasMaterial = false
+        var triangleAlphas: [Float] = []
 
+        triangleAlphas.reserveCapacity(mesh.triangles.count)
         positions.reserveCapacity(mesh.triangles.count * 3)
         colors.reserveCapacity(mesh.triangles.count * 3)
         emittedCorners.reserveCapacity(mesh.triangles.count * 3)
@@ -65,6 +76,7 @@ extension ThreeMF.Model {
 
         for (triangleIndex, triangle) in mesh.triangles.enumerated() {
             let material = material(for: triangle, inheritedProperty: inheritedProperty)
+            triangleAlphas.append(material?.edgeAlpha ?? 1)
             guard material?.isFullyTransparent != true else {
                 continue
             }
@@ -131,7 +143,7 @@ extension ThreeMF.Model {
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: elements)
         geometry.materials = orderedMaterials.map { $0?.scnMaterial ?? defaultMaterial }
         geometry.name = UUID().uuidString
-        return MeshGeometryResult(geometry: geometry, emittedCorners: emittedCorners, dominantColor: dominantColor, hasMaterial: hasMaterial)
+        return MeshGeometryResult(geometry: geometry, emittedCorners: emittedCorners, dominantColor: dominantColor, hasMaterial: hasMaterial, triangleAlphas: triangleAlphas)
     }
 
     /// The colour of whichever material group covers the most triangles, as linear RGBA. PBR groups

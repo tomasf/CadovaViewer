@@ -33,7 +33,10 @@ extension ModelData {
                 (sharpEdgeLines, smoothEdgeLines) = (.empty, .empty)
             }
 
-            let stats = mesh.statistics(transform: worldTransform)
+            // A part whose every triangle is fully transparent is treated as absent, the same as a
+            // component loaded from a file: no cross-section cap and no statistics.
+            let isInvisible = geometryResult.isInvisible
+            let stats = isInvisible ? Statistics(vertexCount: 0, triangleCount: 0) : mesh.statistics(transform: worldTransform)
 
             // World-space indexed mesh for the cross-section cap.
             var capVertices: [SIMD3<Float>] = []
@@ -49,7 +52,7 @@ extension ModelData {
                 capIndices.append(UInt32(triangle.v2))
                 capIndices.append(UInt32(triangle.v3))
             }
-            let capSolid = capVertices.isEmpty ? nil : PartSolid(vertices: capVertices, indices: capIndices)
+            let capSolid = capVertices.isEmpty || isInvisible ? nil : PartSolid(vertices: capVertices, indices: capIndices)
 
             var nodes = Part.Nodes()
             nodes.container.name = "Item \(itemIndex)"
@@ -74,14 +77,14 @@ extension ModelData {
                 let sharpNodeContainer = SCNNode()
                 sharpNodeContainer.name = "Sharp edges transformer"
                 sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
-                let sharpNode = SCNNode(geometry: sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor))
+                let sharpNode = SCNNode(geometry: sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor, triangleAlphas: geometryResult.triangleAlphas))
                 sharpNode.name = "Sharp edges geometry"
                 sharpNodeContainer.addChildNode(sharpNode)
 
                 let smoothNodeContainer = SCNNode()
                 smoothNodeContainer.name = "Smooth edges transformer"
                 smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
-                let smoothNode = SCNNode(geometry: smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor))
+                let smoothNode = SCNNode(geometry: smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor, triangleAlphas: geometryResult.triangleAlphas))
                 smoothNode.name = "Smooth edges geometry"
                 smoothNodeContainer.addChildNode(smoothNode)
             }

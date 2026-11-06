@@ -17,6 +17,10 @@ private struct ComponentProducts {
     let hasMaterial: Bool
     let capVertices: [SIMD3<Float>]
     let capIndices: [UInt32]
+    let triangleAlphas: [Float]
+    /// Every triangle is fully transparent, so the component is treated as absent: it draws no
+    /// edges, adds nothing to the cross-section cap and isn't counted in the part's statistics.
+    let isInvisible: Bool
 }
 
 extension ModelData {
@@ -76,13 +80,13 @@ extension ModelData {
                 nodes.container.addChildNode(sharpEdgesGroupNode)
                 nodes.container.addChildNode(smoothEdgesGroupNode)
 
-                for product in products {
+                for product in products where !product.isInvisible {
                     let sharpNodeContainer = SCNNode()
                     sharpNodeContainer.name = "Sharp edges transformer"
                     sharpNodeContainer.transform = product.transform
                     sharpEdgesGroupNode.addChildNode(sharpNodeContainer)
 
-                    let sharpGeometry = product.sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
+                    let sharpGeometry = product.sharpEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor, triangleAlphas: product.triangleAlphas)
                     let sharpNode = SCNNode(geometry: sharpGeometry)
                     sharpNode.name = "Sharp edges geometry"
                     sharpNodeContainer.addChildNode(sharpNode)
@@ -92,7 +96,7 @@ extension ModelData {
                     smoothNodeContainer.transform = product.transform
                     smoothEdgesGroupNode.addChildNode(smoothNodeContainer)
 
-                    let smoothGeometry = product.smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor)
+                    let smoothGeometry = product.smoothEdgeLines.geometry(unknownNeedsLightColor: unknownEdgesNeedLightColor, triangleAlphas: product.triangleAlphas)
                     let smoothNode = SCNNode(geometry: smoothGeometry)
                     smoothNode.name = "Smooth edges geometry"
                     smoothNodeContainer.addChildNode(smoothNode)
@@ -100,7 +104,7 @@ extension ModelData {
             }
 
             var modelGeometryVariants: [ModelGeometryVariant] = []
-            for product in products {
+            for product in products where !product.isInvisible {
                 let modelNode = SCNNode(geometry: product.mainGeometry)
                 modelNode.name = "Main geometry"
                 modelNode.transform = product.transform
@@ -116,7 +120,7 @@ extension ModelData {
             // Concatenate the components' indexed meshes (offsetting indices) into one solid for caps.
             var capVertices: [SIMD3<Float>] = []
             var capIndices: [UInt32] = []
-            for product in products {
+            for product in products where !product.isInvisible {
                 let offset = UInt32(capVertices.count)
                 capVertices += product.capVertices
                 capIndices += product.capIndices.map { $0 + offset }
@@ -129,7 +133,7 @@ extension ModelData {
                 name: loadedItem.rootObject.name ?? "Object \(itemIndex + 1)",
                 id: loadedItem.item.partNumber,
                 semantic: loadedItem.item.semantic,
-                stats: Statistics(products.map(\.stats)),
+                stats: Statistics(products.filter { !$0.isInvisible }.map(\.stats)),
                 modelGeometryVariants: modelGeometryVariants,
                 dominantColor: dominantColor,
                 hasMaterial: products.contains { $0.hasMaterial },
@@ -212,7 +216,9 @@ extension ModelData {
             dominantColor: geometryResult.dominantColor,
             hasMaterial: geometryResult.hasMaterial,
             capVertices: capVertices,
-            capIndices: capIndices
+            capIndices: capIndices,
+            triangleAlphas: geometryResult.triangleAlphas,
+            isInvisible: geometryResult.isInvisible
         )
     }
 }

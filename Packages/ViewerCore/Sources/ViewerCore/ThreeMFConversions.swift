@@ -53,6 +53,18 @@ public enum Material {
         }
     }
 
+    /// How opaque the triangle's edges should be, from 0 to 1: a vertex-colour triangle's most
+    /// opaque corner. A PBR material always counts as opaque, matching `isFullyTransparent`, which
+    /// never hides one.
+    public var edgeAlpha: Float {
+        switch self {
+        case let .vertexColors(color, color2, color3):
+            Float(Swift.max(color.alpha, color2.alpha, color3.alpha)) / 255
+        case .pbr:
+            1
+        }
+    }
+
     public var colorValues: [ThreeMF.Color]? {
         if case let .vertexColors(color, color2, color3) = self {
             [color, color2, color3]

@@ -44,6 +44,10 @@ extension Mesh {
     /// dark line colour by the triangles that border it — `triangleColors[i]` is triangle `i`'s own
     /// explicit colour (see `ThreeMF.Model.explicitTriangleColors(for:)`), or `nil` where it has none
     /// and would rely on the containing part's inherited colour, which isn't knowable here.
+    ///
+    /// Opacity isn't decided here, for the same reason: each edge keeps its bordering triangles, and
+    /// `EdgeLines.geometry(unknownNeedsLightColor:triangleAlphas:)` fades it once the component's
+    /// resolved triangle opacities are known.
     public func edgeGeometries(triangleColors: [SIMD4<Float>?]) -> (sharp: EdgeLines, smooth: EdgeLines) {
         let positions: [SCNVector3] = vertices.map(\.scnVector3)
         let (sharpEdges, smoothEdges) = extractEdgeSegments()
@@ -55,10 +59,13 @@ extension Mesh {
             linePositions.reserveCapacity(edges.count * 2)
             var needsLightColor: [Bool?] = []
             needsLightColor.reserveCapacity(edges.count)
+            var borderingFaces: [BorderingFaces] = []
+            borderingFaces.reserveCapacity(edges.count)
 
             for (edge, faces) in edges {
                 linePositions.append(positions[edge.v1])
                 linePositions.append(positions[edge.v2])
+                borderingFaces.append(faces)
 
                 // Only commit to a known verdict when every bordering face has an explicit
                 // colour of its own; a face relying on the part's inherited colour makes the
@@ -81,7 +88,7 @@ extension Mesh {
                 needsLightColor.append(allExplicit ? anyDark : nil)
             }
 
-            return EdgeLines(positions: linePositions, needsLightColor: needsLightColor)
+            return EdgeLines(positions: linePositions, needsLightColor: needsLightColor, borderingFaces: borderingFaces)
         }
 
         return (edgeLines(sharpEdges), edgeLines(smoothEdges))
@@ -120,7 +127,7 @@ extension Mesh {
     /// An edge's 1 or 2 bordering triangles — a fixed pair rather than `[Int]`, since a non-manifold
     /// edge (3+) is dropped before this is ever constructed, and there can be well over a million
     /// edges in a large mesh: an `[Int]` per edge would mean that many avoidable heap allocations.
-    fileprivate struct BorderingFaces {
+    struct BorderingFaces {
         let first: Int32
         let second: Int32?
 
@@ -312,39 +319,72 @@ extension Mesh {
 public struct EdgeLines {
     fileprivate let positions: [SCNVector3]
     fileprivate let needsLightColor: [Bool?]
+    /// Each edge's bordering triangles, for fading it by their opacity.
+    fileprivate let borderingFaces: [ThreeMF.Mesh.BorderingFaces]
 
     fileprivate static let darkColor = ThreeMF.Color(red: 0, green: 0, blue: 0).scnVector4
     fileprivate static let lightColor = ThreeMF.Color(red: 140, green: 140, blue: 140).scnVector4
 
-    static let empty = EdgeLines(positions: [], needsLightColor: [])
+    static let empty = EdgeLines(positions: [], needsLightColor: [], borderingFaces: [])
 
     /// Builds the renderable line geometry, resolving any edge left unclassified by
     /// `edgeGeometries(triangleColors:)` (its bordering faces relied on an inherited colour) to
     /// `unknownNeedsLightColor` — the containing part's own dominant-colour darkness check, the
     /// best information available once the mesh alone can't say.
-    public func geometry(unknownNeedsLightColor: Bool) -> SCNGeometry {
-        guard !positions.isEmpty else {
+    ///
+    /// Each edge is as opaque as the more opaque of its bordering triangles, read from
+    /// `triangleAlphas` (one per triangle of the mesh, with the component's inherited property
+    /// applied). An edge between two fully transparent faces is left out, so a fully transparent
+    /// volume draws no outline; one bordering any opaque face still marks a real crease and stays
+    /// fully visible.
+    public func geometry(unknownNeedsLightColor: Bool, triangleAlphas: [Float]) -> SCNGeometry {
+        var visiblePositions: [SCNVector3] = []
+        visiblePositions.reserveCapacity(positions.count)
+        var colors: [SCNVector4] = []
+        colors.reserveCapacity(positions.count)
+        var isTranslucent = false
+
+        for (index, needsLight) in needsLightColor.enumerated() {
+            let alpha = Self.alpha(of: borderingFaces[index], triangleAlphas: triangleAlphas)
+            guard alpha > 0 else { continue }
+            if alpha < 1 { isTranslucent = true }
+
+            var color = (needsLight ?? unknownNeedsLightColor) ? Self.lightColor : Self.darkColor
+            color.w = CGFloat(alpha)
+            visiblePositions.append(positions[index * 2])
+            visiblePositions.append(positions[index * 2 + 1])
+            colors.append(color)
+            colors.append(color)
+        }
+
+        guard !visiblePositions.isEmpty else {
             return SCNGeometry()
         }
 
-        var colors: [SCNVector4] = []
-        colors.reserveCapacity(positions.count)
-        for needsLight in needsLightColor {
-            let color = (needsLight ?? unknownNeedsLightColor) ? Self.lightColor : Self.darkColor
-            colors.append(color)
-            colors.append(color)
-        }
-
-        let vertexSource = SCNGeometrySource(vertices: positions)
+        let vertexSource = SCNGeometrySource(vertices: visiblePositions)
         let colorSource = SCNGeometrySource.colors(colors)
-        let element = SCNGeometryElement(indices: Array(Int32(0)..<Int32(positions.count)), primitiveType: .line)
+        let element = SCNGeometryElement(indices: Array(Int32(0)..<Int32(visiblePositions.count)), primitiveType: .line)
 
         let geometry = SCNGeometry(sources: [vertexSource, colorSource], elements: [element])
         let material = SCNMaterial()
         material.lightingModel = .constant
         material.diffuse.contents = NSColor.white
+        if isTranslucent {
+            material.blendMode = .alpha
+            material.transparencyMode = .singleLayer
+        }
         geometry.materials = [material]
         return geometry
+    }
+
+    /// The opacity of an edge: that of its more opaque bordering triangle. A triangle index outside
+    /// `triangleAlphas` counts as opaque, so a missing entry can never hide an edge.
+    private static func alpha(of faces: ThreeMF.Mesh.BorderingFaces, triangleAlphas: [Float]) -> Float {
+        func alpha(_ face: Int32) -> Float {
+            let index = Int(face)
+            return triangleAlphas.indices.contains(index) ? triangleAlphas[index] : 1
+        }
+        return Swift.max(alpha(faces.first), faces.second.map(alpha) ?? 0)
     }
 }
 
