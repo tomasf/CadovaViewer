@@ -16,6 +16,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
     private var modelNode: SCNNode?
     private var parts: [ModelData.Part] = []
     private var toolbar: NSVisualEffectView?
+    private var coordinateIndicator: NSView?
     private var overlayScene: OverlayScene?
     private var cancellables: Set<AnyCancellable> = []
     
@@ -79,6 +80,7 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             setupToolbar()
             setupCoordinateIndicator()
             updateEdgeVisibility()
+            updateOverlayVisibility()
         }
     }
 
@@ -261,11 +263,25 @@ class PreviewViewController: NSViewController, QLPreviewingController, SCNSceneR
             hostingView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
             hostingView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -8),
         ])
+        coordinateIndicator = hostingView
+    }
+
+    /// Below this size the preview is too cramped for its overlays — typically Finder's inline preview
+    /// pane, which Quick Look gives no way to tell apart from its own panel, or a shrunken panel.
+    private static let compactSize = CGSize(width: 400, height: 300)
+
+    /// Hides the toolbar and coordinate indicator when the preview is compact, leaving just the model.
+    private func updateOverlayVisibility() {
+        let size = view.bounds.size
+        let isCompact = size.width < Self.compactSize.width || size.height < Self.compactSize.height
+        toolbar?.isHidden = isCompact
+        coordinateIndicator?.isHidden = isCompact
     }
 
     override func viewDidLayout() {
         super.viewDidLayout()
         sceneViewSize = sceneView?.bounds.size ?? .zero
+        updateOverlayVisibility()
     }
 
     // MARK: - SCNSceneRendererDelegate
